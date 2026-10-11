@@ -1,0 +1,33 @@
+{
+  "recordId": "PM-202610111453054-304c",
+  "savedAt": "2026-10-11T14:53:05.485Z",
+  "station": "หมู่ 3 สะท้อน",
+  "province": "จันทบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 3 สะท้อน",
+    "province": "จันทบุรี",
+    "district": "เขาคิชฌกูฏ",
+    "subdistrict": "จันทเขลม",
+    "installationPlace": "ศาลาประชาคม",
+    "equipmentPlace": "ศาลาประชาคม",
+    "contactName": "นางเนาวรัตน์ อินเหยี่ยว",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 3 สะท้อน",
+    "contactPhone": "065-573-8517",
+    "siteCondition": "ปกติ",
+    "antennaCondition": "ปกติ",
+    "workObstacle": "ไม่มี",
+    "summary": "เปลี่ยนผู้ใหญ่บ้านคนใหม่ ชื่อนางเนาวรัตน์ อินเหยี่ยว เนื่องจากคนเดิมหมดวาระ",
+    "informantName": "นางเนาวรัตน์ อินเหยี่ยว",
+    "operatorName": "อนุศักดิ์ สมาน"
+  },
+  "photos": []
+}
