@@ -1,0 +1,33 @@
+{
+  "recordId": "PM-202610111459523-eab1",
+  "savedAt": "2026-10-11T14:59:52.379Z",
+  "station": "หมู่ 5 จันตาแป๊ะ",
+  "province": "จันทบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 5 จันตาแป๊ะ",
+    "province": "จันทบุรี",
+    "district": "เขาคิชฌกูฏ",
+    "subdistrict": "จันทเขลม",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นางกัญนิถา น้อยชิน",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 5 จันตาแป๊ะ",
+    "contactPhone": "090-502-0324",
+    "visitDate": "2026-10-07",
+    "siteCondition": "ปกติ",
+    "antennaCondition": "ปกติ",
+    "workObstacle": "ไม่มี",
+    "informantName": "นางกัญนิถา น้อยชิน",
+    "operatorName": "อนุศักดิ์ สมาน"
+  },
+  "photos": []
+}
