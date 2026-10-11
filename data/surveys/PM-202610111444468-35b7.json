@@ -1,0 +1,33 @@
+{
+  "recordId": "PM-202610111444468-35b7",
+  "savedAt": "2026-10-11T14:44:46.839Z",
+  "station": "หมู่ 8 หลังเนิน",
+  "province": "จันทบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 8 หลังเนิน",
+    "province": "จันทบุรี",
+    "district": "เขาคิชฌกูฏ",
+    "subdistrict": "คลองพลู",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายบรรเจิด คงแพทย์",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 8 หลังเนิน",
+    "contactPhone": "098-372-9433",
+    "visitDate": "2026-10-07",
+    "siteCondition": "ปกติ",
+    "antennaCondition": "ปกติ",
+    "workObstacle": "ไม่มี",
+    "informantName": "นายบรรเจิด คงแพทย์",
+    "operatorName": "อนุศักดิ์ สมาน"
+  },
+  "photos": []
+}
