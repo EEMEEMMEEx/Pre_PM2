@@ -1,0 +1,33 @@
+{
+  "recordId": "PM-202610120909026-366c",
+  "savedAt": "2026-10-12T09:09:02.650Z",
+  "station": "หมู่ 6 ชำเคราะห์",
+  "province": "จันทบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 6 ชำเคราะห์",
+    "province": "จันทบุรี",
+    "district": "เขาคิชฌกูฏ",
+    "subdistrict": "ตะเคียนทอง",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายชุมพล งามล้วน",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 6 ชำเคราะห์",
+    "contactPhone": "089-095-6421",
+    "siteCondition": "ปกติ",
+    "antennaCondition": "ปกติ",
+    "workObstacle": "ไม่มี",
+    "informantName": "นายชุมพล งามล้วน",
+    "operatorName": "อนุศักดิ์ สมาน",
+    "visitDate": "2026-10-09"
+  },
+  "photos": []
+}
