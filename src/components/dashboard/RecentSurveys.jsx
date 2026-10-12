@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Clock,
   ArrowRight,
@@ -11,6 +11,9 @@ import {
   Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
+  Search,
+  X,
+  Filter,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
@@ -24,15 +27,55 @@ export function RecentSurveys({ recent = [], onNavigate }) {
   const [selectedPreview, setSelectedPreview] = useState(null);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [permitFilter, setPermitFilter] = useState('all');
 
-  const totalItems = recent.length;
+  const filteredSurveys = useMemo(() => {
+    let list = recent;
+    if (permitFilter !== 'all') {
+      list = list.filter((item) => {
+        const p = item.permit || item.fields?.permit || '';
+        if (permitFilter === 'อนุญาต') return p === 'อนุญาต' || p === 'on';
+        if (permitFilter === 'ไม่อนุญาต') return p === 'ไม่อนุญาต';
+        return p !== 'อนุญาต' && p !== 'on' && p !== 'ไม่อนุญาต';
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter((item) => {
+        const fields = item.fields || {};
+        const station = (item.station || fields.station || '').toLowerCase();
+        const province = (item.province || fields.province || '').toLowerCase();
+        const district = (fields.district || '').toLowerCase();
+        const subdistrict = (fields.subdistrict || '').toLowerCase();
+        const recordId = (item.recordId || '').toLowerCase();
+        const contact = (fields.contactName || fields.informantName || '').toLowerCase();
+        const operator = (fields.operatorName || '').toLowerCase();
+        const summary = (fields.summary || '').toLowerCase();
+        return (
+          station.includes(q) ||
+          province.includes(q) ||
+          district.includes(q) ||
+          subdistrict.includes(q) ||
+          recordId.includes(q) ||
+          contact.includes(q) ||
+          operator.includes(q) ||
+          summary.includes(q)
+        );
+      });
+    }
+    return list;
+  }, [recent, searchQuery, permitFilter]);
+
+  const totalItems = filteredSurveys.length;
+  const isFiltered = searchQuery.trim() !== '' || permitFilter !== 'all';
   const effectivePageSize = pageSize === 'all' ? (totalItems || 1) : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(totalItems / effectivePageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const startIndex = (safeCurrentPage - 1) * effectivePageSize;
   const endIndex = pageSize === 'all' ? totalItems : Math.min(startIndex + effectivePageSize, totalItems);
-  const displayedItems = pageSize === 'all' ? recent : recent.slice(startIndex, endIndex);
+  const displayedItems = pageSize === 'all' ? filteredSurveys : filteredSurveys.slice(startIndex, endIndex);
 
   const getBadge = (permit) => {
     if (permit === 'อนุญาต') {
@@ -84,7 +127,7 @@ export function RecentSurveys({ recent = [], onNavigate }) {
     <>
       <GlassCard className="flex flex-col" hoverEffect={false}>
         {/* Panel Title & Action */}
-        <div className={cn('flex items-center justify-between pb-4 border-b', isDark ? 'border-slate-800/80' : 'border-slate-200')}>
+        <div className={cn('flex flex-wrap items-center justify-between gap-3 pb-4 border-b', isDark ? 'border-slate-800/80' : 'border-slate-200')}>
           <div className="flex items-center gap-2">
             <div
               className={cn(
@@ -95,10 +138,22 @@ export function RecentSurveys({ recent = [], onNavigate }) {
               <Clock className="h-4 w-4" />
             </div>
             <div>
-              <h2 className={cn('text-lg font-bold tracking-normal leading-tight', isDark ? 'text-white' : 'text-slate-900')}>
-                การสำรวจล่าสุด
-              </h2>
-              <p className={cn('text-xs', isDark ? 'text-slate-400' : 'text-slate-500')}>
+              <div className="flex items-center gap-2">
+                <h2 className={cn('text-lg font-bold tracking-normal leading-tight', isDark ? 'text-white' : 'text-slate-900')}>
+                  ประวัติการกรอกข้อมูลการตรวจเยี่ยม
+                </h2>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-mono font-bold border',
+                    isDark
+                      ? 'bg-blue-500/20 text-cyan-300 border-blue-500/30'
+                      : 'bg-sky-100 text-sky-700 border-sky-300'
+                  )}
+                >
+                  {recent.length} สถานี
+                </span>
+              </div>
+              <p className={cn('text-xs mt-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
                 คลิกที่รหัสรายการ หรือชื่อสถานี เพื่อพรีวิวข้อมูลและรูปภาพ
               </p>
             </div>
@@ -121,18 +176,125 @@ export function RecentSurveys({ recent = [], onNavigate }) {
           )}
         </div>
 
+        {/* Filter & Search Toolbar */}
+        <div className="pt-3 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          {/* Search Box */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className={cn('absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5', isDark ? 'text-slate-400' : 'text-slate-500')} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="ค้นหาสถานี, จังหวัด, รหัส, ผู้แจ้ง..."
+              className={cn(
+                'w-full pl-8 pr-7 py-1.5 rounded-lg border text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
+                isDark
+                  ? 'border-slate-700 bg-slate-900/90 text-slate-100 placeholder:text-slate-500 hover:border-slate-600'
+                  : 'border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 hover:border-slate-400 shadow-2xs'
+              )}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                className={cn(
+                  'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer',
+                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'
+                )}
+                title="ล้างคำค้นหา"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Permit Status Filter Pill Buttons */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0">
+            <button
+              type="button"
+              onClick={() => {
+                setPermitFilter('all');
+                setCurrentPage(1);
+              }}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                permitFilter === 'all'
+                  ? isDark
+                    ? 'bg-blue-600/30 border-blue-500/50 text-white'
+                    : 'bg-sky-100 border-sky-300 text-sky-800 font-semibold'
+                  : isDark
+                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+              )}
+            >
+              ทั้งหมด ({recent.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPermitFilter('อนุญาต');
+                setCurrentPage(1);
+              }}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                permitFilter === 'อนุญาต'
+                  ? isDark
+                    ? 'bg-emerald-500/25 border-emerald-500/50 text-emerald-300'
+                    : 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold'
+                  : isDark
+                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-emerald-400'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
+              )}
+            >
+              <CheckCircle2 className="h-3 w-3" />
+              <span>อนุญาต</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPermitFilter('ไม่อนุญาต');
+                setCurrentPage(1);
+              }}
+              className={cn(
+                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                permitFilter === 'ไม่อนุญาต'
+                  ? isDark
+                    ? 'bg-rose-500/25 border-rose-500/50 text-rose-300'
+                    : 'bg-rose-50 border-rose-400 text-rose-800 font-semibold'
+                  : isDark
+                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-rose-400'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
+              )}
+            >
+              <XCircle className="h-3 w-3" />
+              <span>ไม่อนุญาต</span>
+            </button>
+          </div>
+        </div>
+
         {/* Toolbar: Count info & Page Size Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3.5 pb-1 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-xs">
           <div className={cn('font-medium', isDark ? 'text-slate-400' : 'text-slate-600')}>
             แสดง{' '}
             <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
               {totalItems > 0 ? startIndex + 1 : 0} - {endIndex}
             </span>{' '}
-            จากทั้งหมด{' '}
+            จาก{isFiltered ? 'ที่ค้นพบ ' : 'ทั้งหมด '}
             <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
               {totalItems}
             </span>{' '}
             สถานี
+            {isFiltered && (
+              <span className={cn('ml-1', isDark ? 'text-slate-500' : 'text-slate-400')}>
+                (จากประวัติทั้งหมด {recent.length} สถานี)
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -162,7 +324,7 @@ export function RecentSurveys({ recent = [], onNavigate }) {
               <option value={20}>20 สถานี/หน้า</option>
               <option value={50}>50 สถานี/หน้า</option>
               <option value={100}>100 สถานี/หน้า</option>
-              <option value="all">ทั้งหมด</option>
+              <option value="all">ทั้งหมด ({totalItems})</option>
             </select>
           </div>
         </div>
@@ -285,7 +447,26 @@ export function RecentSurveys({ recent = [], onNavigate }) {
               ) : (
                 <tr>
                   <td colSpan={6} className={cn('py-8 text-center', isDark ? 'text-slate-500' : 'text-slate-400')}>
-                    ยังไม่มีผลสำรวจ
+                    {isFiltered ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span>ไม่พบข้อมูลที่ตรงกับคำค้นหาหรือตัวกรอง</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setPermitFilter('all');
+                          }}
+                          className={cn(
+                            'text-xs underline font-medium cursor-pointer',
+                            isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-sky-600 hover:text-sky-800'
+                          )}
+                        >
+                          ล้างตัวกรองทั้งหมด
+                        </button>
+                      </div>
+                    ) : (
+                      'ยังไม่มีผลสำรวจ'
+                    )}
                   </td>
                 </tr>
               )}

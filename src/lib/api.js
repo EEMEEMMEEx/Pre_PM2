@@ -36,8 +36,8 @@ export function saveLocalSurvey(survey) {
       current.unshift(survey);
     }
 
-    // Keep up to 50 recent surveys
-    const trimmed = current.slice(0, 50);
+    // Keep up to 200 recent surveys
+    const trimmed = current.slice(0, 200);
 
     try {
       localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(trimmed));
@@ -391,7 +391,7 @@ export async function fetchSurveysFromGitHubClient() {
 
     const surveys = (
       await Promise.all(
-        jsonFiles.slice(0, 30).map(async (file) => {
+        jsonFiles.slice(0, 500).map(async (file) => {
           try {
             const fileRes = await fetch(file.download_url);
             if (fileRes.ok) return await fileRes.json();

@@ -445,49 +445,48 @@ class DatabaseService:
             province = station_info.get("province") or fields.get("province") or "ไม่ระบุจังหวัด"
             province_counts[province] = province_counts.get(province, 0) + 1
 
-            if len(recent) < 10:
-                permit_label = "อนุญาต" if permit in ("อนุญาต", "on") else (permit or "ยังไม่ระบุ")
-                survey_photos_list = photos_by_survey.get(survey["id"], [])
-                merged_fields = {
-                    "station": station_name,
-                    "subdistrict": station_info.get("subdistrict", "") if station_info else "",
-                    "district": station_info.get("district", "") if station_info else "",
-                    "province": province,
-                    "installationPlace": (station_info.get("installation_place", "") if station_info else "") or fields.get("installationPlace", ""),
-                    "equipmentPlace": (station_info.get("equipment_place", "") if station_info else "") or fields.get("equipmentPlace", ""),
-                    "contactName": (station_info.get("contact_name", "") if station_info else "") or fields.get("contactName", ""),
-                    "contactPosition": (station_info.get("contact_position", "") if station_info else "") or fields.get("contactPosition", ""),
-                    "contactPhone": (station_info.get("contact_phone", "") if station_info else "") or fields.get("contactPhone", "") or fields.get("contact_phone", ""),
-                    "photos": survey_photos_list,
-                    **fields
-                }
-                # Also ensure nested location and contact fallbacks are populated if empty in fields
-                if not merged_fields.get("installationPlace") and station_info:
-                    merged_fields["installationPlace"] = station_info.get("installation_place", "")
-                if not merged_fields.get("equipmentPlace") and station_info:
-                    merged_fields["equipmentPlace"] = station_info.get("equipment_place", "")
-                if not merged_fields.get("contactName") and station_info:
-                    merged_fields["contactName"] = station_info.get("contact_name", "")
-                if not merged_fields.get("contactPosition") and station_info:
-                    merged_fields["contactPosition"] = station_info.get("contact_position", "")
-                if not merged_fields.get("contactPhone") and station_info:
-                    merged_fields["contactPhone"] = station_info.get("contact_phone", "")
-                if not merged_fields.get("subdistrict") and station_info:
-                    merged_fields["subdistrict"] = station_info.get("subdistrict", "")
-                if not merged_fields.get("district") and station_info:
-                    merged_fields["district"] = station_info.get("district", "")
-                if not merged_fields.get("photos"):
-                    merged_fields["photos"] = survey_photos_list
+            permit_label = "อนุญาต" if permit in ("อนุญาต", "on") else (permit or "ยังไม่ระบุ")
+            survey_photos_list = photos_by_survey.get(survey["id"], [])
+            merged_fields = {
+                "station": station_name,
+                "subdistrict": station_info.get("subdistrict", "") if station_info else "",
+                "district": station_info.get("district", "") if station_info else "",
+                "province": province,
+                "installationPlace": (station_info.get("installation_place", "") if station_info else "") or fields.get("installationPlace", ""),
+                "equipmentPlace": (station_info.get("equipment_place", "") if station_info else "") or fields.get("equipmentPlace", ""),
+                "contactName": (station_info.get("contact_name", "") if station_info else "") or fields.get("contactName", ""),
+                "contactPosition": (station_info.get("contact_position", "") if station_info else "") or fields.get("contactPosition", ""),
+                "contactPhone": (station_info.get("contact_phone", "") if station_info else "") or fields.get("contactPhone", "") or fields.get("contact_phone", ""),
+                "photos": survey_photos_list,
+                **fields
+            }
+            # Also ensure nested location and contact fallbacks are populated if empty in fields
+            if not merged_fields.get("installationPlace") and station_info:
+                merged_fields["installationPlace"] = station_info.get("installation_place", "")
+            if not merged_fields.get("equipmentPlace") and station_info:
+                merged_fields["equipmentPlace"] = station_info.get("equipment_place", "")
+            if not merged_fields.get("contactName") and station_info:
+                merged_fields["contactName"] = station_info.get("contact_name", "")
+            if not merged_fields.get("contactPosition") and station_info:
+                merged_fields["contactPosition"] = station_info.get("contact_position", "")
+            if not merged_fields.get("contactPhone") and station_info:
+                merged_fields["contactPhone"] = station_info.get("contact_phone", "")
+            if not merged_fields.get("subdistrict") and station_info:
+                merged_fields["subdistrict"] = station_info.get("subdistrict", "")
+            if not merged_fields.get("district") and station_info:
+                merged_fields["district"] = station_info.get("district", "")
+            if not merged_fields.get("photos"):
+                merged_fields["photos"] = survey_photos_list
 
-                recent.append({
-                    "recordId": survey["record_id"],
-                    "savedAt": survey["saved_at"],
-                    "station": station_name or "ไม่ระบุสถานี",
-                    "province": province,
-                    "permit": permit_label,
-                    "fields": merged_fields,
-                    "photos": survey_photos_list
-                })
+            recent.append({
+                "recordId": survey["record_id"],
+                "savedAt": survey["saved_at"],
+                "station": station_name or "ไม่ระบุสถานี",
+                "province": province,
+                "permit": permit_label,
+                "fields": merged_fields,
+                "photos": survey_photos_list
+            })
 
         top_provinces = sorted(
             [{"name": name, "count": count} for name, count in province_counts.items()],

@@ -314,7 +314,7 @@ async function fetchSurveysFromGitHub() {
     jsonFiles.sort((a, b) => b.name.localeCompare(a.name));
 
     const surveys = (await Promise.all(
-      jsonFiles.slice(0, 50).map(async (file) => {
+      jsonFiles.slice(0, 500).map(async (file) => {
         try {
           const fileHeaders = { "User-Agent": "NBTC-PrePM-Survey-App" };
           if (token && !tokenRejected) fileHeaders["Authorization"] = `Bearer ${token}`;
@@ -798,7 +798,7 @@ async function getDashboardData() {
     else if (fields.permit === "ไม่อนุญาต") denied++;
   }
 
-  const recent = surveys.slice(0, 10).map((survey) => {
+  const recent = surveys.map((survey) => {
     const fields = survey.fields || {};
     const station = findStation(stations, fields);
     const stationName = station?.village || fields.station || fields.stationSelect || "ไม่ระบุสถานี";

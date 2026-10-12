@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.5.6",
+  "version": "2.5.7",
   "private": true,
   "scripts": {
     "dev": "vite",
