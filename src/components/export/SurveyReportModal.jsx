@@ -566,50 +566,9 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
             <div className="bg-neutral-100 font-bold border border-black px-2.5 py-0.5 text-[13.5px] text-black">
               5. สรุปผลการตรวจเยี่ยมและข้อคิดเห็น (Survey Summary & Recommendations)
             </div>
-            <div className="border border-t-0 border-black p-2 text-[12.5px] leading-relaxed min-h-[36px] bg-white text-black">
+            <div className="border border-t-0 border-black p-2.5 text-[12.5px] leading-relaxed min-h-[60px] bg-white text-black">
               {summary}
             </div>
-          </div>
-
-          {/* Section 6: ลายมือชื่อผู้ให้ข้อมูลและผู้ตรวจเยี่ยม */}
-          <div className="mb-1">
-            <div className="bg-neutral-100 font-bold border border-black px-2.5 py-0.5 text-[13.5px] text-black">
-              6. ลายมือชื่อผู้ให้ข้อมูลและเจ้าหน้าที่ผู้ตรวจเยี่ยม (Verification & Signatures)
-            </div>
-            <table className="w-full border-collapse border border-t-0 border-black text-[12.5px] leading-snug">
-              <tbody>
-                <tr>
-                  <td className="border border-black p-2 w-1/2 text-center align-top bg-white">
-                    <p className="text-neutral-700 text-[12px] mb-3.5">
-                      ลงชื่อ....................................................................
-                    </p>
-                    <p className="font-bold text-black text-[13px]">
-                      ( {informantName || contactName || '....................................................................'} )
-                    </p>
-                    <p className="text-[11.5px] text-neutral-800 mt-0.5">
-                      {contactPosition && contactPosition !== '-' ? contactPosition : 'ผู้ให้ข้อมูล / เจ้าของพื้นที่'}
-                    </p>
-                    <p className="text-[11px] text-neutral-600 mt-0.5">
-                      วันที่ .......... / .......... / ..........
-                    </p>
-                  </td>
-                  <td className="border border-black p-2 w-1/2 text-center align-top bg-white">
-                    <p className="text-neutral-700 text-[12px] mb-3.5">
-                      ลงชื่อ....................................................................
-                    </p>
-                    <p className="font-bold text-black text-[13px]">
-                      ( {operatorName || '....................................................................'} )
-                    </p>
-                    <p className="text-[11.5px] text-neutral-800 mt-0.5">
-                      ผู้ปฏิบัติงาน / เจ้าหน้าที่ตรวจเยี่ยม
-                    </p>
-                    <p className="text-[11px] text-neutral-600 mt-0.5">
-                      วันที่ {visitDateStr !== '-' ? visitDateStr : '.......... / .......... / ..........'}
-                    </p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
 
