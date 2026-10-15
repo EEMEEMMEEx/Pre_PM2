@@ -151,6 +151,18 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
             CacheControl="no-cache",
         )
         print(f"  [OK] Uploaded API snapshot: /api/dashboard [application/json] ({len(dashboard_json)/1024:.1f} KB) with {len(dashboard_data.get('recent', []))} surveys")
+
+        gh_status = DatabaseService.check_github_auth()
+        gh_status_json = json.dumps(gh_status, ensure_ascii=False).encode("utf-8")
+        for k in ["api/github-status", "github-status"]:
+            s3.put_object(
+                Bucket=bucket_name,
+                Key=k,
+                Body=gh_status_json,
+                ContentType="application/json; charset=utf-8",
+                CacheControl="no-cache",
+            )
+            print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
 

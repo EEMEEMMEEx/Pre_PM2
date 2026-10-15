@@ -1,16 +1,17 @@
 {
   "name": "survey-control-room",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js",
-    "export:photos": "node scripts/export-photos.js",
+    "start": "python database.py",
+    "deploy": "python deploy_r2.py",
+    "deploy:r2": "python deploy_r2.py",
+    "export:photos": "python export_photos.py",
     "export:pdf": "python export_pdf.py",
-    "export:archive": "python export_pdf.py --archive",
-    "deploy:r2": "python deploy_r2.py"
+    "export:archive": "python export_pdf.py --archive"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

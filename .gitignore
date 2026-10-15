@@ -14,3 +14,5 @@ r2-credentials.json
 .env.*
 *.pdf
 SURVEY_*.xlsx
+.vercel/
+.netlify/

@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 
 /**
  * Export survey records into an official formatted Excel spreadsheet (.xlsx).
- * Works 100% in browser (Local, Cloudflare R2, Vercel, Netlify).
+ * Works 100% in browser (Cloudflare R2, GitHub Sync, Local OneDrive).
  *
  * @param {Array} surveys - Array of survey objects
  * @param {string} customFilename - Output filename

@@ -4,7 +4,36 @@
  */
 
 const LOCAL_SURVEYS_KEY = 'nbtc_pre_pm_saved_surveys';
+const GITHUB_TOKEN_KEY = 'nbtc_github_token';
 const SURVEY_RESET_DATE = '2026-10-05T00:00:00.000Z';
+
+export function getStoredGitHubToken() {
+  try {
+    return typeof window !== 'undefined' ? (localStorage.getItem(GITHUB_TOKEN_KEY) || '').trim() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+export function saveGitHubToken(token) {
+  try {
+    if (typeof window !== 'undefined') {
+      const clean = (token || '').trim();
+      if (clean) {
+        localStorage.setItem(GITHUB_TOKEN_KEY, clean);
+      } else {
+        localStorage.removeItem(GITHUB_TOKEN_KEY);
+      }
+      notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED' });
+    }
+  } catch (e) {
+    console.warn('Failed to save GitHub token:', e);
+  }
+}
+
+export function clearGitHubToken() {
+  saveGitHubToken('');
+}
 
 let syncBroadcastChannel = null;
 if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
@@ -411,6 +440,20 @@ export async function submitSurvey(arg1, arg2, arg3) {
     githubSynced: false,
   };
 
+  if (!serverResult?.githubSynced) {
+    const ghToken = getStoredGitHubToken();
+    if (ghToken) {
+      try {
+        const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
+        if (ghRes.success) {
+          finalResult.githubSynced = true;
+        }
+      } catch (e) {
+        console.warn('GitHub client commit failed:', e);
+      }
+    }
+  }
+
   if (serverError && !serverResult) {
     console.warn('Server save had issue, saved to local cache:', serverError);
   }
@@ -502,14 +545,28 @@ export async function updateSurvey(arg1, arg2, arg3) {
 
   window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'update', recordId } }));
 
-  return (
-    serverResult || {
-      saved: true,
-      updated: true,
-      recordId,
-      savedAt: localSurvey.savedAt,
+  let finalResult = serverResult || {
+    saved: true,
+    updated: true,
+    recordId,
+    savedAt: localSurvey.savedAt,
+  };
+
+  if (!serverResult?.githubSynced) {
+    const ghToken = getStoredGitHubToken();
+    if (ghToken) {
+      try {
+        const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
+        if (ghRes.success) {
+          finalResult.githubSynced = true;
+        }
+      } catch (e) {
+        console.warn('GitHub client update commit failed:', e);
+      }
     }
-  );
+  }
+
+  return finalResult;
 }
 
 export async function deleteSurveys(recordIds) {
@@ -539,6 +596,16 @@ export async function deleteSurveys(recordIds) {
     }
   } catch (err) {
     serverError = err.message;
+  }
+
+  // If server did not delete from GitHub, try direct GitHub delete
+  if (!serverResult?.githubDeleted) {
+    const ghToken = getStoredGitHubToken();
+    if (ghToken) {
+      for (const id of ids) {
+        await deleteSurveyFromGitHubClient(id, ghToken).catch(() => {});
+      }
+    }
   }
 
   try {
@@ -678,11 +745,164 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
   }
 }
 
-export async function fetchGitHubStatus() {
+export async function commitSurveyToGitHubClient(survey, customToken = null) {
+  const token = customToken || getStoredGitHubToken();
+  if (!token) return { success: false, reason: 'no_token' };
+
+  const repo = 'Thaidimaru/Pre_PM2';
+  const branch = 'main';
+  const filePath = `data/surveys/${survey.recordId}.json`;
+
   try {
-    let res = await fetch('/api/github-status', { cache: 'no-store' }).catch(() => null);
+    let sha = null;
+    const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}?ref=${branch}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+      cache: 'no-store',
+    }).catch(() => null);
+
+    if (getRes && getRes.ok) {
+      const fileData = await getRes.json();
+      sha = fileData.sha;
+    }
+
+    const payloadStr = JSON.stringify(survey, null, 2);
+    // Base64 encode supporting UTF-8 / Thai characters
+    const contentB64 = btoa(unescape(encodeURIComponent(payloadStr)));
+
+    const bodyObj = {
+      message: `feat(survey): Pre-PM survey ${survey.recordId} - ${survey.station || 'Station'}`,
+      content: contentB64,
+      branch,
+      committer: {
+        name: 'NBTC Survey System',
+        email: 'survey-bot@nbtc.local',
+      },
+    };
+    if (sha) bodyObj.sha = sha;
+
+    const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bodyObj),
+    });
+
+    if (putRes.ok) {
+      clientGhSurveysCache = null;
+      notifySurveysUpdated({ type: 'GITHUB_COMMITTED', recordId: survey.recordId });
+      return { success: true };
+    }
+    const errObj = await putRes.json().catch(() => ({}));
+    return { success: false, error: errObj.message || `HTTP ${putRes.status}` };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteSurveyFromGitHubClient(recordId, customToken = null) {
+  const token = customToken || getStoredGitHubToken();
+  if (!token) return { success: false, reason: 'no_token' };
+
+  const repo = 'Thaidimaru/Pre_PM2';
+  const branch = 'main';
+  const filePath = `data/surveys/${recordId}.json`;
+
+  try {
+    const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}?ref=${branch}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+      cache: 'no-store',
+    }).catch(() => null);
+
+    if (!getRes || !getRes.ok) {
+      return { success: true, reason: 'file_not_found_on_github' };
+    }
+
+    const fileData = await getRes.json();
+    const sha = fileData.sha;
+    if (!sha) return { success: true };
+
+    const delRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `chore(survey): Delete Pre-PM survey ${recordId}`,
+        sha,
+        branch,
+        committer: {
+          name: 'NBTC Survey System',
+          email: 'survey-bot@nbtc.local',
+        },
+      }),
+    });
+
+    if (delRes.ok) {
+      clientGhSurveysCache = null;
+      notifySurveysUpdated({ type: 'GITHUB_DELETED', recordId });
+      return { success: true };
+    }
+    return { success: false };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchGitHubStatus() {
+  // 1. Check if token is configured in local browser storage (for Cloudflare R2 / client usage)
+  const localToken = getStoredGitHubToken();
+  if (localToken) {
+    try {
+      const res = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${localToken}`,
+          Accept: 'application/vnd.github+json',
+        },
+      });
+      if (res.ok) {
+        const u = await res.json();
+        return {
+          configured: true,
+          valid: true,
+          source: 'local_storage',
+          user: u.login,
+          repo: 'Thaidimaru/Pre_PM2',
+          branch: 'main',
+          message: `เชื่อมต่อ GitHub สำเร็จ (${u.login})`,
+        };
+      }
+      if (res.status === 401) {
+        return {
+          configured: true,
+          valid: false,
+          source: 'local_storage',
+          reason: 'bad_token',
+          message: 'GitHub Token ในเบราว์เซอร์ไม่ถูกต้องหรือหมดอายุ',
+          repo: 'Thaidimaru/Pre_PM2',
+          branch: 'main',
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to test local GitHub token:', e);
+    }
+  }
+
+  // 2. Fallback to server / R2 API snapshot endpoint
+  try {
+    let res = await fetch(`/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
     if (!res || !res.ok) {
-      res = await fetch('/github-status', { cache: 'no-store' }).catch(() => null);
+      res = await fetch(`/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
     }
     if (res && res.ok) {
       return await res.json();
@@ -692,3 +912,4 @@ export async function fetchGitHubStatus() {
   }
   return { configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
 }
+
