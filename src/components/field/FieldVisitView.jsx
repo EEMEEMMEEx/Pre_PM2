@@ -496,31 +496,17 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="visitDate" className={labelClass}>
-                  วันที่เข้าพื้นที่
-                </label>
-                <input
-                  id="visitDate"
-                  type="date"
-                  value={formData.visitDate || ''}
-                  onChange={(e) => updateField('visitDate', e.target.value)}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="visitTime" className={labelClass}>
-                  เวลาเข้าพื้นที่
-                </label>
-                <input
-                  id="visitTime"
-                  type="time"
-                  value={formData.visitTime || ''}
-                  onChange={(e) => updateField('visitTime', e.target.value)}
-                  className={inputClass}
-                />
-              </div>
+            <div>
+              <label htmlFor="visitDate" className={labelClass}>
+                วันที่เข้าพื้นที่
+              </label>
+              <input
+                id="visitDate"
+                type="date"
+                value={formData.visitDate || ''}
+                onChange={(e) => updateField('visitDate', e.target.value)}
+                className={inputClass}
+              />
             </div>
           </div>
         </GlassCard>
