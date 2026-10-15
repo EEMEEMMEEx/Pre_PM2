@@ -112,6 +112,20 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
         uploaded += 1
         print(f"  [OK] Uploaded ({uploaded}/{len(files_to_upload)}): /{rel_key} [{content_type}] ({len(file_bytes)/1024:.1f} KB)")
 
+    # Upload SPA route fallbacks so direct navigation or refresh on /dashboard loads the web app
+    index_html_path = DIST_DIR / "index.html"
+    if index_html_path.exists():
+        index_bytes = index_html_path.read_bytes()
+        for spa_route in ["dashboard", "dashboard/index.html"]:
+            s3.put_object(
+                Bucket=bucket_name,
+                Key=spa_route,
+                Body=index_bytes,
+                ContentType="text/html; charset=utf-8",
+                CacheControl="no-cache, no-store, must-revalidate",
+            )
+            print(f"  [OK] Uploaded SPA route fallback: /{spa_route} [text/html]")
+
     # Upload lightweight API snapshots for instant CDN dashboard and station dropdowns
     try:
         from database import DatabaseService
@@ -129,15 +143,14 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
 
         dashboard_data = DatabaseService.get_dashboard_payload()
         dashboard_json = json.dumps(dashboard_data, ensure_ascii=False).encode("utf-8")
-        for k in ["api/dashboard", "dashboard"]:
-            s3.put_object(
-                Bucket=bucket_name,
-                Key=k,
-                Body=dashboard_json,
-                ContentType="application/json; charset=utf-8",
-                CacheControl="no-cache",
-            )
-            print(f"  [OK] Uploaded API snapshot: /{k} [application/json] ({len(dashboard_json)/1024:.1f} KB)")
+        s3.put_object(
+            Bucket=bucket_name,
+            Key="api/dashboard",
+            Body=dashboard_json,
+            ContentType="application/json; charset=utf-8",
+            CacheControl="no-cache",
+        )
+        print(f"  [OK] Uploaded API snapshot: /api/dashboard [application/json] ({len(dashboard_json)/1024:.1f} KB) with {len(dashboard_data.get('recent', []))} surveys")
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
 

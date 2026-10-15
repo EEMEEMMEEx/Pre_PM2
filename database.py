@@ -313,11 +313,26 @@ class DatabaseService:
             except Exception as e:
                 print(f"Warning: Failed to seed {path.name}: {e}")
 
-        # Also seed from data/surveys/*.json
-        if AppConfig.SURVEYS_DIR.exists():
-            for path in sorted(AppConfig.SURVEYS_DIR.glob("*.json")):
+        # 2. Seed from all survey JSON directories (Git data/surveys and OneDrive surveys)
+        survey_dirs = []
+        git_surveys_dir = AppConfig.ROOT / "data" / "surveys"
+        if git_surveys_dir.exists():
+            survey_dirs.append(git_surveys_dir)
+        if AppConfig.DATA_DIR != AppConfig.ROOT:
+            od_surveys_dir = AppConfig.DATA_DIR / "surveys"
+            od_surveys_dir.mkdir(parents=True, exist_ok=True)
+            if od_surveys_dir not in survey_dirs:
+                survey_dirs.append(od_surveys_dir)
+
+        seen_files = set()
+        for s_dir in survey_dirs:
+            for path in sorted(s_dir.glob("*.json")):
+                if path.name in seen_files:
+                    continue
+                seen_files.add(path.name)
                 try:
-                    record = json.loads(path.read_text(encoding="utf-8-sig"))
+                    content_text = path.read_text(encoding="utf-8-sig")
+                    record = json.loads(content_text)
                     record_id = record.get("recordId") or path.stem
                     saved_at = record.get("savedAt") or dt.datetime.fromtimestamp(
                         path.stat().st_mtime, dt.timezone.utc
@@ -344,6 +359,16 @@ class DatabaseService:
                                         )
                                     except Exception:
                                         pass
+
+                    # Sync file across survey directories
+                    for other_dir in survey_dirs:
+                        if other_dir != path.parent:
+                            target_file = other_dir / path.name
+                            if not target_file.exists():
+                                try:
+                                    target_file.write_text(content_text, encoding="utf-8")
+                                except Exception:
+                                    pass
                 except Exception as e:
                     print(f"Warning: Failed to seed {path.name}: {e}")
 
@@ -391,6 +416,7 @@ class DatabaseService:
     def get_dashboard_payload(cls) -> dict:
         """Compile live dashboard KPI statistics, province bars, and recent entries."""
         with cls.connect() as conn:
+            cls._seed_surveys_from_json(conn)
             stations = [dict(s) for s in conn.execute("SELECT * FROM stations").fetchall()]
             surveys = [dict(r) for r in conn.execute(
                 "SELECT id, record_id, saved_at, fields_json FROM surveys WHERE saved_at >= ? ORDER BY saved_at DESC",

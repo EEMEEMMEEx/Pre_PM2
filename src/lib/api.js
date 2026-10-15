@@ -166,18 +166,36 @@ export async function fetchDashboardData() {
   }
 
   const localSurveys = getLocalSurveys();
+  const knownRecordIds = new Set([
+    ...(serverData?.recent || []).map((s) => s.recordId),
+    ...localSurveys.map((s) => s.recordId),
+  ]);
 
-  // If server responded with valid survey metrics, prioritize server data + local pending surveys
-  if (serverData && Array.isArray(serverData.recent)) {
-    return mergeDashboardWithLocal(serverData, localSurveys);
+  // On static hosting (e.g. Cloudflare R2: r2.dev), or when server is unavailable,
+  // actively check GitHub to fetch and merge surveys entered by other users!
+  const isStaticHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname.includes('r2.dev') ||
+      window.location.hostname.includes('github.io') ||
+      window.location.hostname.includes('cloudflare') ||
+      (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'));
+
+  let ghSurveys = [];
+  if (isStaticHost || !serverData || !Array.isArray(serverData.recent)) {
+    try {
+      ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds);
+    } catch (err) {
+      console.warn('Could not fetch latest surveys from GitHub:', err);
+    }
   }
 
-  // Fallback: If server is completely unavailable (offline / preview mode), fetch from GitHub client
-  const ghSurveys = await fetchSurveysFromGitHubClient().catch(() => []);
-  const combinedSurveys = [...ghSurveys, ...localSurveys];
-  const merged = mergeDashboardWithLocal(serverData, combinedSurveys);
+  const allCombinedSurveys = [
+    ...(serverData?.recent || []),
+    ...ghSurveys,
+    ...localSurveys,
+  ];
 
-  return merged;
+  return mergeDashboardWithLocal(serverData, allCombinedSurveys);
 }
 
 export const THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
@@ -520,9 +538,9 @@ export async function deleteSurveys(recordIds) {
 
 let clientGhSurveysCache = null;
 let clientGhLastFetchTime = 0;
-const CLIENT_GH_CACHE_TTL = 60000;
+const CLIENT_GH_CACHE_TTL = 30000;
 
-export async function fetchSurveysFromGitHubClient() {
+export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set()) {
   const now = Date.now();
   if (clientGhSurveysCache && (now - clientGhLastFetchTime) < CLIENT_GH_CACHE_TTL) {
     return clientGhSurveysCache;
@@ -538,9 +556,20 @@ export async function fetchSurveysFromGitHubClient() {
     const jsonFiles = items.filter((f) => f.type === 'file' && f.name.endsWith('.json') && !f.name.startsWith('.'));
     jsonFiles.sort((a, b) => b.name.localeCompare(a.name));
 
+    // Only download files that are NOT in knownRecordIds (saving bandwidth & rate limits!)
+    const filesToFetch = jsonFiles.filter((f) => {
+      const recId = f.name.replace(/\.json$/, '');
+      return !knownRecordIds.has(recId);
+    });
+
+    if (filesToFetch.length === 0) {
+      clientGhLastFetchTime = now;
+      return clientGhSurveysCache || [];
+    }
+
     const rawSurveys = (
       await Promise.all(
-        jsonFiles.slice(0, 500).map(async (file) => {
+        filesToFetch.slice(0, 200).map(async (file) => {
           try {
             const fileRes = await fetch(file.download_url);
             if (fileRes.ok) return await fileRes.json();
@@ -550,7 +579,7 @@ export async function fetchSurveysFromGitHubClient() {
       )
     ).filter((s) => s && s.recordId);
 
-    const surveys = rawSurveys.map((s) => {
+    const newSurveys = rawSurveys.map((s) => {
       const rawPhotos = Array.isArray(s.photos) && s.photos.length > 0
         ? s.photos
         : Array.isArray(s.fields?.photos) && s.fields.photos.length > 0
@@ -584,9 +613,10 @@ export async function fetchSurveysFromGitHubClient() {
       };
     });
 
-    clientGhSurveysCache = surveys;
+    const combined = [...(clientGhSurveysCache || []), ...newSurveys];
+    clientGhSurveysCache = combined;
     clientGhLastFetchTime = now;
-    return surveys;
+    return combined;
   } catch (e) {
     console.warn('fetchSurveysFromGitHubClient error:', e);
     return clientGhSurveysCache || [];
