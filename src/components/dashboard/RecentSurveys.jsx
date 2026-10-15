@@ -716,6 +716,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                             </span>
                           )}
                         </button>
+                        <div className={cn('text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                          <span>ผู้ให้ข้อมูล: <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>{item.fields?.informantName || item.fields?.contactName || '-'}</span></span>
+                          <span className="opacity-40">•</span>
+                          <span>ผู้ตรวจ: <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>{item.fields?.operatorName || '-'}</span></span>
+                        </div>
                       </td>
 
                       <td className={cn('py-3 px-3', isDark ? 'text-slate-300' : 'text-slate-700')}>
@@ -730,10 +735,21 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           isDark ? 'text-slate-400' : 'text-slate-500'
                         )}
                       >
-                        {new Date(item.savedAt).toLocaleString('th-TH', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        })}
+                        {item.fields?.visitDate ? (
+                          <div>
+                            <div className={cn('font-medium', isDark ? 'text-slate-200' : 'text-slate-800')}>
+                              {item.fields.visitDate}
+                            </div>
+                            <div className="text-[10.5px] opacity-75">
+                              บันทึก: {new Date(item.savedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                            </div>
+                          </div>
+                        ) : (
+                          new Date(item.savedAt).toLocaleString('th-TH', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })
+                        )}
                       </td>
 
                       <td className="py-3 pl-3 pr-3 text-center">

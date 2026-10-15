@@ -908,9 +908,32 @@ table.report-table th, table.report-table td {{
     <div class="section-title">
       5. สรุปผลการตรวจเยี่ยมและข้อคิดเห็น (Survey Summary & Recommendations)
     </div>
-    <div class="summary-box">
+    <div class="summary-box" style="min-height: 38px; padding: 5px 8px;">
       {html.escape(s['summary'] or '-')}
     </div>
+
+    <!-- Section 6: ลายมือชื่อผู้ให้ข้อมูลและผู้ตรวจเยี่ยม -->
+    <div class="section-title">
+      6. ลายมือชื่อผู้ให้ข้อมูลและเจ้าหน้าที่ผู้ตรวจเยี่ยม (Verification & Signatures)
+    </div>
+    <table class="report-table" style="margin-top: 0;">
+      <tbody>
+        <tr>
+          <td style="width: 50%; text-align: center; padding: 8px; vertical-align: top;">
+            <p style="margin: 0 0 20px 0; font-size: 12px; color: #374151;">ลงชื่อ....................................................................</p>
+            <p style="margin: 0; font-weight: 700; font-size: 13px; color: #000000;">( {html.escape(s['informantName'] or s['contactName'] or '....................................................................')} )</p>
+            <p style="margin: 2px 0 0 0; font-size: 11.5px; color: #374151;">{html.escape(s['contactPosition'] or 'ผู้ให้ข้อมูล / เจ้าของพื้นที่')}</p>
+            <p style="margin: 2px 0 0 0; font-size: 11px; color: #4b5563;">วันที่ .......... / .......... / ..........</p>
+          </td>
+          <td style="width: 50%; text-align: center; padding: 8px; vertical-align: top;">
+            <p style="margin: 0 0 20px 0; font-size: 12px; color: #374151;">ลงชื่อ....................................................................</p>
+            <p style="margin: 0; font-weight: 700; font-size: 13px; color: #000000;">( {html.escape(s['operatorName'] or '....................................................................')} )</p>
+            <p style="margin: 2px 0 0 0; font-size: 11.5px; color: #374151;">ผู้ปฏิบัติงาน / เจ้าหน้าที่ตรวจเยี่ยม</p>
+            <p style="margin: 2px 0 0 0; font-size: 11px; color: #4b5563;">วันที่ {visit_date_th if visit_date_th != '-' else '.......... / .......... / ..........'}</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <!-- Page 1 Footer -->

@@ -183,6 +183,8 @@ export function SurveyPreviewModal({
     );
   }, [surveyData]);
 
+  const photos = resolvedPhotos;
+
   // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
   useEffect(() => {
     if (!isOpen) return;

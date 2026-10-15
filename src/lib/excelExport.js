@@ -20,20 +20,25 @@ export function exportSurveysToExcel(surveys, customFilename) {
       'อำเภอ': fields.district || '-',
       'ตำบล': fields.subdistrict || '-',
       'สถานที่ติดตั้ง': fields.installationPlace || fields.installation_place || '-',
+      'สถานที่วางเครื่อง': fields.equipmentPlace || fields.equipment_place || '-',
       'ผลการพิจารณา': item.permit || fields.permit || '-',
+      'ข้อจำกัดในการเข้าพื้นที่': fields.accessLimit || fields.access_limit || '-',
       'วันที่ตรวจเยี่ยม': fields.visitDate || fields.visit_date || '-',
       'เวลาตรวจเยี่ยม': fields.visitTime || fields.visit_time || '-',
       'ชื่อผู้ติดต่อ/ผู้ดูแล': fields.contactName || fields.informantName || '-',
       'เบอร์โทรศัพท์': fields.contactPhone || fields.phone || '-',
       'ตำแหน่งผู้ติดต่อ': fields.contactPosition || '-',
+      'หน่วยงาน/หมู่บ้าน': fields.contactVillage || '-',
       'สภาพพื้นที่': fields.siteCondition || '-',
       'สภาพสายอากาศ': fields.antennaCondition || '-',
+      'อุปสรรคการปฏิบัติงาน': fields.workObstacle || fields.work_obstacle || '-',
       'สถานะระบบวิทยุ': fields.radioStatus || '-',
       'สถานะระบบไฟฟ้า': fields.powerStatus || '-',
       'สถานะแบตเตอรี่': fields.batteryStatus || '-',
       'สถานะระบบกราวด์': fields.groundStatus || '-',
       'ปัญหาเพิ่มเติม': fields.userProblem || '-',
       'สรุปผลการตรวจเยี่ยม': fields.summary || '-',
+      'ชื่อผู้ให้ข้อมูล': fields.informantName || fields.contactName || '-',
       'ผู้ตรวจเยี่ยม': fields.operatorName || '-',
       'จำนวนรูปถ่าย': (item.photos || fields.photos || []).length,
       'เวลาบันทึกลงระบบ': item.savedAt ? new Date(item.savedAt).toLocaleString('th-TH') : '-'
@@ -51,20 +56,25 @@ export function exportSurveysToExcel(surveys, customFilename) {
     { wch: 16 }, // อำเภอ
     { wch: 16 }, // ตำบล
     { wch: 32 }, // สถานที่ติดตั้ง
+    { wch: 28 }, // สถานที่วางเครื่อง
     { wch: 14 }, // ผลการพิจารณา
+    { wch: 25 }, // ข้อจำกัด
     { wch: 15 }, // วันที่
     { wch: 10 }, // เวลา
     { wch: 22 }, // ผู้ติดต่อ
     { wch: 16 }, // เบอร์โทร
     { wch: 22 }, // ตำแหน่ง
+    { wch: 24 }, // หมู่บ้าน
     { wch: 25 }, // สภาพพื้นที่
     { wch: 25 }, // สายอากาศ
+    { wch: 25 }, // อุปสรรค
     { wch: 15 }, // วิทยุ
     { wch: 15 }, // ไฟฟ้า
     { wch: 15 }, // แบตเตอรี่
     { wch: 15 }, // กราวด์
     { wch: 25 }, // ปัญหา
     { wch: 35 }, // สรุป
+    { wch: 22 }, // ผู้ให้ข้อมูล
     { wch: 20 }, // ผู้ตรวจ
     { wch: 12 }, // รูปถ่าย
     { wch: 20 }, // บันทึก

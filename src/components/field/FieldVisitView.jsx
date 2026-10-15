@@ -60,6 +60,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activePreviewPhoto, setActivePreviewPhoto] = useState(null);
   const fileInputRef = useRef(null);
+  const lastAutoFilledStationRef = useRef('');
+
+  // Handle editing mode initialization
+  const isEditMode = Boolean(editingSurvey && (editingSurvey.recordId || editingSurvey.fields?.recordId));
 
   // Fetch stations for auto-completion immediately on mount
   useEffect(() => {
@@ -107,21 +111,24 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
   }, [stations, formData.station]);
 
   useEffect(() => {
-    if (activeStation) {
-      setFormData((prev) => ({
-        ...prev,
-        province: activeStation.province || '',
-        district: activeStation.district || '',
-        subdistrict: activeStation.subdistrict || '',
-        installationPlace: activeStation.installationPlace || '',
-        equipmentPlace: activeStation.equipmentPlace || '',
-        contactName: activeStation.contactName || '',
-        contactPosition: activeStation.contactPosition || '',
-        contactVillage: activeStation.village || prev.contactVillage || '',
-        contactPhone: activeStation.contactPhone || prev.contactPhone || ''
-      }));
+    if (activeStation && !isEditMode) {
+      if (lastAutoFilledStationRef.current !== activeStation.village) {
+        lastAutoFilledStationRef.current = activeStation.village;
+        setFormData((prev) => ({
+          ...prev,
+          province: activeStation.province || prev.province || '',
+          district: activeStation.district || prev.district || '',
+          subdistrict: activeStation.subdistrict || prev.subdistrict || '',
+          installationPlace: activeStation.installationPlace || prev.installationPlace || '',
+          equipmentPlace: activeStation.equipmentPlace || prev.equipmentPlace || '',
+          contactName: activeStation.contactName || prev.contactName || '',
+          contactPosition: activeStation.contactPosition || prev.contactPosition || '',
+          contactVillage: activeStation.village || prev.contactVillage || '',
+          contactPhone: activeStation.contactPhone || prev.contactPhone || ''
+        }));
+      }
     }
-  }, [activeStation]);
+  }, [activeStation, isEditMode]);
 
   // Compress uploaded photo to preserve bandwidth and quota
   const compressImageFile = (file, maxDimension = 1280, quality = 0.75) => {
@@ -188,12 +195,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Handle editing mode initialization
-  const isEditMode = Boolean(editingSurvey && (editingSurvey.recordId || editingSurvey.fields?.recordId));
-
   useEffect(() => {
     if (editingSurvey) {
       const rawFields = editingSurvey.fields || editingSurvey;
+      lastAutoFilledStationRef.current = editingSurvey.station || rawFields.station || '';
       setFormData({
         ...rawFields,
         station: editingSurvey.station || rawFields.station || '',
@@ -202,17 +207,27 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
         subdistrict: rawFields.subdistrict || '',
         installationPlace: rawFields.installationPlace || '',
         equipmentPlace: rawFields.equipmentPlace || '',
+        visitDate: rawFields.visitDate || rawFields.visit_date || (editingSurvey.savedAt ? editingSurvey.savedAt.slice(0, 10) : ''),
+        visitTime: rawFields.visitTime || rawFields.visit_time || '',
         contactName: rawFields.contactName || '',
         contactPosition: rawFields.contactPosition || '',
         contactVillage: rawFields.contactVillage || '',
         contactPhone: rawFields.contactPhone || '',
         permit: rawFields.permit === 'on' ? 'อนุญาต' : (rawFields.permit || 'อนุญาต'),
+        accessLimit: rawFields.accessLimit || rawFields.access_limit || '',
         radioStatus: rawFields.radioStatus || 'ปกติ',
         receiveStatus: rawFields.receiveStatus || 'ปกติ',
         transmitStatus: rawFields.transmitStatus || 'ปกติ',
         powerStatus: rawFields.powerStatus || 'ปกติ',
         batteryStatus: rawFields.batteryStatus || 'ปกติ',
         groundStatus: rawFields.groundStatus || 'ปกติ',
+        userProblem: rawFields.userProblem || rawFields.user_problem || '',
+        siteCondition: rawFields.siteCondition || rawFields.site_condition || '',
+        antennaCondition: rawFields.antennaCondition || rawFields.antenna_condition || '',
+        workObstacle: rawFields.workObstacle || rawFields.work_obstacle || '',
+        summary: rawFields.summary || rawFields.userSummary || '',
+        informantName: rawFields.informantName || rawFields.informant_name || rawFields.contactName || '',
+        operatorName: rawFields.operatorName || rawFields.operator_name || '',
       });
 
       const rawPhotos = editingSurvey.photos || rawFields.photos || [];
