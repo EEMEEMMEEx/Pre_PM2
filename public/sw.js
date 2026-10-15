@@ -48,6 +48,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Live real-time requests with _t timestamp pass through directly to network
+  if (url.searchParams.has('_t')) {
+    return;
+  }
+
   // 1. API endpoints (/api/database, /api/dashboard): Network-first, fallback to cache
   if (url.pathname.includes('/api/') || url.pathname === '/database' || url.pathname === '/dashboard') {
     event.respondWith(

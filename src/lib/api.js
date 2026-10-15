@@ -6,6 +6,24 @@
 const LOCAL_SURVEYS_KEY = 'nbtc_pre_pm_saved_surveys';
 const SURVEY_RESET_DATE = '2026-10-05T00:00:00.000Z';
 
+let syncBroadcastChannel = null;
+if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+  try {
+    syncBroadcastChannel = new BroadcastChannel('nbtc_pre_pm_sync_channel');
+  } catch (e) {}
+}
+
+export function notifySurveysUpdated(payload = {}) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: payload }));
+  }
+  if (syncBroadcastChannel) {
+    try {
+      syncBroadcastChannel.postMessage({ type: 'SURVEYS_UPDATED', timestamp: Date.now(), ...payload });
+    } catch (e) {}
+  }
+}
+
 export function getLocalSurveys() {
   try {
     const raw = localStorage.getItem(LOCAL_SURVEYS_KEY);
@@ -58,6 +76,7 @@ export function saveLocalSurvey(survey) {
       });
       localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(light));
     }
+    notifySurveysUpdated({ survey, recordId: survey.recordId });
   } catch (e) {
     console.warn('Failed to save survey to localStorage:', e);
   }
@@ -68,6 +87,7 @@ export function deleteLocalSurvey(recordId) {
     const current = getLocalSurveys();
     const filtered = current.filter((s) => s.recordId !== recordId);
     localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(filtered));
+    notifySurveysUpdated({ deletedRecordId: recordId });
   } catch (e) {
     console.warn('Failed to delete survey from localStorage:', e);
   }
@@ -154,10 +174,11 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
   };
 }
 
-export async function fetchDashboardData() {
+export async function fetchDashboardData(options = {}) {
+  const force = options.force || false;
   let serverData = null;
   try {
-    const res = await fetch('/api/dashboard', { cache: 'no-store' });
+    const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       serverData = await res.json();
     }
@@ -183,7 +204,7 @@ export async function fetchDashboardData() {
   let ghSurveys = [];
   if (isStaticHost || !serverData || !Array.isArray(serverData.recent)) {
     try {
-      ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds);
+      ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds, force);
     } catch (err) {
       console.warn('Could not fetch latest surveys from GitHub:', err);
     }
@@ -538,16 +559,50 @@ export async function deleteSurveys(recordIds) {
 
 let clientGhSurveysCache = null;
 let clientGhLastFetchTime = 0;
-const CLIENT_GH_CACHE_TTL = 30000;
+let lastSurveysCommitSha = null;
+let lastSurveysCommitETag = null;
+const CLIENT_GH_CACHE_TTL = 10000;
 
-export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set()) {
+export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
   const now = Date.now();
-  if (clientGhSurveysCache && (now - clientGhLastFetchTime) < CLIENT_GH_CACHE_TTL) {
+  if (!force && clientGhSurveysCache && (now - clientGhLastFetchTime) < CLIENT_GH_CACHE_TTL) {
     return clientGhSurveysCache;
   }
   try {
-    const res = await fetch('https://api.github.com/repos/Thaidimaru/Pre_PM2/contents/data/surveys?ref=main', {
+    // 1. Lightweight commit check with ETag to save API rate limits & bandwidth
+    const commitHeaders = { Accept: 'application/vnd.github+json' };
+    if (lastSurveysCommitETag && !force) {
+      commitHeaders['If-None-Match'] = lastSurveysCommitETag;
+    }
+
+    const commitRes = await fetch(
+      `https://api.github.com/repos/Thaidimaru/Pre_PM2/commits?path=data/surveys&per_page=1&_t=${now}`,
+      { headers: commitHeaders, cache: 'no-store' }
+    ).catch(() => null);
+
+    // If 304 Not Modified, nothing has changed on GitHub!
+    if (commitRes && commitRes.status === 304 && clientGhSurveysCache) {
+      clientGhLastFetchTime = now;
+      return clientGhSurveysCache;
+    }
+
+    if (commitRes && commitRes.ok) {
+      const commitETag = commitRes.headers.get('ETag');
+      if (commitETag) lastSurveysCommitETag = commitETag;
+      const commits = await commitRes.json().catch(() => []);
+      const latestSha = commits[0]?.sha;
+
+      if (latestSha && latestSha === lastSurveysCommitSha && clientGhSurveysCache && !force) {
+        clientGhLastFetchTime = now;
+        return clientGhSurveysCache;
+      }
+      if (latestSha) lastSurveysCommitSha = latestSha;
+    }
+
+    // 2. Fetch directory items when commit changed or first run
+    const res = await fetch(`https://api.github.com/repos/Thaidimaru/Pre_PM2/contents/data/surveys?ref=main&_t=${now}`, {
       headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
     });
     if (!res.ok) return clientGhSurveysCache || [];
     const items = await res.json();
