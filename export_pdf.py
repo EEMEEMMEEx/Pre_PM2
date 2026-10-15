@@ -767,7 +767,6 @@ table.report-table th, table.report-table td {{
       <div>
         <span class="doc-meta-bold">วันที่บันทึกตรวจเยี่ยม: </span>
         <span>{visit_date_th}</span>
-        <span style="margin-left: 4px; font-weight: 600;">({visit_time})</span>
       </div>
     </div>
 

@@ -266,8 +266,6 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
             </div>
             <div>
               <span className="font-bold">วันที่ตรวจเยี่ยม:</span> <span>{visitDateStr}</span>
-              <span className="mx-2">|</span>
-              <span className="font-bold">เวลา:</span> <span>{visitTime}</span>
             </div>
           </div>
 
@@ -343,15 +341,15 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
                   </td>
                   <td className="border border-black py-1 px-3 text-black font-semibold" colSpan={3}>
                     {isPermitted ? (
-                      <span className="text-emerald-800 font-bold">
+                      <span className="text-black font-bold">
                         [ / ] อนุญาตให้เข้าพื้นที่ปฏิบัติงาน
                       </span>
                     ) : (
-                      <span className="text-rose-800 font-bold">
+                      <span className="text-black font-bold">
                         [ X ] ไม่อนุญาตให้เข้าพื้นที่ปฏิบัติงาน
                       </span>
                     )}
-                    <span className="ml-4 font-normal text-neutral-800">
+                    <span className="ml-4 font-normal text-black">
                       (เงื่อนไข / ข้อจำกัด: {accessLimit})
                     </span>
                   </td>
@@ -365,9 +363,9 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
             <div className="bg-neutral-100 font-bold border border-black px-2.5 py-1 text-[13.5px] text-black">
               3. ผลการตรวจสอบและประเมินสภาพระบบวิทยุคมนาคม (System Assessment)
             </div>
-            <table className="w-full border-collapse border border-t-0 border-black text-[13px] leading-[1.3]">
+            <table className="w-full border-collapse border border-t-0 border-black text-[13px] leading-[1.3] text-black">
               <thead>
-                <tr className="bg-neutral-50 text-neutral-900 font-bold text-center">
+                <tr className="bg-neutral-50 text-black font-bold text-center">
                   <th className="border border-black py-1 px-1.5 w-[8%]">ลำดับ</th>
                   <th className="border border-black py-1 px-3 w-[42%] text-left">
                     รายการประเมินและตรวจสอบ
@@ -378,91 +376,71 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
               </thead>
               <tbody>
                 <tr>
-                  <td className="border border-black py-1 px-1.5 text-center">1</td>
-                  <td className="border border-black py-1 px-3">
+                  <td className="border border-black py-1 px-1.5 text-center text-black">1</td>
+                  <td className="border border-black py-1 px-3 text-black">
                     สภาพเครื่องวิทยุคมนาคม ( Radio Transceiver )
                   </td>
-                  <td className="border border-black py-1 px-2 text-center font-semibold">
-                    {isRadioNormal ? (
-                      <span className="text-emerald-800 font-bold">ปกติ</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold">ไม่ปกติ</span>
-                    )}
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-black">
+                    <span className="text-black font-bold">{isRadioNormal ? 'ปกติ' : 'ไม่ปกติ'}</span>
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-800">
+                  <td className="border border-black py-1 px-3 text-black">
                     {isRadioNormal ? 'ไฟสถานะเครื่องปกติ ไม่มีไฟเตือน Alarm' : 'พบไฟเตือนความผิดปกติ'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="border border-black py-1 px-1.5 text-center">2</td>
-                  <td className="border border-black py-1 px-3">
+                  <td className="border border-black py-1 px-1.5 text-center text-black">2</td>
+                  <td className="border border-black py-1 px-3 text-black">
                     สัญญาณรับ-ส่งวิทยุ ( RF Signal / Link )
                   </td>
-                  <td className="border border-black py-1 px-2 text-center font-semibold">
-                    {isSignalNormal ? (
-                      <span className="text-emerald-800 font-bold">ปกติ</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold">ไม่ปกติ</span>
-                    )}
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-black">
+                    <span className="text-black font-bold">{isSignalNormal ? 'ปกติ' : 'ไม่ปกติ'}</span>
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-800">
+                  <td className="border border-black py-1 px-3 text-black">
                     {isSignalNormal ? 'รับ-ส่งสัญญาณเสถียร ไม่พบสัญญาณรบกวน' : 'สัญญาณอ่อน/มีสัญญาณรบกวน'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="border border-black py-1 px-1.5 text-center">3</td>
-                  <td className="border border-black py-1 px-3">
+                  <td className="border border-black py-1 px-1.5 text-center text-black">3</td>
+                  <td className="border border-black py-1 px-3 text-black">
                     ระบบจ่ายไฟฟ้าหลัก ( AC Power Supply )
                   </td>
-                  <td className="border border-black py-1 px-2 text-center font-semibold">
-                    {isPowerNormal ? (
-                      <span className="text-emerald-800 font-bold">ปกติ</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold">ไม่ปกติ</span>
-                    )}
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-black">
+                    <span className="text-black font-bold">{isPowerNormal ? 'ปกติ' : 'ไม่ปกติ'}</span>
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-800">
+                  <td className="border border-black py-1 px-3 text-black">
                     {isPowerNormal ? 'แรงดันไฟฟ้าปกติ เบรกเกอร์ทำงานสมบูรณ์' : 'กระแสไฟฟ้าขัดข้อง/แรงดันตก'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="border border-black py-1 px-1.5 text-center">4</td>
-                  <td className="border border-black py-1 px-3">
+                  <td className="border border-black py-1 px-1.5 text-center text-black">4</td>
+                  <td className="border border-black py-1 px-3 text-black">
                     ระบบไฟฟ้าสำรอง / แบตเตอรี่ ( Backup Battery )
                   </td>
-                  <td className="border border-black py-1 px-2 text-center font-semibold">
-                    {isBatteryNormal ? (
-                      <span className="text-emerald-800 font-bold">ปกติ</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold">ไม่ปกติ</span>
-                    )}
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-black">
+                    <span className="text-black font-bold">{isBatteryNormal ? 'ปกติ' : 'ไม่ปกติ'}</span>
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-800">
+                  <td className="border border-black py-1 px-3 text-black">
                     {isBatteryNormal ? 'แรงดันแบตเตอรี่พร้อมใช้งาน' : 'แบตเตอรี่เสื่อมสภาพ/แรงดันต่ำ'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="border border-black py-1 px-1.5 text-center">5</td>
-                  <td className="border border-black py-1 px-3">ระบบกราวด์ ( Ground System )</td>
-                  <td className="border border-black py-1 px-2 text-center font-semibold">
-                    {isGroundNormal ? (
-                      <span className="text-emerald-800 font-bold">ปกติ</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold">ไม่ปกติ</span>
-                    )}
+                  <td className="border border-black py-1 px-1.5 text-center text-black">5</td>
+                  <td className="border border-black py-1 px-3 text-black">ระบบกราวด์ ( Ground System )</td>
+                  <td className="border border-black py-1 px-2 text-center font-semibold text-black">
+                    <span className="text-black font-bold">{isGroundNormal ? 'ปกติ' : 'ไม่ปกติ'}</span>
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-800">
+                  <td className="border border-black py-1 px-3 text-black">
                     {isGroundNormal ? 'ระบบกราวด์สมบูรณ์ ต่อลงดินเรียบร้อย' : 'ระบบกราวด์มีปัญหา/หลุดหลวม'}
                   </td>
                 </tr>
                 <tr>
                   <td
-                    className="border border-black py-1 px-3 text-center font-bold bg-neutral-50/80 text-neutral-900"
+                    className="border border-black py-1 px-3 text-center font-bold bg-neutral-50/80 text-black"
                     colSpan={2}
                   >
                     ปัญหาเพิ่มเติมที่ผู้ใช้งานแจ้ง
                   </td>
-                  <td className="border border-black py-1 px-3 text-neutral-900" colSpan={2}>
+                  <td className="border border-black py-1 px-3 text-black" colSpan={2}>
                     {userProblem}
                   </td>
                 </tr>
