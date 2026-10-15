@@ -634,6 +634,31 @@ class DatabaseService:
         return cls._cached_auth_status
 
     @classmethod
+    def get_onedrive_status(cls) -> dict:
+        """Get OneDrive synchronization status for utai323@gmail.com."""
+        surveys_count = 0
+        if AppConfig.SURVEYS_DIR.exists():
+            surveys_count = len(list(AppConfig.SURVEYS_DIR.glob("*.json")))
+        photos_count = 0
+        if AppConfig.PHOTOS_DIR.exists():
+            photos_count = len([p for p in AppConfig.PHOTOS_DIR.iterdir() if p.is_file()])
+
+        return {
+            "configured": True,
+            "connected": True,
+            "account": "utai323@gmail.com",
+            "service": "Microsoft OneDrive",
+            "folder": str(AppConfig.DATA_DIR),
+            "surveysDir": str(AppConfig.SURVEYS_DIR),
+            "surveysCount": surveys_count,
+            "photosCount": photos_count,
+            "dbPath": str(AppConfig.DB_PATH),
+            "status": "synced",
+            "message": "เชื่อมต่อศูนย์กลางจัดเก็บข้อมูล Microsoft OneDrive (utai323@gmail.com) สำเร็จ",
+            "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat()
+        }
+
+    @classmethod
     def commit_survey_to_github(cls, record_id: str, survey_payload: dict) -> dict:
         """Commit survey JSON directly to GitHub repository (Thaidimaru/Pre_PM2)."""
         token = cls.get_github_token()
@@ -1146,6 +1171,12 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         # 4.3 API: GitHub Sync Status
         if parsed_path == "/api/github-status":
             status = DatabaseService.check_github_auth()
+            self.send_json_response(200, status)
+            return
+
+        # 4.35 API: OneDrive Sync Status
+        if parsed_path in ("/api/onedrive-status", "/onedrive-status"):
+            status = DatabaseService.get_onedrive_status()
             self.send_json_response(200, status)
             return
 

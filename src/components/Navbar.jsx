@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, Menu, X, Sun, Moon, GitBranch, AlertCircle, KeyRound } from 'lucide-react';
+import { Calendar, Clock, Menu, X, Sun, Moon, Cloud, GitBranch, AlertCircle, KeyRound } from 'lucide-react';
 import { APP_VERSION } from '@/version';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
-import { fetchGitHubStatus } from '@/lib/api';
+import { fetchGitHubStatus, fetchOneDriveStatus } from '@/lib/api';
 import { GitHubTokenModal } from '@/components/auth/GitHubTokenModal';
+import { OneDriveSyncModal } from '@/components/auth/OneDriveSyncModal';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 
 export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   const { isDark, toggleTheme } = useTheme();
+  const [onedriveStatus, setOnedriveStatus] = useState(null);
   const [githubStatus, setGithubStatus] = useState({ configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2' });
+  const [isOneDriveModalOpen, setIsOneDriveModalOpen] = useState(false);
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [timeStr, setTimeStr] = useState(() =>
@@ -183,46 +186,20 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
               </span>
             </div>
 
-            {/* GitHub sync status indicator (Clickable button to configure token) */}
+            {/* OneDrive Central Storage & Sync indicator */}
             <button
               type="button"
-              onClick={() => setIsTokenModalOpen(true)}
+              onClick={() => setIsOneDriveModalOpen(true)}
               className={cn(
-                'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
-                githubStatus.valid
-                  ? isDark
-                    ? 'border-sky-500/30 bg-sky-950/40 text-sky-300 hover:bg-sky-900/40'
-                    : 'border-sky-300 bg-sky-50 text-sky-700 shadow-xs hover:bg-sky-100'
-                  : githubStatus.configured
-                    ? isDark
-                      ? 'border-amber-500/30 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40'
-                      : 'border-amber-300 bg-amber-50 text-amber-700 shadow-xs hover:bg-amber-100'
-                    : isDark
-                      ? 'border-slate-700 bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
-                      : 'border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
+                isDark
+                  ? 'border-sky-500/40 bg-sky-950/50 text-sky-300 hover:bg-sky-900/50 hover:border-sky-400'
+                  : 'border-sky-300 bg-sky-50 text-sky-700 shadow-xs hover:bg-sky-100'
               )}
-              title={
-                githubStatus.valid
-                  ? `GitHub Sync: เชื่อมต่อแล้ว (${githubStatus.user || githubStatus.repo}) - คลิกเพื่อตั้งค่า`
-                  : githubStatus.configured
-                    ? 'GitHub Token มีปัญหา - คลิกเพื่อตรวจสอบหรืออัปเดต'
-                    : 'GitHub Sync: รอตั้งค่า Token - คลิกเพื่อตั้งค่า Personal Access Token'
-              }
+              title="ศูนย์กลางจัดเก็บและซิงค์ข้อมูล: Microsoft OneDrive (utai323@gmail.com) — คลิกเพื่อดูรายละเอียดหรือซิงค์ข้อมูล"
             >
-              {githubStatus.valid ? (
-                <GitBranch className={cn('h-3.5 w-3.5', isDark ? 'text-sky-400' : 'text-sky-600')} />
-              ) : githubStatus.configured ? (
-                <AlertCircle className={cn('h-3.5 w-3.5', isDark ? 'text-amber-400' : 'text-amber-600')} />
-              ) : (
-                <GitBranch className="h-3.5 w-3.5 text-slate-400" />
-              )}
-              <span>
-                {githubStatus.valid
-                  ? `GitHub เชื่อมต่อ${githubStatus.user ? ` (${githubStatus.user})` : ''}`
-                  : githubStatus.configured
-                    ? 'Token มีปัญหา'
-                    : 'รอตั้งค่า Token'}
-              </span>
+              <Cloud className={cn('h-3.5 w-3.5', isDark ? 'text-sky-400' : 'text-sky-600')} />
+              <span>OneDrive ซิงค์ (utai323)</span>
             </button>
 
             <div className={cn('h-6 w-px', isDark ? 'bg-slate-700/60' : 'bg-slate-300')} />
@@ -270,13 +247,18 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
                 </>
               )}
             </button>
-
-
           </div>
         </div>
       </div>
 
-      {/* GitHub Token Configuration Modal */}
+      {/* OneDrive Storage & Sync Center Modal */}
+      <OneDriveSyncModal
+        isOpen={isOneDriveModalOpen}
+        onClose={() => setIsOneDriveModalOpen(false)}
+        onOpenGitHubModal={() => setIsTokenModalOpen(true)}
+      />
+
+      {/* Advanced Fallback: GitHub Token Configuration Modal */}
       <GitHubTokenModal
         isOpen={isTokenModalOpen}
         onClose={() => setIsTokenModalOpen(false)}

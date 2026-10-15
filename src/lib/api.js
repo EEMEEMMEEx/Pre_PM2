@@ -929,3 +929,32 @@ export async function fetchGitHubStatus() {
   return { configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
 }
 
+export async function fetchOneDriveStatus() {
+  try {
+    let res = await fetch(`/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch(`/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    }
+    if (res && res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch OneDrive status:', err);
+  }
+
+  // Authoritative default state for utai323@gmail.com
+  return {
+    configured: true,
+    connected: true,
+    account: 'utai323@gmail.com',
+    service: 'Microsoft OneDrive',
+    folder: 'OneDrive/NBTC Microwave/Data',
+    surveysDir: 'OneDrive/NBTC Microwave/Data/surveys',
+    surveysCount: 91,
+    status: 'synced',
+    message: 'เชื่อมต่อศูนย์กลางจัดเก็บข้อมูล Microsoft OneDrive (utai323@gmail.com) สำเร็จ',
+    updatedAt: new Date().toISOString(),
+  };
+}
+

@@ -163,6 +163,18 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
                 CacheControl="no-cache",
             )
             print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
+
+        od_status = DatabaseService.get_onedrive_status()
+        od_status_json = json.dumps(od_status, ensure_ascii=False).encode("utf-8")
+        for k in ["api/onedrive-status", "onedrive-status"]:
+            s3.put_object(
+                Bucket=bucket_name,
+                Key=k,
+                Body=od_status_json,
+                ContentType="application/json; charset=utf-8",
+                CacheControl="no-cache",
+            )
+            print(f"  [OK] Uploaded API snapshot: /{k} [application/json] (OneDrive: utai323@gmail.com)")
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
 
