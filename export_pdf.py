@@ -993,6 +993,7 @@ def export_pdf(
     include_photos: bool = True,
     station_filter: str = None,
     record_filter: str = None,
+    record_ids: list = None,
     preferred_browser: str = None,
     split_folder: Path = None,
 ) -> Path:
@@ -1011,6 +1012,10 @@ def export_pdf(
         sys.exit(1)
 
     # Apply filters if requested
+    if record_ids:
+        target_ids = {str(x).strip() for x in record_ids if str(x).strip()}
+        surveys = [s for s in surveys if str(s.get("recordId", "")).strip() in target_ids or str(s.get("id", "")).strip() in target_ids]
+        print(f"      Filtered by record_ids ({len(target_ids)} target(s)): {len(surveys)} record(s)")
     if station_filter:
         q = station_filter.lower().strip()
         surveys = [s for s in surveys if q in s["station"].lower() or q in s["province"].lower()]

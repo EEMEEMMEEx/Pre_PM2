@@ -915,8 +915,38 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(200, status)
             return
 
-        # 4.4 API: Export All Survey Reports to PDF
+        # 4.4 API: Export Survey Reports to PDF (Supports custom selected IDs)
         if parsed_path in ("/api/export-pdf", "/api/export/pdf", "/api/export-all-pdf"):
+            ids_param = query_params.get("ids", [""])[0] if "query_params" in locals() else ""
+            if not ids_param:
+                from urllib.parse import parse_qs, urlparse
+                ids_param = parse_qs(urlparse(self.path).query).get("ids", [""])[0]
+
+            if ids_param:
+                selected_ids = [x.strip() for x in ids_param.split(",") if x.strip()]
+                temp_pdf = AppConfig.DATA_DIR / f"SURVEY_EXPORT_{len(selected_ids)}_STATIONS.pdf"
+                try:
+                    from export_pdf import export_pdf
+                    export_pdf(output_path=temp_pdf, record_ids=selected_ids)
+                    if temp_pdf.exists():
+                        data = temp_pdf.read_bytes()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/pdf")
+                        self.send_header("Content-Length", str(len(data)))
+                        self.send_header("Content-Disposition", f'attachment; filename="SURVEY_SELECTED_{len(selected_ids)}_STATIONS.pdf"')
+                        self.send_header("Cache-Control", "no-cache")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
+                    else:
+                        self.send_json_response(500, {"error": "Selected PDF could not be generated"})
+                        return
+                except Exception as e:
+                    self.send_json_response(500, {"error": f"Failed to generate selected PDF: {e}"})
+                    return
+
+            # Default: Export all surveys
             pdf_file = AppConfig.SURVEY_PDF_PATH
             if not pdf_file.exists():
                 try:

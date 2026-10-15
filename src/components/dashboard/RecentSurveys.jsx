@@ -15,17 +15,22 @@ import {
   X,
   Filter,
   FileDown,
+  FileSpreadsheet,
+  Check,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
+import { exportSurveysToExcel } from '@/lib/excelExport';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
 export function RecentSurveys({ recent = [], onNavigate }) {
   const { isDark } = useTheme();
   const [selectedReport, setSelectedReport] = useState(null);
+  const [batchReportSurveys, setBatchReportSurveys] = useState(null);
   const [selectedPreview, setSelectedPreview] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,13 +75,74 @@ export function RecentSurveys({ recent = [], onNavigate }) {
 
   const totalItems = filteredSurveys.length;
   const isFiltered = searchQuery.trim() !== '' || permitFilter !== 'all';
-  const effectivePageSize = pageSize === 'all' ? (totalItems || 1) : Number(pageSize);
+  const effectivePageSize = pageSize === 'all' ? totalItems || 1 : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(totalItems / effectivePageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const startIndex = (safeCurrentPage - 1) * effectivePageSize;
   const endIndex = pageSize === 'all' ? totalItems : Math.min(startIndex + effectivePageSize, totalItems);
   const displayedItems = pageSize === 'all' ? filteredSurveys : filteredSurveys.slice(startIndex, endIndex);
+
+  // Selection Logic
+  const isAllSelected =
+    displayedItems.length > 0 && displayedItems.every((item) => selectedIds.has(item.recordId));
+  const isSomeSelected =
+    displayedItems.some((item) => selectedIds.has(item.recordId)) && !isAllSelected;
+
+  const handleToggleSelect = (recordId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recordId)) {
+        next.delete(recordId);
+      } else {
+        next.add(recordId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (isAllSelected) {
+        displayedItems.forEach((item) => next.delete(item.recordId));
+      } else {
+        displayedItems.forEach((item) => next.add(item.recordId));
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedIds(new Set(filteredSurveys.map((item) => item.recordId)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleExportExcel = (customList) => {
+    const listToExport = customList
+      ? customList
+      : selectedIds.size > 0
+      ? recent.filter((r) => selectedIds.has(r.recordId))
+      : filteredSurveys;
+    if (listToExport.length === 0) return;
+    const filename =
+      selectedIds.size > 0
+        ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.xlsx`
+        : `SURVEY_DATA_ALL_${listToExport.length}_STATIONS.xlsx`;
+    exportSurveysToExcel(listToExport, filename);
+  };
+
+  const handleExportBatchPdf = () => {
+    const listToExport =
+      selectedIds.size > 0
+        ? recent.filter((r) => selectedIds.has(r.recordId))
+        : filteredSurveys;
+    if (listToExport.length === 0) return;
+    setBatchReportSurveys(listToExport);
+  };
 
   const getBadge = (permit) => {
     if (permit === 'อนุญาต') {
@@ -128,7 +194,12 @@ export function RecentSurveys({ recent = [], onNavigate }) {
     <>
       <GlassCard className="flex flex-col" hoverEffect={false}>
         {/* Panel Title & Action */}
-        <div className={cn('flex flex-wrap items-center justify-between gap-3 pb-4 border-b', isDark ? 'border-slate-800/80' : 'border-slate-200')}>
+        <div
+          className={cn(
+            'flex flex-wrap items-center justify-between gap-3 pb-4 border-b',
+            isDark ? 'border-slate-800/80' : 'border-slate-200'
+          )}
+        >
           <div className="flex items-center gap-2">
             <div
               className={cn(
@@ -140,7 +211,12 @@ export function RecentSurveys({ recent = [], onNavigate }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className={cn('text-lg font-bold tracking-normal leading-tight', isDark ? 'text-white' : 'text-slate-900')}>
+                <h2
+                  className={cn(
+                    'text-lg font-bold tracking-normal leading-tight',
+                    isDark ? 'text-white' : 'text-slate-900'
+                  )}
+                >
                   ประวัติการกรอกข้อมูลการตรวจเยี่ยม
                 </h2>
                 <span
@@ -155,26 +231,71 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                 </span>
               </div>
               <p className={cn('text-xs mt-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
-                คลิกที่รหัสรายการ หรือชื่อสถานี เพื่อพรีวิวข้อมูลและรูปภาพ
+                เลือกเครื่องหมายถูกด้านหน้ารายการเพื่อดาวน์โหลดหลายรายการพร้อมกัน หรือคลิกที่ชื่อสถานีเพื่อพรีวิว
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Export PDF Button (All or Selected) */}
             <a
-              href="/api/export-pdf"
-              download={`SURVEY_REPORTS_ALL_${recent.length || 63}.pdf`}
+              href={
+                selectedIds.size > 0
+                  ? `/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`
+                  : '/api/export-pdf'
+              }
+              download={
+                selectedIds.size > 0
+                  ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`
+                  : `SURVEY_REPORTS_ALL_${recent.length || 63}.pdf`
+              }
               className={cn(
                 'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
-                isDark
+                selectedIds.size > 0
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-cyan-400 shadow-md'
+                  : isDark
                   ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
                   : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
               )}
-              title={`ดาวน์โหลดรายงานผลการสำรวจทางการทั้งหมด (PDF รวม ${recent.length} สถานี พร้อมรูปถ่าย)`}
+              title={
+                selectedIds.size > 0
+                  ? `ดาวน์โหลดไฟล์ PDF ทางการสำหรับ ${selectedIds.size} สถานีที่เลือก`
+                  : `ดาวน์โหลดรายงานผลการสำรวจทางการทั้งหมด (PDF รวม ${recent.length} สถานี พร้อมรูปถ่าย)`
+              }
             >
               <FileDown className="h-3.5 w-3.5" />
-              <span>Export PDF ทั้งหมด ({recent.length})</span>
+              <span>
+                {selectedIds.size > 0
+                  ? `Export PDF ที่เลือก (${selectedIds.size})`
+                  : `Export PDF ทั้งหมด (${recent.length})`}
+              </span>
             </a>
+
+            {/* Export Excel Button */}
+            <button
+              type="button"
+              onClick={() => handleExportExcel()}
+              className={cn(
+                'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
+                selectedIds.size > 0
+                  ? 'bg-emerald-600 text-white border-emerald-400 shadow-md hover:bg-emerald-500'
+                  : isDark
+                  ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-600/30 hover:border-emerald-400 hover:text-white'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-400'
+              )}
+              title={
+                selectedIds.size > 0
+                  ? `ส่งออกไฟล์ Excel สำหรับ ${selectedIds.size} สถานีที่เลือก`
+                  : `ส่งออกผลการสำรวจทั้งหมดเป็นไฟล์ Excel (.xlsx)`
+              }
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>
+                {selectedIds.size > 0
+                  ? `Excel ที่เลือก (${selectedIds.size})`
+                  : `Export Excel (${recent.length})`}
+              </span>
+            </button>
 
             {onNavigate && (
               <button
@@ -198,7 +319,12 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         <div className="pt-3 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px]">
-            <Search className={cn('absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5', isDark ? 'text-slate-400' : 'text-slate-500')} />
+            <Search
+              className={cn(
+                'absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5',
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              )}
+            />
             <input
               type="text"
               value={searchQuery}
@@ -247,8 +373,8 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                     ? 'bg-blue-600/30 border-blue-500/50 text-white'
                     : 'bg-sky-100 border-sky-300 text-sky-800 font-semibold'
                   : isDark
-                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
               )}
             >
               ทั้งหมด ({recent.length})
@@ -266,8 +392,8 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                     ? 'bg-emerald-500/25 border-emerald-500/50 text-emerald-300'
                     : 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold'
                   : isDark
-                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-emerald-400'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
+                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-emerald-400'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
               )}
             >
               <CheckCircle2 className="h-3 w-3" />
@@ -286,8 +412,8 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                     ? 'bg-rose-500/25 border-rose-500/50 text-rose-300'
                     : 'bg-rose-50 border-rose-400 text-rose-800 font-semibold'
                   : isDark
-                    ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-rose-400'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
+                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-rose-400'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
               )}
             >
               <XCircle className="h-3 w-3" />
@@ -295,6 +421,90 @@ export function RecentSurveys({ recent = [], onNavigate }) {
             </button>
           </div>
         </div>
+
+        {/* Floating Batch Actions Bar when items are selected */}
+        {selectedIds.size > 0 && (
+          <div
+            className={cn(
+              'flex flex-wrap items-center justify-between gap-3 p-2.5 px-4 rounded-xl border mt-1 mb-2 transition-all shadow-sm',
+              isDark
+                ? 'bg-gradient-to-r from-cyan-950/70 via-slate-900/90 to-blue-950/70 border-cyan-500/40 text-cyan-200'
+                : 'bg-gradient-to-r from-sky-50 via-white to-blue-50 border-sky-300 text-sky-900'
+            )}
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-bold">
+                ✓
+              </span>
+              <span>
+                เลือกแล้ว{' '}
+                <strong className={cn('font-mono font-bold', isDark ? 'text-cyan-300' : 'text-sky-700')}>
+                  {selectedIds.size}
+                </strong>{' '}
+                รายการ
+              </span>
+              <span className="opacity-40">•</span>
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="text-xs underline hover:text-cyan-300 cursor-pointer font-medium opacity-85"
+              >
+                เลือกทั้งหมดในผลค้นหา ({filteredSurveys.length})
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Direct PDF Download from Server */}
+              <a
+                href={`/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`}
+                download={`SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md hover:from-blue-500 hover:to-cyan-400 cursor-pointer transition-all"
+                title="ดาวน์โหลดไฟล์ PDF รวมสำหรับสถานีที่เลือกโดยตรง"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span>ดาวน์โหลด PDF ({selectedIds.size})</span>
+              </a>
+
+              {/* Printable A4 Modal (Batch Print) */}
+              <button
+                type="button"
+                onClick={handleExportBatchPdf}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-md cursor-pointer transition-all border border-indigo-500/40"
+                title="เปิดพรีวิวและพิมพ์เอกสาร A4 ทางการรวมทุกรายการที่เลือก"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>พิมพ์ / พรีวิว A4 ({selectedIds.size})</span>
+              </button>
+
+              {/* Batch Excel Export */}
+              <button
+                type="button"
+                onClick={() => handleExportExcel()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-md cursor-pointer transition-all border border-emerald-500/40"
+                title="ส่งออกรายการที่เลือกเป็นไฟล์ Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>Excel ({selectedIds.size})</span>
+              </button>
+
+              {/* Clear Selection */}
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer',
+                  isDark
+                    ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                )}
+                title="ยกเลิกการเลือกทั้งหมด"
+              >
+                <X className="h-3 w-3" />
+                <span>ยกเลิก</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Toolbar: Count info & Page Size Selector */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-xs">
@@ -350,7 +560,7 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         {/* Table Container with scrollbar */}
         <div
           className={cn(
-            'overflow-x-auto overflow-y-auto max-h-[420px] rounded-xl border mt-2 custom-scrollbar transition-colors',
+            'overflow-x-auto overflow-y-auto max-h-[460px] rounded-xl border mt-2 custom-scrollbar transition-colors shadow-2xs',
             isDark ? 'border-slate-800/80 bg-slate-950/20' : 'border-slate-200 bg-white'
           )}
         >
@@ -362,7 +572,21 @@ export function RecentSurveys({ recent = [], onNavigate }) {
               )}
             >
               <tr className={cn('border-b text-xs font-semibold', isDark ? 'border-slate-800' : 'border-slate-200')}>
-                <th className="py-2.5 pr-3 pl-3">รหัสรายการ</th>
+                {/* Select All Checkbox */}
+                <th className="py-2.5 pl-3.5 pr-1.5 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = isSomeSelected;
+                    }}
+                    onChange={handleToggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-900/60 text-cyan-500 focus:ring-cyan-500 cursor-pointer accent-cyan-500"
+                    title={isAllSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้'}
+                    aria-label="เลือกทั้งหมดในหน้านี้"
+                  />
+                </th>
+                <th className="py-2.5 pr-3 pl-2">รหัสรายการ</th>
                 <th className="py-2.5 px-3">สถานี</th>
                 <th className="py-2.5 px-3">จังหวัด</th>
                 <th className="py-2.5 px-3 text-center">ผล</th>
@@ -372,99 +596,121 @@ export function RecentSurveys({ recent = [], onNavigate }) {
             </thead>
             <tbody className={cn('divide-y', isDark ? 'divide-slate-800/50' : 'divide-slate-200')}>
               {displayedItems.length > 0 ? (
-                displayedItems.map((item) => (
-                  <tr
-                    key={item.recordId}
-                    className={cn(
-                      'transition-colors',
-                      isDark ? 'hover:bg-slate-800/30' : 'hover:bg-sky-50/50'
-                    )}
-                  >
-                    {/* Clickable Record ID */}
-                    <td className="py-3 pr-3 pl-3 font-mono text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPreview(item)}
-                        className={cn(
-                          'group inline-flex items-center gap-1.5 transition-colors font-mono cursor-pointer text-left',
-                          isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-sky-600 hover:text-sky-700'
-                        )}
-                        title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
-                      >
-                        <span className="group-hover:underline underline-offset-2 font-semibold">
-                          {item.recordId}
-                        </span>
-                        <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    </td>
+                displayedItems.map((item) => {
+                  const isSelected = selectedIds.has(item.recordId);
+                  return (
+                    <tr
+                      key={item.recordId}
+                      className={cn(
+                        'transition-colors',
+                        isSelected
+                          ? isDark
+                            ? 'bg-cyan-500/10 hover:bg-cyan-500/15'
+                            : 'bg-sky-50/80 hover:bg-sky-100/60'
+                          : isDark
+                          ? 'hover:bg-slate-800/30'
+                          : 'hover:bg-sky-50/50'
+                      )}
+                    >
+                      {/* Checkbox column */}
+                      <td className="py-3 pl-3.5 pr-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(item.recordId)}
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-900/60 text-cyan-500 focus:ring-cyan-500 cursor-pointer accent-cyan-500"
+                          title={`เลือกสถานี ${item.station}`}
+                          aria-label={`เลือกสถานี ${item.station}`}
+                        />
+                      </td>
 
-                    {/* Clickable Station Name */}
-                    <td className="py-3 px-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPreview(item)}
-                        className={cn(
-                          'text-left font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 flex-wrap',
-                          isDark ? 'text-slate-200 hover:text-cyan-300' : 'text-slate-800 hover:text-sky-600'
-                        )}
-                        title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
-                      >
-                        <span className="hover:underline underline-offset-2">
-                          {item.station}
-                        </span>
-                        {item.photos && item.photos.length > 0 && (
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium border',
-                              isDark
-                                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300'
-                                : 'bg-sky-100 border-sky-200 text-sky-700'
-                            )}
-                            title={`มีรูปภาพแนบ ${item.photos.length} รูป`}
-                          >
-                            <ImageIcon className="h-3 w-3" />
-                            <span>{item.photos.length}</span>
+                      {/* Clickable Record ID */}
+                      <td className="py-3 pr-3 pl-2 font-mono text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPreview(item)}
+                          className={cn(
+                            'group inline-flex items-center gap-1.5 transition-colors font-mono cursor-pointer text-left',
+                            isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-sky-600 hover:text-sky-700'
+                          )}
+                          title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
+                        >
+                          <span className="group-hover:underline underline-offset-2 font-semibold">
+                            {item.recordId}
                           </span>
-                        )}
-                      </button>
-                    </td>
+                          <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      </td>
 
-                    <td className={cn('py-3 px-3', isDark ? 'text-slate-300' : 'text-slate-700')}>
-                      {item.province}
-                    </td>
+                      {/* Clickable Station Name */}
+                      <td className="py-3 px-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPreview(item)}
+                          className={cn(
+                            'text-left font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 flex-wrap',
+                            isDark ? 'text-slate-200 hover:text-cyan-300' : 'text-slate-800 hover:text-sky-600'
+                          )}
+                          title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
+                        >
+                          <span className="hover:underline underline-offset-2">{item.station}</span>
+                          {item.photos && item.photos.length > 0 && (
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium border',
+                                isDark
+                                  ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300'
+                                  : 'bg-sky-100 border-sky-200 text-sky-700'
+                              )}
+                              title={`มีรูปภาพแนบ ${item.photos.length} รูป`}
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                              <span>{item.photos.length}</span>
+                            </span>
+                          )}
+                        </button>
+                      </td>
 
-                    <td className="py-3 px-3 text-center">
-                      {getBadge(item.permit)}
-                    </td>
+                      <td className={cn('py-3 px-3', isDark ? 'text-slate-300' : 'text-slate-700')}>
+                        {item.province}
+                      </td>
 
-                    <td className={cn('py-3 px-3 text-right text-xs', isDark ? 'text-slate-400' : 'text-slate-500')}>
-                      {new Date(item.savedAt).toLocaleString('th-TH', {
-                        dateStyle: 'short',
-                        timeStyle: 'short'
-                      })}
-                    </td>
+                      <td className="py-3 px-3 text-center">{getBadge(item.permit)}</td>
 
-                    <td className="py-3 pl-3 pr-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedReport(item)}
+                      <td
                         className={cn(
-                          'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer shadow-xs',
-                          isDark
-                            ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
-                            : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
+                          'py-3 px-3 text-right text-xs',
+                          isDark ? 'text-slate-400' : 'text-slate-500'
                         )}
-                        title="ส่งออกรายงาน A4 ทางการ (Export PDF / Print)"
                       >
-                        <Printer className="h-3.5 w-3.5" />
-                        <span>Export</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        {new Date(item.savedAt).toLocaleString('th-TH', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </td>
+
+                      <td className="py-3 pl-3 pr-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReport(item)}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer shadow-xs',
+                            isDark
+                              ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
+                              : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
+                          )}
+                          title="ส่งออกรายงาน A4 ทางการ (Export PDF / Print)"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          <span>Export</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={6} className={cn('py-8 text-center', isDark ? 'text-slate-500' : 'text-slate-400')}>
+                  <td colSpan={7} className={cn('py-8 text-center', isDark ? 'text-slate-500' : 'text-slate-400')}>
                     {isFiltered ? (
                       <div className="flex flex-col items-center gap-2">
                         <span>ไม่พบข้อมูลที่ตรงกับคำค้นหาหรือตัวกรอง</span>
@@ -548,8 +794,8 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                                 : 'bg-sky-100 text-sky-700 border border-sky-300'
                               : isDark
-                                ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                              ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                           )}
                         >
                           {pageNum}
@@ -589,11 +835,18 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         }}
       />
 
-      {/* Survey Official A4 Printable Report Modal */}
+      {/* Single Survey Official A4 Printable Report Modal */}
       <SurveyReportModal
         isOpen={Boolean(selectedReport)}
         onClose={() => setSelectedReport(null)}
         surveyData={selectedReport || {}}
+      />
+
+      {/* Batch Survey Official A4 Printable Report Modal */}
+      <SurveyReportModal
+        isOpen={Boolean(batchReportSurveys && batchReportSurveys.length > 0)}
+        onClose={() => setBatchReportSurveys(null)}
+        surveys={batchReportSurveys || []}
       />
     </>
   );
