@@ -112,11 +112,17 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
         uploaded += 1
         print(f"  [OK] Uploaded ({uploaded}/{len(files_to_upload)}): /{rel_key} [{content_type}] ({len(file_bytes)/1024:.1f} KB)")
 
-    # Upload SPA route fallbacks so direct navigation or refresh on /dashboard loads the web app
+    # Upload SPA route fallbacks so direct navigation or refresh loads the web app
     index_html_path = DIST_DIR / "index.html"
     if index_html_path.exists():
         index_bytes = index_html_path.read_bytes()
-        for spa_route in ["dashboard", "dashboard/index.html"]:
+        spa_routes = [
+            "dashboard", "dashboard/index.html", "dashboard/",
+            "field", "field/index.html", "field/",
+            "login", "login/index.html", "login/",
+            "index", "home",
+        ]
+        for spa_route in spa_routes:
             s3.put_object(
                 Bucket=bucket_name,
                 Key=spa_route,
