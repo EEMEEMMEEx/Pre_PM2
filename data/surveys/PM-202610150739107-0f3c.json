@@ -1,0 +1,18 @@
+{
+  "recordId": "PM-202610150739107-0f3c",
+  "savedAt": "2026-10-15T07:39:10.764Z",
+  "station": "หนักไทร",
+  "province": "",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หนักไทร"
+  },
+  "photos": []
+}
