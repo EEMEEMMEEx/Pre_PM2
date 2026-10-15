@@ -538,7 +538,7 @@ export async function fetchSurveysFromGitHubClient() {
     const jsonFiles = items.filter((f) => f.type === 'file' && f.name.endsWith('.json') && !f.name.startsWith('.'));
     jsonFiles.sort((a, b) => b.name.localeCompare(a.name));
 
-    const surveys = (
+    const rawSurveys = (
       await Promise.all(
         jsonFiles.slice(0, 500).map(async (file) => {
           try {
@@ -549,6 +549,40 @@ export async function fetchSurveysFromGitHubClient() {
         })
       )
     ).filter((s) => s && s.recordId);
+
+    const surveys = rawSurveys.map((s) => {
+      const rawPhotos = Array.isArray(s.photos) && s.photos.length > 0
+        ? s.photos
+        : Array.isArray(s.fields?.photos) && s.fields.photos.length > 0
+        ? s.fields.photos
+        : [];
+
+      const formattedPhotos = rawPhotos.map((p, idx) => {
+        let dataUrl = p.dataUrl || null;
+        if (!dataUrl && p.data) {
+          dataUrl = p.data.startsWith('data:')
+            ? p.data
+            : `data:${p.type || p.contentType || 'image/jpeg'};base64,${p.data}`;
+        }
+        return {
+          ...p,
+          id: p.id || idx + 1,
+          name: p.name || `photo_${idx + 1}.jpg`,
+          contentType: p.type || p.contentType || 'image/jpeg',
+          dataUrl,
+          url: dataUrl || p.url || `/api/photos/${p.id || encodeURIComponent(p.name || '')}`,
+        };
+      });
+
+      return {
+        ...s,
+        photos: formattedPhotos,
+        fields: {
+          ...(s.fields || {}),
+          photos: formattedPhotos,
+        },
+      };
+    });
 
     clientGhSurveysCache = surveys;
     clientGhLastFetchTime = now;

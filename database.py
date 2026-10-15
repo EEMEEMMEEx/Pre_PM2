@@ -17,7 +17,7 @@ import secrets
 import sqlite3
 import threading
 import urllib.parse
-from urllib.parse import unquote, quote, parse_qs
+from urllib.parse import unquote, quote, parse_qs, urlparse
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
@@ -1127,7 +1127,6 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         if parsed_path in ("/api/export-pdf", "/api/export/pdf", "/api/export-all-pdf"):
             ids_param = query_params.get("ids", [""])[0] if "query_params" in locals() else ""
             if not ids_param:
-                from urllib.parse import parse_qs, urlparse
                 ids_param = parse_qs(urlparse(self.path).query).get("ids", [""])[0]
 
             if ids_param:

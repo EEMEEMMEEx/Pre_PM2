@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Radio as RadioIcon,
@@ -26,6 +26,20 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 import { findStationByName } from '@/lib/api';
+
+/**
+ * Robust photo source resolver for base64 data, dataUrl, or server url
+ */
+export const getPhotoSrc = (photo) => {
+  if (!photo) return '';
+  if (photo.dataUrl) return photo.dataUrl;
+  if (photo.data) {
+    return photo.data.startsWith('data:')
+      ? photo.data
+      : `data:${photo.type || photo.contentType || 'image/jpeg'};base64,${photo.data}`;
+  }
+  return photo.url || '';
+};
 
 export function SurveyPreviewModal({
   isOpen,
@@ -135,10 +149,79 @@ export function SurveyPreviewModal({
   const informantName = fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : '');
   const operatorName = fields.operatorName || fields.operator_name || 'วิศวกรผู้ควบคุมงาน';
 
-  // Photos
-  const photos = Array.isArray(surveyData.photos) && surveyData.photos.length > 0
+  // Photos with full base64 data resolution
+  const rawPhotos = Array.isArray(surveyData.photos) && surveyData.photos.length > 0
     ? surveyData.photos
     : (Array.isArray(fields.photos) && fields.photos.length > 0 ? fields.photos : []);
+
+  const [resolvedPhotos, setResolvedPhotos] = useState(() => {
+    return rawPhotos.map((p, idx) => {
+      const src = getPhotoSrc(p);
+      return {
+        ...p,
+        id: p.id || idx + 1,
+        name: p.name || `photo_${idx + 1}.jpg`,
+        dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+        url: src || (p.id ? `/api/photos/${p.id}` : ''),
+      };
+    });
+  });
+
+  // Re-sync when surveyData changes
+  useEffect(() => {
+    setResolvedPhotos(
+      rawPhotos.map((p, idx) => {
+        const src = getPhotoSrc(p);
+        return {
+          ...p,
+          id: p.id || idx + 1,
+          name: p.name || `photo_${idx + 1}.jpg`,
+          dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+          url: src || (p.id ? `/api/photos/${p.id}` : ''),
+        };
+      })
+    );
+  }, [surveyData]);
+
+  // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
+  useEffect(() => {
+    if (!isOpen) return;
+    const hasMissingDataUrl = resolvedPhotos.some((p) => !p.dataUrl);
+    const isStaticHost =
+      typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
+    if (recordId && recordId !== '-' && (hasMissingDataUrl || isStaticHost)) {
+      const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
+      fetch(ghUrl)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.photos) && data.photos.length > 0) {
+            setResolvedPhotos((prev) =>
+              prev.map((photo, idx) => {
+                const match =
+                  data.photos[idx] ||
+                  data.photos.find((p) => p.name === photo.name) ||
+                  data.photos[0];
+                if (match && match.data) {
+                  const b64 = match.data.startsWith('data:')
+                    ? match.data
+                    : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
+                  return {
+                    ...photo,
+                    dataUrl: b64,
+                    url: b64,
+                  };
+                }
+                return photo;
+              })
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen, recordId]);
 
   // Format file size
   const formatSize = (bytes) => {
@@ -173,9 +256,10 @@ export function SurveyPreviewModal({
   // Download Single Photo
   const handleDownloadPhoto = (photo, e) => {
     if (e) e.stopPropagation();
-    const downloadUrl = photo.url
-      ? (photo.url.includes('?') ? `${photo.url}&download=1` : `${photo.url}?download=1`)
-      : (photo.dataUrl || photo.url);
+    const src = getPhotoSrc(photo);
+    if (!src) return;
+    const isData = src.startsWith('data:');
+    const downloadUrl = !isData && src.includes('?') ? `${src}&download=1` : (!isData ? `${src}?download=1` : src);
 
     const link = document.createElement('a');
     link.href = downloadUrl;
@@ -570,38 +654,55 @@ export function SurveyPreviewModal({
               )}
             </div>
 
-            {photos.length > 0 ? (
+            {resolvedPhotos.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-                {photos.map((photo, index) => (
-                  <div
-                    key={photo.id || index}
-                    className={cn(
-                      'group relative flex flex-col rounded-xl border overflow-hidden shadow-xs transition-all duration-200',
-                      isDark ? 'border-slate-800 bg-slate-900/80 hover:border-cyan-500/50' : 'border-slate-200 bg-white hover:border-sky-300 shadow-2xs'
-                    )}
-                  >
-                    {/* Thumbnail Image */}
+                {resolvedPhotos.map((photo, index) => {
+                  const photoSrc = getPhotoSrc(photo);
+                  return (
                     <div
-                      onClick={() => setActivePhoto(photo)}
-                      className="relative h-44 w-full bg-black/50 overflow-hidden cursor-pointer flex items-center justify-center"
+                      key={photo.id || index}
+                      className={cn(
+                        'group relative flex flex-col rounded-xl border overflow-hidden shadow-xs transition-all duration-200',
+                        isDark ? 'border-slate-800 bg-slate-900/80 hover:border-cyan-500/50' : 'border-slate-200 bg-white hover:border-sky-300 shadow-2xs'
+                      )}
                     >
-                      <img
-                        src={photo.url || photo.dataUrl}
-                        alt={photo.name}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                      {/* Zoom Indicator Overlay */}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <span className="flex items-center gap-1 rounded-lg bg-black/70 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm border border-white/20">
-                          <ZoomIn className="h-3.5 w-3.5" />
-                          <span>ดูรูปขนาดใหญ่</span>
-                        </span>
+                      {/* Thumbnail Image */}
+                      <div
+                        onClick={() => setActivePhoto(photo)}
+                        className="relative h-44 w-full bg-black/50 overflow-hidden cursor-pointer flex items-center justify-center"
+                      >
+                        <img
+                          src={photoSrc}
+                          alt={photo.name}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          loading="lazy"
+                          onError={(e) => {
+                            if (recordId && recordId !== '-' && (!photoSrc || !photoSrc.startsWith('data:'))) {
+                              fetch(`https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`)
+                                .then((r) => (r.ok ? r.json() : null))
+                                .then((data) => {
+                                  const match =
+                                    data?.photos?.[index] ||
+                                    data?.photos?.find((p) => p.name === photo.name);
+                                  if (match && match.data) {
+                                    const b64 = match.data.startsWith('data:')
+                                      ? match.data
+                                      : `data:${match.type || 'image/jpeg'};base64,${match.data}`;
+                                    e.currentTarget.src = b64;
+                                  }
+                                })
+                                .catch(() => {});
+                            }
+                          }}
+                        />
+                        {/* Zoom Indicator Overlay */}
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <span className="flex items-center gap-1 rounded-lg bg-black/70 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm border border-white/20">
+                            <ZoomIn className="h-3.5 w-3.5" />
+                            <span>ดูรูปขนาดใหญ่</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
                     {/* Photo Info & Download Button */}
                     <div className={cn('p-2.5 flex items-center justify-between gap-2 transition-colors', isDark ? 'bg-slate-950/80' : 'bg-slate-50')}>
@@ -632,7 +733,8 @@ export function SurveyPreviewModal({
                       </button>
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             ) : (
               <div className={cn('flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl border border-dashed transition-colors', isDark ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-50 border-slate-300')}>
@@ -683,7 +785,7 @@ export function SurveyPreviewModal({
           <div className="mt-3 flex items-center justify-center rounded-xl bg-black/80 max-h-[75vh] overflow-hidden p-2">
             {activePhoto && (
               <img
-                src={activePhoto.url || activePhoto.dataUrl}
+                src={getPhotoSrc(activePhoto)}
                 alt={activePhoto.name}
                 className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-2xl"
               />

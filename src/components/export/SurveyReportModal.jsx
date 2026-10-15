@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, FileText } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -6,6 +6,20 @@ import { cn } from '@/lib/utils';
 import { findStationByName } from '@/lib/api';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 import forthLogo from '@/assets/images/forth-logo.png';
+
+/**
+ * Robust photo source resolver for base64 data, dataUrl, or server url
+ */
+export function getPhotoSrc(photo) {
+  if (!photo) return '';
+  if (photo.dataUrl) return photo.dataUrl;
+  if (photo.data) {
+    return photo.data.startsWith('data:')
+      ? photo.data
+      : `data:${photo.type || photo.contentType || 'image/jpeg'};base64,${photo.data}`;
+  }
+  return photo.url || '';
+}
 
 /**
  * StationA4ReportPages - Renders Page 1 (Official Form) and Page 2+ (Photo Appendix)
@@ -184,19 +198,87 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
     fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : '');
   const operatorName = fields.operatorName || fields.operator_name || 'วิศวกรผู้ควบคุมงาน';
 
-  // Photo attachments
-  const photos =
+  // Photo attachments with full base64 data resolution
+  const rawPhotos =
     Array.isArray(surveyData.photos) && surveyData.photos.length > 0
       ? surveyData.photos
       : Array.isArray(fields.photos) && fields.photos.length > 0
       ? fields.photos
       : [];
 
+  const [resolvedPhotos, setResolvedPhotos] = useState(() => {
+    return rawPhotos.map((p, idx) => {
+      const src = getPhotoSrc(p);
+      return {
+        ...p,
+        id: p.id || idx + 1,
+        name: p.name || `photo_${idx + 1}.jpg`,
+        dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+        url: src || (p.id ? `/api/photos/${p.id}` : ''),
+      };
+    });
+  });
+
+  // Re-sync when surveyData changes
+  useEffect(() => {
+    setResolvedPhotos(
+      rawPhotos.map((p, idx) => {
+        const src = getPhotoSrc(p);
+        return {
+          ...p,
+          id: p.id || idx + 1,
+          name: p.name || `photo_${idx + 1}.jpg`,
+          dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+          url: src || (p.id ? `/api/photos/${p.id}` : ''),
+        };
+      })
+    );
+  }, [surveyData]);
+
+  // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
+  useEffect(() => {
+    const hasMissingDataUrl = resolvedPhotos.some((p) => !p.dataUrl);
+    const isStaticHost =
+      typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
+    if (recordId && recordId !== '-' && (hasMissingDataUrl || isStaticHost)) {
+      const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
+      fetch(ghUrl)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.photos) && data.photos.length > 0) {
+            setResolvedPhotos((prev) =>
+              prev.map((photo, idx) => {
+                const match =
+                  data.photos[idx] ||
+                  data.photos.find((p) => p.name === photo.name) ||
+                  data.photos[0];
+                if (match && match.data) {
+                  const b64 = match.data.startsWith('data:')
+                    ? match.data
+                    : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
+                  return {
+                    ...photo,
+                    dataUrl: b64,
+                    url: b64,
+                  };
+                }
+                return photo;
+              })
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, [recordId]);
+
   // Split photos into chunks of 6 per appendix page
   const PHOTOS_PER_PAGE = 6;
   const photoPages = [];
-  for (let i = 0; i < photos.length; i += PHOTOS_PER_PAGE) {
-    photoPages.push(photos.slice(i, i + PHOTOS_PER_PAGE));
+  for (let i = 0; i < resolvedPhotos.length; i += PHOTOS_PER_PAGE) {
+    photoPages.push(resolvedPhotos.slice(i, i + PHOTOS_PER_PAGE));
   }
   const totalPages = 1 + photoPages.length;
 
@@ -554,6 +636,7 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
             <div className="grid grid-cols-2 gap-3.5 pt-1">
               {pagePhotos.map((photo, idx) => {
                 const globalIndex = pageIndex * PHOTOS_PER_PAGE + idx + 1;
+                const photoSrc = getPhotoSrc(photo);
                 return (
                   <div
                     key={photo.id || idx}
@@ -561,10 +644,29 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
                   >
                     <div className="h-44 w-full flex items-center justify-center bg-neutral-50 overflow-hidden mb-1.5 border border-neutral-200 rounded-sm">
                       <img
-                        src={photo.dataUrl || photo.url}
+                        src={photoSrc}
                         alt={photo.name}
                         className="max-h-44 w-auto max-w-full object-contain"
                         loading="eager"
+                        onError={(e) => {
+                          // Fallback to GitHub raw survey JSON if relative /api/photos/ failed
+                          if (recordId && recordId !== '-' && (!photoSrc || !photoSrc.startsWith('data:'))) {
+                            fetch(`https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`)
+                              .then((r) => (r.ok ? r.json() : null))
+                              .then((data) => {
+                                const match =
+                                  data?.photos?.[globalIndex - 1] ||
+                                  data?.photos?.find((p) => p.name === photo.name);
+                                if (match && match.data) {
+                                  const b64 = match.data.startsWith('data:')
+                                    ? match.data
+                                    : `data:${match.type || 'image/jpeg'};base64,${match.data}`;
+                                  e.currentTarget.src = b64;
+                                }
+                              })
+                              .catch(() => {});
+                          }
+                        }}
                       />
                     </div>
                     <div className="w-full flex items-center justify-between text-[12px] text-neutral-900 px-1">
