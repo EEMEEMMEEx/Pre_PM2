@@ -1,0 +1,15 @@
+{
+  "recordId": "PM-20261015-131834-4b8e",
+  "savedAt": "2026-10-15T06:18:34.536312+00:00",
+  "station": "Test Station Edit and Delete",
+  "province": "Bangkok",
+  "permit": "อนุญาต",
+  "fields": {
+    "station": "Test Station Edit and Delete",
+    "province": "Bangkok",
+    "permit": "อนุญาต",
+    "contactName": "Mr. Test User",
+    "siteCondition": "Before Edit"
+  },
+  "photos": []
+}
