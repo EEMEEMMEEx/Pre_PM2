@@ -233,14 +233,14 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
 
             {/* Document Titles */}
             <div className="flex-1 text-center px-2">
-              <h1 className="text-[17px] font-bold tracking-tight text-black leading-tight">
-                แบบบันทึกผลการเข้าตรวจเยี่ยมเจ้าของพื้นที่
+              <h1 className="text-[15.5px] font-bold tracking-tight text-black leading-tight">
+                โครงการเพิ่มประสิทธิภาพระบบโครงข่ายสื่อสารด้วยอุปกรณ์ทวนสัญญาณผ่านคลื่นความถี่สูง (SHF)
               </h1>
-              <p className="text-[13.5px] font-semibold text-neutral-800 leading-snug">
-                งานบำรุงรักษาเชิงป้องกันล่วงหน้า (Pre-Preventive Maintenance : Pre-PM)
+              <p className="text-[13px] font-semibold text-neutral-800 leading-snug">
+                เพื่อสนับสนุนการปฏิบัติราชการและแก้ไขปัญหาให้กับประชาชนในพื้นที่ห่างไกล
               </p>
-              <p className="text-[12px] text-neutral-700 leading-normal">
-                โครงการจ้างบำรุงรักษาและซ่อมแซมแก้ไขระบบวิทยุสื่อสารแบบดิจิทัล (Microwave Repeater)
+              <p className="text-[12px] font-medium text-neutral-700 leading-normal">
+                สัญญาเลขที่ 8680228 ลงวันที่ 23 กรกฎาคม 2568
               </p>
             </div>
 
