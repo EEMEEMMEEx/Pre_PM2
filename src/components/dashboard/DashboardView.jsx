@@ -94,18 +94,22 @@ export function DashboardView({ onNavigate }) {
         {/* KPI Metric Cards */}
         <KpiCards stats={data.stats} />
 
-        {/* Main Grid: Province Breakdown on Left, Donut & Recents on Right */}
+        {/* Analytics Row: Province Breakdown & Survey Result Donut */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left: Map and Provincial breakdown */}
-          <div className="lg:col-span-7">
-            <ProvinceChart provinces={data.provinces} />
+          {/* Province Breakdown (compact & balanced) */}
+          <div className="lg:col-span-6">
+            <ProvinceChart provinces={data.provinces} totalSurveys={data.stats?.surveys} />
           </div>
 
-          {/* Right: Donut Chart and Recent Activities */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
+          {/* Survey Donut */}
+          <div className="lg:col-span-6">
             <SurveyDonut stats={data.stats} />
-            <RecentSurveys recent={data.recent} onNavigate={onNavigate} />
           </div>
+        </div>
+
+        {/* Survey Records & History Table (Full Width) */}
+        <div className="w-full">
+          <RecentSurveys recent={data.recent} onNavigate={onNavigate} />
         </div>
       </motion.main>
   );
