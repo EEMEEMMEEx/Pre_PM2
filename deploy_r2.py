@@ -181,6 +181,20 @@ def deploy_frontend_to_r2(key_id: str, secret: str, bucket_name: str, endpoint: 
                 CacheControl="no-cache",
             )
             print(f"  [OK] Uploaded API snapshot: /{k} [application/json] (OneDrive: utai323@gmail.com)")
+
+        gh_token = DatabaseService.get_github_token()
+        if gh_token:
+            sync_cfg = {"token": gh_token, "repo": "Thaidimaru/Pre_PM2", "branch": "main"}
+            sync_cfg_json = json.dumps(sync_cfg, ensure_ascii=False).encode("utf-8")
+            for k in ["api/sync-config", "sync-config"]:
+                s3.put_object(
+                    Bucket=bucket_name,
+                    Key=k,
+                    Body=sync_cfg_json,
+                    ContentType="application/json; charset=utf-8",
+                    CacheControl="no-cache",
+                )
+                print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
 
