@@ -22,7 +22,7 @@ ONEDRIVE_DATA_DIR = Path(r"C:\Users\utai3\OneDrive\NBTC Microwave\Data")
 DATA_DIR = ONEDRIVE_DATA_DIR if ONEDRIVE_DATA_DIR.exists() else ROOT_DIR
 
 DB_PATH = DATA_DIR / "survey.db"
-DEFAULT_OUTPUT_PDF = DATA_DIR / "SURVEY_REPORTS_ALL_63.pdf"
+DEFAULT_OUTPUT_PDF = DATA_DIR / "SURVEY_REPORTS_ALL.pdf"
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -122,6 +122,13 @@ def fetch_survey_data(db_path: Path = DB_PATH) -> list:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+
+    # Synchronize latest survey records from data/surveys/*.json
+    try:
+        from database import DatabaseService
+        DatabaseService._seed_surveys_from_json(conn)
+    except Exception as e:
+        print(f"[WARN] Survey JSON synchronization skipped: {e}")
 
     # Load stations mapping
     stations_map = {}
@@ -1018,6 +1025,7 @@ def export_pdf(
     record_ids: list = None,
     preferred_browser: str = None,
     split_folder: Path = None,
+    archive_folder: Path = None,
 ) -> Path:
     """
     Main export function: fetches surveys, renders HTML, and invokes headless Chromium to print PDF.
@@ -1128,6 +1136,38 @@ def export_pdf(
                     print(f"  [OK] Exported #{idx+1}: {station_pdf_path.name} [{station_pdf_path.stat().st_size / 1024:.1f} KB]")
             print(f"[SUCCESS] All individual station PDFs exported to '{split_folder}'.")
 
+        # Handle structured archive organized by Province/District
+        if archive_folder:
+            archive_folder = Path(archive_folder).resolve()
+            archive_folder.mkdir(parents=True, exist_ok=True)
+            print(f"\n[ARCHIVE] Generating structured archive PDFs into: {archive_folder}")
+            for idx, s in enumerate(surveys):
+                province = (s.get("province") or "ไม่ระบุจังหวัด").strip()
+                district = (s.get("district") or "ทั่วไป").strip()
+                subfolder = archive_folder / province / district
+                subfolder.mkdir(parents=True, exist_ok=True)
+
+                clean_station = re.sub(r'[\\/*?:"<>|]', "", s['station']).strip()
+                clean_rec = re.sub(r'[\\/*?:"<>|]', "", s['recordId']).strip()
+                station_pdf_path = subfolder / f"PM_{clean_station}_{clean_rec}.pdf"
+
+                st_html = generate_html_document([s], assets, include_photos=include_photos)
+                st_temp_html = subfolder / f"temp_{clean_rec}.html"
+                st_temp_html.write_text(st_html, encoding="utf-8")
+                subprocess.run([
+                    browser_exe,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--no-pdf-header-footer",
+                    f"--print-to-pdf={station_pdf_path}",
+                    str(st_temp_html.resolve())
+                ], capture_output=True, timeout=60)
+                if st_temp_html.exists():
+                    st_temp_html.unlink()
+                if station_pdf_path.exists():
+                    print(f"  [OK] Archived #{idx+1} ({province}/{district}): {station_pdf_path.name} [{station_pdf_path.stat().st_size / 1024:.1f} KB]")
+            print(f"[SUCCESS] All station reports archived successfully into '{archive_folder}'.")
+
     finally:
         if temp_html.exists():
             temp_html.unlink()
@@ -1143,6 +1183,12 @@ if __name__ == "__main__":
     parser.add_argument("--id", help="Filter by survey recordId or ID")
     parser.add_argument("--browser", choices=["chrome", "edge"], help="Force specific browser executable")
     parser.add_argument("--split", metavar="DIR", help="Also export individual PDF per station into this directory")
+    parser.add_argument(
+        "--archive",
+        nargs="?",
+        const=str(DATA_DIR / "Reports"),
+        help="Batch archive organized by Province/District into specified directory (default: Data/Reports)",
+    )
 
     args = parser.parse_args()
 
@@ -1153,4 +1199,5 @@ if __name__ == "__main__":
         record_filter=args.id,
         preferred_browser=args.browser,
         split_folder=Path(args.split) if args.split else None,
+        archive_folder=Path(args.archive) if args.archive else None,
     )

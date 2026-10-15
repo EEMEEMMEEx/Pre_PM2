@@ -9,9 +9,21 @@ import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   const { isDark, toggleTheme } = useTheme();
   const [githubStatus, setGithubStatus] = useState({ configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2' });
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [timeStr, setTimeStr] = useState(() =>
     new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     fetchGitHubStatus().then((st) => {
@@ -128,20 +140,34 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
               isDark ? 'text-slate-300' : 'text-slate-600'
             )}
           >
-            {/* Online status indicator */}
+            {/* Online / Offline status indicator */}
             <div
               className={cn(
-                'flex items-center gap-2 rounded-full border px-3 py-1',
-                isDark
-                  ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs'
+                'flex items-center gap-2 rounded-full border px-3 py-1 transition-colors',
+                isOnline
+                  ? isDark
+                    ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
+                    : 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs'
+                  : isDark
+                    ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
+                    : 'border-amber-300 bg-amber-50 text-amber-700 shadow-xs'
               )}
+              title={isOnline ? 'เชื่อมต่ออินเทอร์เน็ตปกติ' : 'ออฟไลน์: บันทึกข้อมูลลงเครื่องอัตโนมัติ'}
             >
               <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                {isOnline && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                )}
+                <span
+                  className={cn(
+                    'relative inline-flex h-2.5 w-2.5 rounded-full',
+                    isOnline ? 'bg-emerald-500' : 'bg-amber-500'
+                  )}
+                />
               </span>
-              <span className="text-xs font-medium">ระบบทำงานปกติ</span>
+              <span className="text-xs font-medium">
+                {isOnline ? 'ระบบทำงานปกติ' : 'ออฟไลน์ (โหมดในพื้นที่)'}
+              </span>
             </div>
 
             {/* GitHub sync status indicator */}

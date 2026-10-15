@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.5.24",
+  "version": "2.6.0",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "start": "node server.js",
     "export:photos": "node scripts/export-photos.js",
     "export:pdf": "python export_pdf.py",
+    "export:archive": "python export_pdf.py --archive",
     "deploy:r2": "python deploy_r2.py"
   },
   "dependencies": {

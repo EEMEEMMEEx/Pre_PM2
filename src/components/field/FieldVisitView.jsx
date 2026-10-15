@@ -306,7 +306,9 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
       let successText = isEditMode
         ? `บันทึกการแก้ไขข้อมูลสถานี ${formData.station || ''} (รหัส ${recId}) เรียบร้อยแล้ว`
         : `บันทึกข้อมูลรหัส ${recId} เรียบร้อยแล้ว`;
-      if (result?.githubSynced) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        successText += ' (โหมดออฟไลน์: บันทึกลงในเครื่องเรียบร้อยแล้ว และจะซิงค์เมื่อมีสัญญาณอินเทอร์เน็ต)';
+      } else if (result?.githubSynced) {
         successText += ' (ซิงค์ขึ้น GitHub ส่วนกลางสำเร็จ)';
       } else if (result?.githubError) {
         successText += ` (หมายเหตุ: ยังไม่ซิงค์ขึ้น GitHub: ${result.githubError})`;
