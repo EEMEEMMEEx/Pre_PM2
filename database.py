@@ -741,6 +741,214 @@ class DatabaseService:
 
         return record_id, gh_res
 
+    @classmethod
+    def delete_survey_from_github(cls, record_id: str) -> dict:
+        """Delete survey JSON from GitHub repository (Thaidimaru/Pre_PM2)."""
+        token = cls.get_github_token()
+        if not token:
+            return {"success": False, "reason": "no_token"}
+
+        repo = os.environ.get("GITHUB_REPO", "Thaidimaru/Pre_PM2")
+        branch = os.environ.get("GITHUB_BRANCH", "main")
+        file_path = f"data/surveys/{record_id}.json"
+
+        try:
+            req_get = urllib.request.Request(
+                f"https://api.github.com/repos/{repo}/contents/{file_path}?ref={branch}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "NBTC-PrePM-Survey-App",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                }
+            )
+            existing_sha = None
+            try:
+                with urllib.request.urlopen(req_get, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        existing_sha = data.get("sha")
+            except Exception:
+                pass
+
+            if not existing_sha:
+                return {"success": True, "reason": "file_not_found_on_github"}
+
+            body_dict = {
+                "message": f"chore(survey): Delete Pre-PM survey {record_id}",
+                "sha": existing_sha,
+                "branch": branch,
+                "committer": {
+                    "name": "NBTC Survey System",
+                    "email": "survey-bot@nbtc.local",
+                }
+            }
+            req_del = urllib.request.Request(
+                f"https://api.github.com/repos/{repo}/contents/{file_path}",
+                data=json.dumps(body_dict).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "NBTC-PrePM-Survey-App",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                method="DELETE"
+            )
+            with urllib.request.urlopen(req_del, timeout=15) as resp:
+                return {"success": True}
+        except Exception as e:
+            print(f"Warning: Failed to delete {record_id} from GitHub: {e}")
+            return {"success": False, "message": str(e)}
+
+    @classmethod
+    def update_survey(cls, record_id: str, fields: dict, photos: list = None) -> tuple:
+        """Update existing survey in SQLite, update photos, update JSON files, and commit to GitHub."""
+        now_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+        with cls.connect() as conn:
+            s_row = conn.execute("SELECT id, saved_at, fields_json FROM surveys WHERE record_id = ?", (record_id,)).fetchone()
+            if not s_row:
+                rec_id, gh_res = cls.save_survey(fields, photos or [])
+                return True, gh_res
+
+            survey_id = s_row["id"]
+            saved_at = s_row["saved_at"]
+
+            fields["updatedAt"] = now_iso
+            conn.execute(
+                "UPDATE surveys SET fields_json = ? WHERE id = ?",
+                (json.dumps(fields, ensure_ascii=False), survey_id)
+            )
+
+            if photos is not None:
+                existing_p_rows = conn.execute(
+                    "SELECT id, name, content_type, data FROM survey_photos WHERE survey_id = ?",
+                    (survey_id,)
+                ).fetchall()
+                existing_ids = {r["id"] for r in existing_p_rows}
+                existing_names = {r["name"]: r["id"] for r in existing_p_rows}
+
+                retained_ids = set()
+                new_photos = []
+
+                for p in photos:
+                    p_id = p.get("id")
+                    raw_b64 = p.get("data") or p.get("base64Data") or ""
+                    p_name = p.get("name") or "photo.jpg"
+                    p_type = p.get("type") or p.get("contentType") or "image/jpeg"
+
+                    if p_id and int(p_id) in existing_ids and not raw_b64:
+                        retained_ids.add(int(p_id))
+                    elif not p_id and p_name in existing_names and not raw_b64:
+                        retained_ids.add(existing_names[p_name])
+                    elif raw_b64:
+                        try:
+                            p_bytes = base64.b64decode(raw_b64)
+                            new_photos.append((p_name, p_type, p_bytes))
+                        except Exception as e:
+                            print(f"Warning: Failed to decode photo {p_name}: {e}")
+
+                for r in existing_p_rows:
+                    if r["id"] not in retained_ids:
+                        conn.execute("DELETE FROM survey_photos WHERE id = ?", (r["id"],))
+
+                for p_name, p_type, p_bytes in new_photos:
+                    conn.execute(
+                        "INSERT INTO survey_photos (survey_id, name, content_type, data) VALUES (?, ?, ?, ?)",
+                        (survey_id, p_name, p_type, p_bytes)
+                    )
+
+            p_rows = conn.execute(
+                "SELECT id, name, content_type, data FROM survey_photos WHERE survey_id = ? ORDER BY id ASC",
+                (survey_id,)
+            ).fetchall()
+            final_photos = [
+                {
+                    "id": pr["id"],
+                    "name": pr["name"],
+                    "contentType": pr["content_type"],
+                    "data": base64.b64encode(pr["data"]).decode("ascii") if pr["data"] else ""
+                }
+                for pr in p_rows
+            ]
+
+        full_survey_data = {
+            "recordId": record_id,
+            "savedAt": saved_at,
+            "updatedAt": now_iso,
+            "station": fields.get("station") or fields.get("stationSelect") or "ไม่ระบุสถานี",
+            "province": fields.get("province", ""),
+            "permit": "อนุญาต" if fields.get("permit") == "on" else (fields.get("permit") or "ยังไม่ระบุ"),
+            "fields": fields,
+            "photos": final_photos
+        }
+
+        for s_dir in (AppConfig.SURVEYS_DIR, AppConfig.ROOT / "data" / "surveys"):
+            try:
+                s_dir.mkdir(parents=True, exist_ok=True)
+                (s_dir / f"{record_id}.json").write_text(
+                    json.dumps(full_survey_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8"
+                )
+            except Exception as e:
+                print(f"Warning: Failed to write survey file to {s_dir}: {e}")
+
+        gh_res = cls.commit_survey_to_github(record_id, full_survey_data)
+
+        try:
+            if AppConfig.SURVEY_PDF_PATH and AppConfig.SURVEY_PDF_PATH.exists():
+                AppConfig.SURVEY_PDF_PATH.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        return True, gh_res
+
+    @classmethod
+    def delete_surveys(cls, record_ids: list) -> dict:
+        """Delete one or more surveys by record_id from SQLite, local files, and GitHub."""
+        if not record_ids:
+            return {"deleted": False, "count": 0}
+
+        deleted_count = 0
+        with cls.connect() as conn:
+            for rec_id in record_ids:
+                s_row = conn.execute("SELECT id FROM surveys WHERE record_id = ?", (rec_id,)).fetchone()
+                if s_row:
+                    s_id = s_row["id"]
+                    conn.execute("DELETE FROM survey_photos WHERE survey_id = ?", (s_id,))
+                    conn.execute("DELETE FROM surveys WHERE id = ?", (s_id,))
+                    deleted_count += 1
+
+        for rec_id in record_ids:
+            for s_dir in (AppConfig.SURVEYS_DIR, AppConfig.ROOT / "data" / "surveys"):
+                try:
+                    target_file = s_dir / f"{rec_id}.json"
+                    if target_file.exists():
+                        target_file.unlink(missing_ok=True)
+                except Exception as e:
+                    print(f"Warning: Failed to delete file {target_file}: {e}")
+
+            for p in AppConfig.ROOT.glob("survey-*.json"):
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8-sig"))
+                    if data.get("recordId") == rec_id:
+                        p.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+            try:
+                cls.delete_survey_from_github(rec_id)
+            except Exception as e:
+                print(f"Warning: Failed to delete {rec_id} from GitHub: {e}")
+
+        try:
+            if AppConfig.SURVEY_PDF_PATH and AppConfig.SURVEY_PDF_PATH.exists():
+                AppConfig.SURVEY_PDF_PATH.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        return {"deleted": True, "count": deleted_count, "deletedIds": record_ids}
+
 
 # Initialize Singletons
 auth_service = AuthService()
@@ -974,8 +1182,16 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         # 5. Not Found
         self.send_json_response(404, {"error": "Not found"})
 
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
+
     def do_POST(self):
-        """Handle POST requests for login and survey submission."""
+        """Handle POST requests for login, survey submission, editing, and deletion."""
         path = self.path.rstrip("/")
         content_length = int(self.headers.get("Content-Length", 0))
 
@@ -988,10 +1204,25 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                 self.send_json_response(200, {"token": "public", "ok": True})
                 return
 
-            # 2. Save Survey Endpoint
+            # 2. Save Survey Endpoint (Auto-detects update if recordId present or isUpdate flag)
             if path in ("/save", "/api/save"):
                 fields = payload.get("fields", {})
                 photos = payload.get("photos", [])
+                record_id = payload.get("recordId") or fields.get("recordId")
+
+                if record_id:
+                    ok, gh_res = DatabaseService.update_survey(record_id, fields, photos)
+                    self.send_json_response(200, {
+                        "saved": True,
+                        "updated": ok,
+                        "recordId": record_id,
+                        "savedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "githubSynced": bool(gh_res.get("success")),
+                        "commitUrl": gh_res.get("commitUrl"),
+                        "githubError": gh_res.get("message") if not gh_res.get("success") else None
+                    })
+                    return
+
                 record_id, gh_res = DatabaseService.save_survey(fields, photos)
                 self.send_json_response(200, {
                     "saved": True,
@@ -1003,10 +1234,69 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                 })
                 return
 
+            # 3. Update Survey Endpoint
+            if path in ("/update", "/api/update"):
+                fields = payload.get("fields", {})
+                photos = payload.get("photos", None)
+                record_id = payload.get("recordId") or fields.get("recordId")
+                if not record_id:
+                    self.send_json_response(400, {"error": "Missing recordId"})
+                    return
+
+                ok, gh_res = DatabaseService.update_survey(record_id, fields, photos)
+                self.send_json_response(200, {
+                    "saved": True,
+                    "updated": ok,
+                    "recordId": record_id,
+                    "savedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+                    "githubSynced": bool(gh_res.get("success")),
+                    "commitUrl": gh_res.get("commitUrl"),
+                    "githubError": gh_res.get("message") if not gh_res.get("success") else None
+                })
+                return
+
+            # 4. Delete Survey Endpoint (supports batch recordIds: [...] or single recordId: "...")
+            if path in ("/delete", "/api/delete"):
+                record_ids = payload.get("recordIds")
+                if not record_ids and payload.get("recordId"):
+                    record_ids = [payload.get("recordId")]
+                if not record_ids:
+                    self.send_json_response(400, {"error": "Missing recordIds or recordId"})
+                    return
+
+                res = DatabaseService.delete_surveys(record_ids)
+                self.send_json_response(200, res)
+                return
+
             self.send_json_response(404, {"error": "Not found"})
 
         except Exception as err:
             self.send_json_response(500, {"error": str(err)})
+
+    def do_DELETE(self):
+        """Handle DELETE requests for single or batch surveys."""
+        parsed_path = unquote(self.path).split("?", 1)[0].rstrip("/")
+        if parsed_path.startswith("/api/survey/"):
+            rec_id = parsed_path[12:].split("/")[0].strip()
+            if rec_id:
+                res = DatabaseService.delete_surveys([rec_id])
+                self.send_json_response(200, res)
+                return
+
+        if parsed_path in ("/api/delete", "/delete"):
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            try:
+                payload = json.loads(body_bytes.decode("utf-8") or "{}")
+                record_ids = payload.get("recordIds") or ([payload.get("recordId")] if payload.get("recordId") else [])
+                res = DatabaseService.delete_surveys(record_ids)
+                self.send_json_response(200, res)
+                return
+            except Exception as err:
+                self.send_json_response(500, {"error": str(err)})
+                return
+
+        self.send_json_response(404, {"error": "Not found"})
 
     def log_message(self, fmt, *args):
         """Clean single-line request logging."""

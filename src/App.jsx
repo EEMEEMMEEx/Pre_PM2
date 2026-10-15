@@ -15,10 +15,16 @@ export function App() {
     return 'field';
   });
 
+  const [editingSurvey, setEditingSurvey] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigateTo = (page) => {
+  const navigateTo = (page, extra = null) => {
     setMobileMenuOpen(false);
+    if (page === 'field') {
+      setEditingSurvey(extra || null);
+    } else {
+      setEditingSurvey(null);
+    }
     setCurrentPage(page);
     const targetUrl = page === 'dashboard' ? '/dashboard' : '/';
     if (window.location.pathname !== targetUrl) {
@@ -30,6 +36,7 @@ export function App() {
   useEffect(() => {
     const handlePopState = () => {
       setMobileMenuOpen(false);
+      setEditingSurvey(null);
       const path = window.location.pathname;
       if (path === '/dashboard') setCurrentPage('dashboard');
       else setCurrentPage('field');
@@ -42,6 +49,7 @@ export function App() {
   useEffect(() => {
     if (window.location.pathname === '/login') {
       window.history.replaceState({}, '', '/');
+      setEditingSurvey(null);
       setCurrentPage('field');
     }
   }, []);
@@ -76,9 +84,16 @@ export function App() {
         <div className="flex-1 min-w-0 pl-0 lg:pl-64 transition-all duration-300">
           <div className="min-h-[calc(100vh-88px)] py-4 sm:py-6">
             {currentPage === 'dashboard' ? (
-              <DashboardView onNavigate={navigateTo} />
+              <DashboardView
+                onNavigate={navigateTo}
+                onEditSurvey={(survey) => navigateTo('field', survey)}
+              />
             ) : (
-              <FieldVisitView onNavigate={navigateTo} />
+              <FieldVisitView
+                onNavigate={navigateTo}
+                editingSurvey={editingSurvey}
+                onCancelEdit={() => navigateTo('dashboard')}
+              />
             )}
           </div>
         </div>

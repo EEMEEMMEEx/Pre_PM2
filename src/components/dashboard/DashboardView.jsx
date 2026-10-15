@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 
 const initialStats = { surveys: 0, stations: 0, allowed: 0, denied: 0 };
 
-export function DashboardView({ onNavigate }) {
+export function DashboardView({ onNavigate, onEditSurvey }) {
   const { isDark } = useTheme();
   const [data, setData] = useState({
     stats: initialStats,
@@ -37,7 +37,16 @@ export function DashboardView({ onNavigate }) {
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+
+    const handleSurveysUpdated = () => {
+      loadData();
+    };
+    window.addEventListener('nbtc-surveys-updated', handleSurveysUpdated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('nbtc-surveys-updated', handleSurveysUpdated);
+    };
   }, []);
 
   return (
@@ -109,7 +118,12 @@ export function DashboardView({ onNavigate }) {
 
         {/* Survey Records & History Table (Full Width) */}
         <div className="w-full">
-          <RecentSurveys recent={data.recent} onNavigate={onNavigate} />
+          <RecentSurveys
+            recent={data.recent}
+            onNavigate={onNavigate}
+            onEditSurvey={onEditSurvey}
+            onRefresh={loadData}
+          />
         </div>
       </motion.main>
   );

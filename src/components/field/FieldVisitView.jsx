@@ -13,7 +13,11 @@ import {
   ZoomIn,
   Loader2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Pencil,
+  ArrowLeft,
+  Save,
+  Undo2,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { ShinyText } from '@/components/ui/shiny-text';
@@ -31,13 +35,13 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { fetchStations, submitSurvey, normalizeStationKey } from '@/lib/api';
+import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey } from '@/lib/api';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { Printer, FileText, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
-export function FieldVisitView({ onNavigate }) {
+export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
   const { isDark } = useTheme();
   const [stations, setStations] = useState([]);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -184,6 +188,51 @@ export function FieldVisitView({ onNavigate }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Handle editing mode initialization
+  const isEditMode = Boolean(editingSurvey && (editingSurvey.recordId || editingSurvey.fields?.recordId));
+
+  useEffect(() => {
+    if (editingSurvey) {
+      const rawFields = editingSurvey.fields || editingSurvey;
+      setFormData({
+        ...rawFields,
+        station: editingSurvey.station || rawFields.station || '',
+        province: editingSurvey.province || rawFields.province || '',
+        district: rawFields.district || '',
+        subdistrict: rawFields.subdistrict || '',
+        installationPlace: rawFields.installationPlace || '',
+        equipmentPlace: rawFields.equipmentPlace || '',
+        contactName: rawFields.contactName || '',
+        contactPosition: rawFields.contactPosition || '',
+        contactVillage: rawFields.contactVillage || '',
+        contactPhone: rawFields.contactPhone || '',
+        permit: rawFields.permit === 'on' ? 'อนุญาต' : (rawFields.permit || 'อนุญาต'),
+        radioStatus: rawFields.radioStatus || 'ปกติ',
+        receiveStatus: rawFields.receiveStatus || 'ปกติ',
+        transmitStatus: rawFields.transmitStatus || 'ปกติ',
+        powerStatus: rawFields.powerStatus || 'ปกติ',
+        batteryStatus: rawFields.batteryStatus || 'ปกติ',
+        groundStatus: rawFields.groundStatus || 'ปกติ',
+      });
+
+      const rawPhotos = editingSurvey.photos || rawFields.photos || [];
+      const formatted = rawPhotos.map((p, idx) => ({
+        id: p.id || idx + 1,
+        name: p.name || `photo_${idx + 1}.jpg`,
+        type: p.contentType || p.type || 'image/jpeg',
+        size: p.size || 0,
+        previewUrl: p.url || p.dataUrl || (p.data ? `data:${p.contentType || p.type || 'image/jpeg'};base64,${p.data}` : `/photos/${p.id || encodeURIComponent(p.name)}`),
+        base64Data: p.data || (p.dataUrl ? p.dataUrl.split(',')[1] : ''),
+        isExisting: true,
+      }));
+      setSelectedPhotos(formatted);
+      setStatusMessage({
+        text: `อยู่ในโหมดแก้ไขข้อมูลสถานี ${editingSurvey.station || rawFields.station || ''} (รหัส: ${editingSurvey.recordId})`,
+        type: 'info'
+      });
+    }
+  }, [editingSurvey]);
+
   const handleRemovePhoto = (index) => {
     setSelectedPhotos((prev) => prev.filter((_, i) => i !== index));
   };
@@ -192,19 +241,28 @@ export function FieldVisitView({ onNavigate }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setStatusMessage({ text: 'กำลังส่งข้อมูลและอัปโหลดรูปภาพ...', type: 'info' });
+    setStatusMessage({
+      text: isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังส่งข้อมูลและอัปโหลดรูปภาพ...',
+      type: 'info'
+    });
 
     try {
       const photosPayload = selectedPhotos.map((p) => ({
+        id: p.id,
         name: p.name,
         type: p.type,
         data: p.base64Data
       }));
 
-      const result = await submitSurvey(formData, photosPayload);
+      let result;
+      if (isEditMode) {
+        result = await updateSurvey(editingSurvey.recordId, formData, photosPayload);
+      } else {
+        result = await submitSurvey(formData, photosPayload);
+      }
 
       const reportPhotos = selectedPhotos.map((p, idx) => ({
-        id: idx + 1,
+        id: p.id || idx + 1,
         name: p.name,
         contentType: p.type,
         url: p.previewUrl,
@@ -212,8 +270,9 @@ export function FieldVisitView({ onNavigate }) {
       }));
 
       // Preserve snapshot of saved report for immediate export
+      const recId = result.recordId || editingSurvey?.recordId;
       setLastSavedReport({
-        recordId: result.recordId,
+        recordId: recId,
         savedAt: new Date().toISOString(),
         station: formData.station,
         province: formData.province || activeStation?.province || '',
@@ -221,6 +280,7 @@ export function FieldVisitView({ onNavigate }) {
         photos: reportPhotos,
         fields: {
           ...formData,
+          recordId: recId,
           province: formData.province || activeStation?.province || '',
           district: formData.district || activeStation?.district || '',
           subdistrict: formData.subdistrict || activeStation?.subdistrict || '',
@@ -228,7 +288,9 @@ export function FieldVisitView({ onNavigate }) {
         }
       });
 
-      let successText = `บันทึกข้อมูลรหัส ${result.recordId} เรียบร้อยแล้ว`;
+      let successText = isEditMode
+        ? `บันทึกการแก้ไขข้อมูลสถานี ${formData.station || ''} (รหัส ${recId}) เรียบร้อยแล้ว`
+        : `บันทึกข้อมูลรหัส ${recId} เรียบร้อยแล้ว`;
       if (result?.githubSynced) {
         successText += ' (ซิงค์ขึ้น GitHub ส่วนกลางสำเร็จ)';
       } else if (result?.githubError) {
@@ -242,17 +304,19 @@ export function FieldVisitView({ onNavigate }) {
         type: 'success'
       });
 
-      // Clear form and photo previews
-      setFormData({
-        permit: 'อนุญาต',
-        radioStatus: 'ปกติ',
-        receiveStatus: 'ปกติ',
-        transmitStatus: 'ปกติ',
-        powerStatus: 'ปกติ',
-        batteryStatus: 'ปกติ',
-        groundStatus: 'ปกติ'
-      });
-      setSelectedPhotos([]);
+      if (!isEditMode) {
+        // Clear form and photo previews for new entries
+        setFormData({
+          permit: 'อนุญาต',
+          radioStatus: 'ปกติ',
+          receiveStatus: 'ปกติ',
+          transmitStatus: 'ปกติ',
+          powerStatus: 'ปกติ',
+          batteryStatus: 'ปกติ',
+          groundStatus: 'ปกติ'
+        });
+        setSelectedPhotos([]);
+      }
     } catch (err) {
       setStatusMessage({
         text: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์',
@@ -283,6 +347,49 @@ export function FieldVisitView({ onNavigate }) {
       className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6 lg:p-8"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Editing Mode Banner */}
+        {isEditMode && (
+          <div
+            className={cn(
+              'flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border transition-all shadow-md',
+              isDark
+                ? 'bg-gradient-to-r from-amber-950/70 via-slate-900/90 to-amber-950/70 border-amber-500/50 text-amber-200'
+                : 'bg-gradient-to-r from-amber-50 via-white to-amber-50 border-amber-300 text-amber-900'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                <Pencil className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                  โหมดแก้ไขข้อมูล (Editing Mode)
+                </div>
+                <div className="text-sm font-bold">
+                  กำลังแก้ไขข้อมูลสถานี: <span className="font-semibold underline">{editingSurvey?.station || formData.station}</span>
+                  <span className="ml-2 font-mono text-xs opacity-75">({editingSurvey?.recordId})</span>
+                </div>
+              </div>
+            </div>
+            {onCancelEdit && (
+              <button
+                type="button"
+                onClick={onCancelEdit}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all self-end sm:self-auto shadow-2xs',
+                  isDark
+                    ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                )}
+                title="ยกเลิกการแก้ไขและกลับสู่ Dashboard"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                <span>ยกเลิกการแก้ไข</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Form Header */}
         <div
           className={cn(
@@ -820,12 +927,22 @@ export function FieldVisitView({ onNavigate }) {
           whileTap={{ scale: 0.99 }}
           type="submit"
           disabled={isSubmitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 py-3.5 text-base font-bold tracking-normal leading-normal text-slate-950 shadow-lg shadow-blue-500/20 hover:shadow-cyan-500/30 transition-all disabled:opacity-60 cursor-pointer"
+          className={cn(
+            'flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold tracking-normal leading-normal text-slate-950 shadow-lg transition-all disabled:opacity-60 cursor-pointer',
+            isEditMode
+              ? 'bg-gradient-to-r from-amber-500 via-orange-400 to-amber-300 shadow-amber-500/20 hover:shadow-amber-500/30'
+              : 'bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 shadow-blue-500/20 hover:shadow-cyan-500/30'
+          )}
         >
           {isSubmitting ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>กำลังบันทึกข้อมูล...</span>
+              <span>{isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังบันทึกข้อมูล...'}</span>
+            </>
+          ) : isEditMode ? (
+            <>
+              <Save className="h-5 w-5" />
+              <span>บันทึกการแก้ไขข้อมูล (Update Survey)</span>
             </>
           ) : (
             <>

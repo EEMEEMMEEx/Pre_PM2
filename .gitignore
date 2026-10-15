@@ -10,5 +10,7 @@ photos/
 *_backup.xlsx
 github-token.txt
 r2-credentials.json
-.env
+*.env
 .env.*
+*.pdf
+SURVEY_*.xlsx

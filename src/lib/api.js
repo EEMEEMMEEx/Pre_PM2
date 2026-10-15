@@ -63,6 +63,16 @@ export function saveLocalSurvey(survey) {
   }
 }
 
+export function deleteLocalSurvey(recordId) {
+  try {
+    const current = getLocalSurveys();
+    const filtered = current.filter((s) => s.recordId !== recordId);
+    localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn('Failed to delete survey from localStorage:', e);
+  }
+}
+
 function mergeDashboardWithLocal(serverData, localSurveys) {
   const base = serverData || {
     updatedAt: new Date().toISOString(),
@@ -367,6 +377,145 @@ export async function submitSurvey(arg1, arg2, arg3) {
   }
 
   return finalResult;
+}
+
+export async function updateSurvey(arg1, arg2, arg3) {
+  let recordId = '';
+  let fields = {};
+  let photos = [];
+
+  if (typeof arg1 === 'string') {
+    recordId = arg1;
+    fields = arg2 || {};
+    photos = arg3 || [];
+  } else {
+    fields = arg1 || {};
+    recordId = fields.recordId;
+    photos = arg2 || [];
+  }
+
+  if (!recordId) {
+    throw new Error('Missing recordId for update');
+  }
+
+  let serverResult = null;
+  let serverError = null;
+
+  try {
+    let res = await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordId, fields, photos }),
+    }).catch(() => null);
+
+    if (!res || res.status === 404) {
+      res = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId, fields, photos, isUpdate: true }),
+      }).catch(() => null);
+    }
+
+    if (res && res.ok) {
+      serverResult = await res.json();
+    } else if (res) {
+      const data = await res.json().catch(() => ({}));
+      serverError = data.message || data.error || 'แก้ไขข้อมูลไม่สำเร็จ';
+    }
+  } catch (err) {
+    serverError = err.message;
+  }
+
+  const formattedPhotos = (photos || []).map((p, idx) => ({
+    id: p.id || idx + 1,
+    name: p.name || `photo_${idx + 1}.jpg`,
+    contentType: p.type || p.contentType || 'image/jpeg',
+    size: p.size || (p.data ? Math.round((p.data.length * 3) / 4) : 0),
+    url: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : (p.url || `/photos/${p.id || encodeURIComponent(p.name)}`),
+    dataUrl: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : (p.dataUrl || p.url || null),
+  }));
+
+  const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
+  const province = fields.province || '';
+  const permit = fields.permit === 'on' ? 'อนุญาต' : fields.permit || 'ยังไม่ระบุ';
+
+  const localSurvey = {
+    recordId,
+    savedAt: serverResult?.savedAt || fields.savedAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    station: stationName,
+    province,
+    permit,
+    fields: {
+      ...fields,
+      recordId,
+      station: stationName,
+      province,
+      permit,
+      photos: formattedPhotos,
+    },
+    photos: formattedPhotos,
+  };
+
+  saveLocalSurvey(localSurvey);
+
+  clientGhSurveysCache = null;
+
+  window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'update', recordId } }));
+
+  return (
+    serverResult || {
+      saved: true,
+      updated: true,
+      recordId,
+      savedAt: localSurvey.savedAt,
+    }
+  );
+}
+
+export async function deleteSurveys(recordIds) {
+  const ids = Array.isArray(recordIds) ? recordIds : [recordIds];
+  if (ids.length === 0) return { deleted: false, count: 0 };
+
+  let serverResult = null;
+  let serverError = null;
+
+  try {
+    let res = await fetch('/api/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordIds: ids }),
+    }).catch(() => null);
+
+    if (!res || res.status === 404) {
+      res = await fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordIds: ids }),
+      }).catch(() => null);
+    }
+
+    if (res && res.ok) {
+      serverResult = await res.json();
+    }
+  } catch (err) {
+    serverError = err.message;
+  }
+
+  try {
+    const current = getLocalSurveys();
+    const idsSet = new Set(ids);
+    const remaining = current.filter((s) => !idsSet.has(s.recordId));
+    localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
+  } catch (e) {
+    console.warn('Failed to update localStorage after delete:', e);
+  }
+
+  clientGhSurveysCache = null;
+
+  window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'delete', recordIds: ids } }));
+
+  return serverResult || { deleted: true, count: ids.length, deletedIds: ids };
 }
 
 let clientGhSurveysCache = null;

@@ -18,7 +18,9 @@ import {
   FileText,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useTheme } from '@/context/ThemeContext';
@@ -29,7 +31,9 @@ export function SurveyPreviewModal({
   isOpen,
   onClose,
   surveyData = {},
-  onOpenOfficialReport
+  onOpenOfficialReport,
+  onEdit,
+  onDelete,
 }) {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -256,6 +260,42 @@ export function SurveyPreviewModal({
           </div>
 
           <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {/* Edit Button */}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(surveyData)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs',
+                  isDark
+                    ? 'border-amber-500/40 bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 hover:border-amber-400 hover:text-white'
+                    : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
+                )}
+                title="แก้ไขข้อมูลการตรวจเยี่ยมนี้"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>แก้ไข</span>
+              </button>
+            )}
+
+            {/* Delete Button */}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(surveyData)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all cursor-pointer shadow-xs',
+                  isDark
+                    ? 'border-rose-500/40 bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 hover:border-rose-400 hover:text-white'
+                    : 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400'
+                )}
+                title="ลบรายการตรวจเยี่ยมนี้"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>ลบ</span>
+              </button>
+            )}
+
             {/* Official Report A4 Modal Button */}
             {onOpenOfficialReport && (
               <button

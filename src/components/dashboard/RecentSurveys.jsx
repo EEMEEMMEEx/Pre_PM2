@@ -17,20 +17,27 @@ import {
   FileDown,
   FileSpreadsheet,
   Check,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
+import { deleteSurveys } from '@/lib/api';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
-export function RecentSurveys({ recent = [], onNavigate }) {
+export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh }) {
   const { isDark } = useTheme();
   const [selectedReport, setSelectedReport] = useState(null);
   const [batchReportSurveys, setBatchReportSurveys] = useState(null);
   const [selectedPreview, setSelectedPreview] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -142,6 +149,29 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         : filteredSurveys;
     if (listToExport.length === 0) return;
     setBatchReportSurveys(listToExport);
+  };
+
+  const handleExecuteDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const idsToDelete = deleteTarget.isBatch
+        ? deleteTarget.ids
+        : [deleteTarget.recordId];
+      await deleteSurveys(idsToDelete);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        idsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
+      setDeleteTarget(null);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + err.message);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const getBadge = (permit) => {
@@ -487,6 +517,23 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                 <span>Excel ({selectedIds.size})</span>
               </button>
 
+              {/* Batch Delete */}
+              <button
+                type="button"
+                onClick={() =>
+                  setDeleteTarget({
+                    isBatch: true,
+                    count: selectedIds.size,
+                    ids: Array.from(selectedIds),
+                  })
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600/90 hover:bg-rose-500 text-white shadow-md cursor-pointer transition-all border border-rose-500/40"
+                title="ลบรายการที่เลือกทั้งหมดออกจากระบบ"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>ลบที่เลือก ({selectedIds.size})</span>
+              </button>
+
               {/* Clear Selection */}
               <button
                 type="button"
@@ -591,7 +638,7 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                 <th className="py-2.5 px-3">จังหวัด</th>
                 <th className="py-2.5 px-3 text-center">ผล</th>
                 <th className="py-2.5 px-3 text-right">เวลาบันทึก</th>
-                <th className="py-2.5 pl-3 pr-3 text-center">Export</th>
+                <th className="py-2.5 pl-3 pr-3 text-center">จัดการ</th>
               </tr>
             </thead>
             <tbody className={cn('divide-y', isDark ? 'divide-slate-800/50' : 'divide-slate-200')}>
@@ -690,20 +737,58 @@ export function RecentSurveys({ recent = [], onNavigate }) {
                       </td>
 
                       <td className="py-3 pl-3 pr-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedReport(item)}
-                          className={cn(
-                            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer shadow-xs',
-                            isDark
-                              ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
-                              : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
-                          )}
-                          title="ส่งออกรายงาน A4 ทางการ (Export PDF / Print)"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          <span>Export</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1 flex-nowrap">
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onEditSurvey) onEditSurvey(item);
+                              else if (onNavigate) onNavigate('field', item);
+                            }}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              isDark
+                                ? 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-600/30 hover:border-amber-400 hover:text-white'
+                                : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
+                            )}
+                            title="แก้ไขข้อมูลการตรวจเยี่ยมนี้"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span className="hidden xl:inline">แก้ไข</span>
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(item)}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              isDark
+                                ? 'border-rose-500/40 bg-rose-950/40 text-rose-300 hover:bg-rose-600/30 hover:border-rose-400 hover:text-white'
+                                : 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400'
+                            )}
+                            title="ลบรายการนี้"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span className="hidden xl:inline">ลบ</span>
+                          </button>
+
+                          {/* Export Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedReport(item)}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              isDark
+                                ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
+                                : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
+                            )}
+                            title="ส่งออกรายงาน A4 ทางการ (Export PDF / Print)"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            <span className="hidden xl:inline">A4</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -833,6 +918,15 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         onOpenOfficialReport={(reportData) => {
           setSelectedReport(reportData);
         }}
+        onEdit={(item) => {
+          setSelectedPreview(null);
+          if (onEditSurvey) onEditSurvey(item);
+          else if (onNavigate) onNavigate('field', item);
+        }}
+        onDelete={(item) => {
+          setSelectedPreview(null);
+          setDeleteTarget(item);
+        }}
       />
 
       {/* Single Survey Official A4 Printable Report Modal */}
@@ -848,6 +942,90 @@ export function RecentSurveys({ recent = [], onNavigate }) {
         onClose={() => setBatchReportSurveys(null)}
         surveys={batchReportSurveys || []}
       />
+
+      {/* Delete Confirmation Dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto">
+          <div
+            className={cn(
+              'relative w-full max-w-md rounded-2xl border p-6 shadow-2xl transition-colors',
+              isDark
+                ? 'border-rose-500/40 bg-slate-900 text-slate-100 shadow-rose-950/40'
+                : 'border-rose-300 bg-white text-slate-900 shadow-xl'
+            )}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold">
+                  {deleteTarget.isBatch
+                    ? 'ยืนยันการลบข้อมูลหลายรายการ'
+                    : 'ยืนยันการลบข้อมูลการตรวจเยี่ยม'}
+                </h3>
+                <p className={cn('mt-2 text-xs leading-relaxed', isDark ? 'text-slate-300' : 'text-slate-600')}>
+                  {deleteTarget.isBatch ? (
+                    <>
+                      คุณต้องการลบข้อมูลการตรวจเยี่ยมที่เลือกจำนวน{' '}
+                      <strong className="text-rose-400 font-bold font-mono">{deleteTarget.count}</strong> สถานี
+                      ออกจากระบบหรือไม่?
+                    </>
+                  ) : (
+                    <>
+                      คุณต้องการลบข้อมูลการตรวจเยี่ยมสถานี{' '}
+                      <strong className="text-rose-400 font-bold">{deleteTarget.station}</strong>{' '}
+                      (รหัส: <span className="font-mono text-cyan-400 font-semibold">{deleteTarget.recordId}</span>) หรือไม่?
+                    </>
+                  )}
+                </p>
+                <div
+                  className={cn(
+                    'mt-3 rounded-lg border p-2.5 text-[11px] font-medium leading-relaxed',
+                    isDark ? 'border-rose-500/30 bg-rose-950/30 text-rose-300' : 'border-rose-200 bg-rose-50 text-rose-700'
+                  )}
+                >
+                  ⚠️ ข้อมูลบันทึกและรูปภาพแนบทั้งหมดจะถูกลบออกจากฐานข้อมูลและไฟล์ถาวร ไม่สามารถกู้คืนได้
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className={cn(
+                  'rounded-xl border px-4 py-2 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50',
+                  isDark
+                    ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                )}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleExecuteDelete}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:from-rose-500 hover:to-red-500 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>กำลังลบ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    <span>ยืนยันการลบ</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

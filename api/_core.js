@@ -182,6 +182,40 @@ async function commitSurveyToGitHub(recordId, surveyPayload) {
   }
 }
 
+async function deleteSurveyFromGitHub(recordId) {
+  const token = getGitHubToken();
+  if (!token) return { success: false, reason: "no_token" };
+  const repo = getGitHubRepo();
+  const branch = getGitHubBranch();
+  const filePath = `data/surveys/${recordId}.json`;
+  try {
+    const sha = await getExistingFileSha(filePath);
+    if (!sha) return { success: true, reason: "file_not_found" };
+    const res = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "User-Agent": "NBTC-PrePM-Survey-App",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({
+        message: `chore(survey): Delete Pre-PM survey ${recordId}`,
+        sha,
+        branch,
+        committer: {
+          name: "NBTC Survey System",
+          email: "survey-bot@nbtc.local",
+        },
+      }),
+    });
+    return { success: res.ok };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 let cachedGitHubSurveys = null;
 let lastGitHubFetchTime = 0;
 const GITHUB_CACHE_TTL = 30000;
@@ -436,6 +470,30 @@ async function writeJson(key, value) {
         fs.mkdirSync(SURVEYS_DIR, { recursive: true });
       }
       fs.writeFileSync(path.join(SURVEYS_DIR, `${value.recordId}.json`), JSON.stringify(value, null, 2), "utf8");
+    } catch {}
+  }
+}
+
+async function deleteJson(key) {
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    try {
+      await fetch(`${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
+      });
+    } catch {}
+  }
+  memoryStore.delete(key);
+  try {
+    const safeFilename = `${encodeURIComponent(key).replace(/[*"\/\\<>:|?]/g, "_")}.json`;
+    const filePath = path.join(TMP_SURVEY_DIR, safeFilename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {}
+  if (key.startsWith(SURVEY_PREFIX)) {
+    const recId = key.slice(SURVEY_PREFIX.length).replace(/\.json$/, "");
+    try {
+      const p = path.join(SURVEYS_DIR, `${recId}.json`);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
     } catch {}
   }
 }
@@ -956,17 +1014,30 @@ exports.handler = async (event) => {
       return json(200, survey);
     }
 
-    if (event.httpMethod === "POST" && route === "save") {
+    if ((event.httpMethod === "POST" || event.httpMethod === "PUT") && (route === "save" || route === "update")) {
       const payload = JSON.parse(event.body || "{}");
       const fields = payload.fields && typeof payload.fields === "object" ? payload.fields : {};
       const photos = Array.isArray(payload.photos) ? payload.photos : [];
-      const sanitizedPhotos = photos.map((photo) => ({
-        name: String(photo?.name || "photo"),
-        type: String(photo?.type || "image/jpeg"),
-        data: String(photo?.data || ""),
-      }));
+      const recordId = payload.recordId || fields.recordId;
+      const isUpdate = route === "update" || Boolean(recordId);
 
-      const totalPhotoChars = sanitizedPhotos.reduce((sum, photo) => sum + photo.data.length, 0);
+      const existingRecord = isUpdate && recordId ? await getSurveyById(recordId) : null;
+
+      const sanitizedPhotos = photos.map((photo, idx) => {
+        let photoData = String(photo?.data || photo?.base64Data || "");
+        if (!photoData && existingRecord && Array.isArray(existingRecord.photos)) {
+          const matchExisting = existingRecord.photos.find((p) => p.name === photo.name || p.id === photo.id);
+          if (matchExisting) photoData = matchExisting.data || "";
+        }
+        return {
+          id: photo?.id || idx + 1,
+          name: String(photo?.name || `photo_${idx + 1}.jpg`),
+          type: String(photo?.type || photo?.contentType || "image/jpeg"),
+          data: photoData,
+        };
+      });
+
+      const totalPhotoChars = sanitizedPhotos.reduce((sum, photo) => sum + (photo.data?.length || 0), 0);
       if (totalPhotoChars > MAX_PHOTO_DATA_CHARS) {
         return json(413, {
           error: "photos_too_large",
@@ -974,15 +1045,17 @@ exports.handler = async (event) => {
         });
       }
 
-      const recordId = `PM-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 15)}-${crypto.randomBytes(2).toString("hex")}`;
-      const savedAt = new Date().toISOString();
+      const finalRecordId = recordId || `PM-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 15)}-${crypto.randomBytes(2).toString("hex")}`;
+      const savedAt = existingRecord?.savedAt || new Date().toISOString();
+      const updatedAt = new Date().toISOString();
       const stationName = fields.station || fields.stationSelect || "ไม่ระบุสถานี";
       const province = fields.province || "";
       const permit = fields.permit === "on" ? "อนุญาต" : fields.permit || "ยังไม่ระบุ";
 
       const surveyRecord = {
-        recordId,
+        recordId: finalRecordId,
         savedAt,
+        updatedAt,
         station: stationName,
         province,
         permit,
@@ -990,24 +1063,61 @@ exports.handler = async (event) => {
         photos: sanitizedPhotos,
       };
 
-      await writeJson(`${SURVEY_PREFIX}${recordId}.json`, surveyRecord);
+      await writeJson(`${SURVEY_PREFIX}${finalRecordId}.json`, surveyRecord);
 
       // Also commit directly to GitHub repository (Thaidimaru/Pre_PM2)
       let ghResult = { success: false, reason: "not_attempted" };
       try {
-        ghResult = await commitSurveyToGitHub(recordId, surveyRecord);
+        ghResult = await commitSurveyToGitHub(finalRecordId, surveyRecord);
       } catch (ghErr) {
         console.warn("GitHub commit error:", ghErr);
       }
 
       return json(200, {
         saved: true,
-        recordId,
+        updated: isUpdate,
+        recordId: finalRecordId,
         savedAt,
+        updatedAt,
         githubSynced: !!ghResult.success,
         commitUrl: ghResult.commitUrl || null,
         githubError: !ghResult.success && ghResult.message ? ghResult.message : null,
       });
+    }
+
+    if ((event.httpMethod === "POST" || event.httpMethod === "DELETE") && route === "delete") {
+      const payload = JSON.parse(event.body || "{}");
+      let recordIds = payload.recordIds;
+      if (!recordIds && payload.recordId) recordIds = [payload.recordId];
+      if (!Array.isArray(recordIds) || recordIds.length === 0) {
+        return json(400, { error: "bad_request", message: "Missing recordIds or recordId" });
+      }
+
+      for (const recId of recordIds) {
+        await deleteJson(`${SURVEY_PREFIX}${recId}.json`);
+        try {
+          await deleteSurveyFromGitHub(recId);
+        } catch (e) {
+          console.warn("GitHub delete error:", e);
+        }
+      }
+
+      return json(200, {
+        deleted: true,
+        count: recordIds.length,
+        deletedIds: recordIds,
+      });
+    }
+
+    if (event.httpMethod === "DELETE" && route === "survey") {
+      const q = event.queryStringParameters || {};
+      const recordId = q.recordId || q.id || "";
+      if (!recordId) {
+        return json(400, { error: "bad_request", message: "Missing recordId" });
+      }
+      await deleteJson(`${SURVEY_PREFIX}${recordId}.json`);
+      await deleteSurveyFromGitHub(recordId).catch(() => {});
+      return json(200, { deleted: true, count: 1, deletedIds: [recordId] });
     }
 
     return json(404, { error: "not_found", message: "Endpoint not found" });
