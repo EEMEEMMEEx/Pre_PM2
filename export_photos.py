@@ -10,8 +10,11 @@ import sqlite3
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
-DB_PATH = ROOT_DIR / "survey.db"
-OUTPUT_DIR = ROOT_DIR / "photos"
+ONEDRIVE_DATA_DIR = Path(r"C:\Users\utai3\OneDrive\NBTC Microwave\Data")
+DATA_DIR = ONEDRIVE_DATA_DIR if ONEDRIVE_DATA_DIR.exists() else ROOT_DIR
+
+DB_PATH = DATA_DIR / "survey.db"
+OUTPUT_DIR = DATA_DIR / "photos"
 
 
 def export_photos(by_folder: bool = False):

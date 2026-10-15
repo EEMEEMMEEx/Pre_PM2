@@ -14,6 +14,7 @@ import {
   Search,
   X,
   Filter,
+  FileDown,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
@@ -159,21 +160,38 @@ export function RecentSurveys({ recent = [], onNavigate }) {
             </div>
           </div>
 
-          {onNavigate && (
-            <button
-              type="button"
-              onClick={() => onNavigate('field')}
+          <div className="flex items-center gap-2">
+            <a
+              href="/api/export-pdf"
+              download={`SURVEY_REPORTS_ALL_${recent.length || 63}.pdf`}
               className={cn(
-                'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
+                'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
                 isDark
-                  ? 'border-blue-500/30 bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 hover:border-blue-500/50 hover:text-white'
-                  : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400 shadow-2xs'
+                  ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
+                  : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
               )}
+              title={`ดาวน์โหลดรายงานผลการสำรวจทางการทั้งหมด (PDF รวม ${recent.length} สถานี พร้อมรูปถ่าย)`}
             >
-              <span>บันทึกใหม่</span>
-              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-            </button>
-          )}
+              <FileDown className="h-3.5 w-3.5" />
+              <span>Export PDF ทั้งหมด ({recent.length})</span>
+            </a>
+
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('field')}
+                className={cn(
+                  'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer',
+                  isDark
+                    ? 'border-blue-500/30 bg-blue-600/20 text-blue-300 hover:bg-blue-600/30 hover:border-blue-500/50 hover:text-white'
+                    : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400 shadow-2xs'
+                )}
+              >
+                <span>บันทึกใหม่</span>
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Filter & Search Toolbar */}

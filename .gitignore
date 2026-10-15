@@ -9,5 +9,6 @@ photos/
 **/.DS_Store
 *_backup.xlsx
 github-token.txt
+r2-credentials.json
 .env
 .env.*

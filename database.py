@@ -32,14 +32,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class AppConfig:
     ROOT = Path(__file__).resolve().parent
     DIST_DIR = ROOT / "dist"
-    DB_PATH = ROOT / "survey.db"
+    
+    # Primary Data Storage: Personal OneDrive (utai323@gmail.com)
+    ONEDRIVE_DATA_DIR = Path(r"C:\Users\utai3\OneDrive\NBTC Microwave\Data")
+    DATA_DIR = ONEDRIVE_DATA_DIR if ONEDRIVE_DATA_DIR.exists() else ROOT
+    
+    DB_PATH = DATA_DIR / "survey.db"
+    PHOTOS_DIR = DATA_DIR / "photos"
+    SURVEY_PDF_PATH = DATA_DIR / "SURVEY_REPORTS_ALL_63.pdf" if (DATA_DIR / "SURVEY_REPORTS_ALL_63.pdf").exists() else (DATA_DIR / "SURVEY_REPORTS_ALL_56.pdf")
+    SURVEYS_DIR = DATA_DIR / "surveys" if (DATA_DIR / "surveys").exists() else (ROOT / "data" / "surveys")
+    
     HTML_PATH = ROOT / "index.html"
     PASSWORD_PATH = ROOT / "access-password.txt"
     DATABASE_XLSX = ROOT / "DATABASE.xlsx"
     AGWBS_XLSX = ROOT / "AGWBS.xlsx"
-    PHOTOS_DIR = ROOT / "photos"
     ASSETS_DIR = ROOT / "assets"
-    SURVEYS_DIR = ROOT / "data" / "surveys"
     GITHUB_TOKEN_PATH = ROOT / "github-token.txt"
     
     HOST = "0.0.0.0"
@@ -908,6 +915,32 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(200, status)
             return
 
+        # 4.4 API: Export All Survey Reports to PDF
+        if parsed_path in ("/api/export-pdf", "/api/export/pdf", "/api/export-all-pdf"):
+            pdf_file = AppConfig.SURVEY_PDF_PATH
+            if not pdf_file.exists():
+                try:
+                    from export_pdf import export_pdf
+                    export_pdf(output_path=pdf_file)
+                except Exception as e:
+                    self.send_json_response(500, {"error": f"Failed to generate PDF: {e}"})
+                    return
+
+            if pdf_file.exists():
+                data = pdf_file.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Disposition", f'attachment; filename="{pdf_file.name}"')
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            else:
+                self.send_json_response(500, {"error": "PDF file could not be generated"})
+                return
+
         # 5. Not Found
         self.send_json_response(404, {"error": "Not found"})
 
@@ -961,6 +994,7 @@ def run_server():
     print(" NBTC Microwave — Survey Control Room Server")
     print(f" Address : http://localhost:{AppConfig.PORT}")
     print(f" Pages   : http://localhost:{AppConfig.PORT}/ (Dashboard & Field Form)")
+    print(f" Storage : {AppConfig.DATA_DIR}")
     print("=" * 60)
     server.serve_forever()
 
