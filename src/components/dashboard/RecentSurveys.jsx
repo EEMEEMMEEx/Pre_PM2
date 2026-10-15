@@ -38,7 +38,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [permitFilter, setPermitFilter] = useState('all');
@@ -240,28 +240,36 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               <Clock className="h-4 w-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2
-                  className={cn(
-                    'text-lg font-bold tracking-normal leading-tight',
-                    isDark ? 'text-white' : 'text-slate-900'
-                  )}
-                >
-                  ประวัติการกรอกข้อมูลการตรวจเยี่ยม
-                </h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </span>
+                  <h2
+                    className={cn(
+                      'text-lg font-bold tracking-normal leading-tight',
+                      isDark ? 'text-white' : 'text-slate-900'
+                    )}
+                  >
+                    ประวัติการกรอกข้อมูลการตรวจเยี่ยมทั้งหมด
+                  </h2>
+                </div>
                 <span
                   className={cn(
-                    'rounded-full px-2 py-0.5 text-xs font-mono font-bold border',
+                    'rounded-full px-2.5 py-0.5 text-xs font-mono font-bold border flex items-center gap-1.5',
                     isDark
-                      ? 'bg-blue-500/20 text-cyan-300 border-blue-500/30'
-                      : 'bg-sky-100 text-sky-700 border-sky-300'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   )}
                 >
-                  {recent.length} สถานี
+                  <span>เรียลไทม์</span>
+                  <span className="opacity-40">•</span>
+                  <span>{recent.length} สถานี</span>
                 </span>
               </div>
               <p className={cn('text-xs mt-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
-                เลือกเครื่องหมายถูกด้านหน้ารายการเพื่อดาวน์โหลดหลายรายการพร้อมกัน หรือคลิกที่ชื่อสถานีเพื่อพรีวิว
+                แสดงข้อมูลภาคสนามครบถ้วนทุกรายการแบบเรียลไทม์ คลิกที่ชื่อสถานีเพื่อดูรายละเอียดและภาพถ่าย หรือเลือกเพื่อ Export
               </p>
             </div>
           </div>
@@ -555,59 +563,88 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
 
         {/* Toolbar: Count info & Page Size Selector */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-xs">
-          <div className={cn('font-medium', isDark ? 'text-slate-400' : 'text-slate-600')}>
-            แสดง{' '}
-            <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
-              {totalItems > 0 ? startIndex + 1 : 0} - {endIndex}
-            </span>{' '}
-            จาก{isFiltered ? 'ที่ค้นพบ ' : 'ทั้งหมด '}
-            <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
-              {totalItems}
-            </span>{' '}
-            สถานี
-            {isFiltered && (
-              <span className={cn('ml-1', isDark ? 'text-slate-500' : 'text-slate-400')}>
-                (จากประวัติทั้งหมด {recent.length} สถานี)
-              </span>
-            )}
-          </div>
+          <div className={cn('font-medium flex items-center gap-2 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-600')}>
+            <span>
+              แสดง{' '}
+              <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
+                {totalItems > 0 ? startIndex + 1 : 0} - {endIndex}
+              </span>{' '}
+              จาก{isFiltered ? 'ที่ค้นพบ ' : 'ทั้งหมด '}
+              <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
+                {totalItems}
+              </span>{' '}
+              สถานี
+              {isFiltered && (
+                <span className={cn('ml-1', isDark ? 'text-slate-500' : 'text-slate-400')}>
+                  (จากประวัติทั้งหมด {recent.length} สถานี)
+                </span>
+              )}
+            </span>
 
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="station-page-size"
-              className={cn('font-medium cursor-pointer', isDark ? 'text-slate-400' : 'text-slate-500')}
-            >
-              จำนวนต่อหน้า:
-            </label>
-            <select
-              id="station-page-size"
-              value={pageSize}
-              onChange={(e) => {
-                const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
-                setPageSize(val);
-                setCurrentPage(1);
-              }}
+            {/* Real-time Indicator Pill */}
+            <span
               className={cn(
-                'rounded-lg border px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
+                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border',
                 isDark
-                  ? 'border-slate-700 bg-slate-900/90 text-slate-200 hover:border-slate-600'
-                  : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 shadow-2xs'
+                  ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
               )}
             >
-              <option value={5}>5 สถานี/หน้า</option>
-              <option value={10}>10 สถานี/หน้า</option>
-              <option value={20}>20 สถานี/หน้า</option>
-              <option value={50}>50 สถานี/หน้า</option>
-              <option value={100}>100 สถานี/หน้า</option>
-              <option value="all">ทั้งหมด ({totalItems})</option>
-            </select>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span>เรียลไทม์</span>
+            </span>
+          </div>
+
+          {/* Quick Page Size Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div
+              className={cn(
+                'inline-flex items-center gap-1 p-0.5 rounded-xl border text-xs',
+                isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-300 bg-slate-100'
+              )}
+            >
+              <span className={cn('px-2 text-[11px] font-semibold', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                แสดง:
+              </span>
+              {[
+                { label: `ทั้งหมด (${totalItems})`, value: 'all' },
+                { label: '50', value: 50 },
+                { label: '25', value: 25 },
+                { label: '10', value: 10 },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setPageSize(opt.value);
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                    pageSize === opt.value
+                      ? isDark
+                        ? 'bg-cyan-500 text-slate-950 font-bold shadow-xs'
+                        : 'bg-sky-600 text-white font-bold shadow-xs'
+                      : isDark
+                        ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Table Container with scrollbar */}
         <div
           className={cn(
-            'overflow-x-auto overflow-y-auto max-h-[460px] rounded-xl border mt-2 custom-scrollbar transition-colors shadow-2xs',
+            'overflow-x-auto overflow-y-auto rounded-xl border mt-2 custom-scrollbar transition-colors shadow-2xs',
+            pageSize === 'all' ? 'max-h-[720px]' : 'max-h-[500px]',
             isDark ? 'border-slate-800/80 bg-slate-950/20' : 'border-slate-200 bg-white'
           )}
         >
@@ -620,7 +657,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             >
               <tr className={cn('border-b text-xs font-semibold', isDark ? 'border-slate-800' : 'border-slate-200')}>
                 {/* Select All Checkbox */}
-                <th className="py-2.5 pl-3.5 pr-1.5 w-10 text-center">
+                <th className="py-2.5 pl-3 pr-1 w-9 text-center">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -633,18 +670,22 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     aria-label="เลือกทั้งหมดในหน้านี้"
                   />
                 </th>
+                <th className="py-2.5 px-2 text-center w-10">#</th>
                 <th className="py-2.5 pr-3 pl-2">รหัสรายการ</th>
-                <th className="py-2.5 px-3">สถานี</th>
-                <th className="py-2.5 px-3">จังหวัด</th>
-                <th className="py-2.5 px-3 text-center">ผล</th>
+                <th className="py-2.5 px-3">สถานี / ข้อมูลติดต่อ</th>
+                <th className="py-2.5 px-3">จังหวัด / อำเภอ</th>
+                <th className="py-2.5 px-3 text-center">ผลการขออนุญาต</th>
+                <th className="py-2.5 px-3 text-center">ระบบวิทยุ / ไฟฟ้า</th>
+                <th className="py-2.5 px-3 text-center">รูปภาพ</th>
                 <th className="py-2.5 px-3 text-right">เวลาบันทึก</th>
                 <th className="py-2.5 pl-3 pr-3 text-center">จัดการ</th>
               </tr>
             </thead>
             <tbody className={cn('divide-y', isDark ? 'divide-slate-800/50' : 'divide-slate-200')}>
               {displayedItems.length > 0 ? (
-                displayedItems.map((item) => {
+                displayedItems.map((item, rowIdx) => {
                   const isSelected = selectedIds.has(item.recordId);
+                  const f = item.fields || {};
                   return (
                     <tr
                       key={item.recordId}
@@ -660,7 +701,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       )}
                     >
                       {/* Checkbox column */}
-                      <td className="py-3 pl-3.5 pr-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 pl-3 pr-1 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -669,6 +710,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           title={`เลือกสถานี ${item.station}`}
                           aria-label={`เลือกสถานี ${item.station}`}
                         />
+                      </td>
+
+                      {/* Row index # */}
+                      <td className="py-3 px-2 text-center text-xs font-mono opacity-50">
+                        {startIndex + rowIdx + 1}
                       </td>
 
                       {/* Clickable Record ID */}
@@ -689,7 +735,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                         </button>
                       </td>
 
-                      {/* Clickable Station Name */}
+                      {/* Clickable Station Name + Contact & Phone */}
                       <td className="py-3 px-3">
                         <button
                           type="button"
@@ -700,48 +746,111 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           )}
                           title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
                         >
-                          <span className="hover:underline underline-offset-2">{item.station}</span>
-                          {item.photos && item.photos.length > 0 && (
-                            <span
-                              className={cn(
-                                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium border',
-                                isDark
-                                  ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300'
-                                  : 'bg-sky-100 border-sky-200 text-sky-700'
-                              )}
-                              title={`มีรูปภาพแนบ ${item.photos.length} รูป`}
-                            >
-                              <ImageIcon className="h-3 w-3" />
-                              <span>{item.photos.length}</span>
-                            </span>
-                          )}
+                          <span className="hover:underline underline-offset-2 font-semibold text-sm">
+                            {item.station}
+                          </span>
                         </button>
                         <div className={cn('text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-500')}>
-                          <span>ผู้ให้ข้อมูล: <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>{item.fields?.informantName || item.fields?.contactName || '-'}</span></span>
-                          <span className="opacity-40">•</span>
-                          <span>ผู้ตรวจ: <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>{item.fields?.operatorName || '-'}</span></span>
+                          <span>
+                            ผู้ให้ข้อมูล:{' '}
+                            <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>
+                              {f.contactName || f.informantName || '-'}
+                            </span>
+                          </span>
+                          {(f.contactPhone || f.contact_phone) && (
+                            <>
+                              <span className="opacity-40">•</span>
+                              <span className="font-mono text-cyan-400/90">{f.contactPhone || f.contact_phone}</span>
+                            </>
+                          )}
+                          {f.operatorName && (
+                            <>
+                              <span className="opacity-40">•</span>
+                              <span>ช่าง: {f.operatorName}</span>
+                            </>
+                          )}
                         </div>
                       </td>
 
-                      <td className={cn('py-3 px-3', isDark ? 'text-slate-300' : 'text-slate-700')}>
-                        {item.province}
+                      {/* Province & District */}
+                      <td className={cn('py-3 px-3 text-xs', isDark ? 'text-slate-300' : 'text-slate-700')}>
+                        <div className="font-medium">{item.province}</div>
+                        {f.district && <div className="text-[11px] opacity-75">อ.{f.district}</div>}
                       </td>
 
+                      {/* Permit Badge */}
                       <td className="py-3 px-3 text-center">{getBadge(item.permit)}</td>
 
+                      {/* Radio & Power Status */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="inline-flex flex-col gap-1 items-center">
+                          <span
+                            className={cn(
+                              'px-1.5 py-0.5 rounded text-[10.5px] font-medium border',
+                              f.radioStatus === 'ปกติ' || !f.radioStatus
+                                ? isDark
+                                  ? 'border-emerald-500/30 text-emerald-300 bg-emerald-950/30'
+                                  : 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                                : isDark
+                                  ? 'border-amber-500/40 text-amber-300 bg-amber-950/40'
+                                  : 'border-amber-300 text-amber-700 bg-amber-50'
+                            )}
+                          >
+                            วิทยุ: {f.radioStatus || 'ปกติ'}
+                          </span>
+                          <span
+                            className={cn(
+                              'px-1.5 py-0.5 rounded text-[10.5px] font-medium border',
+                              f.powerStatus === 'ปกติ' || !f.powerStatus
+                                ? isDark
+                                  ? 'border-sky-500/30 text-sky-300 bg-blue-950/30'
+                                  : 'border-sky-300 text-sky-700 bg-sky-50'
+                                : isDark
+                                  ? 'border-amber-500/40 text-amber-300 bg-amber-950/40'
+                                  : 'border-amber-300 text-amber-700 bg-amber-50'
+                            )}
+                          >
+                            ไฟ: {f.powerStatus || 'ปกติ'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Photos Thumbnail Badge */}
+                      <td className="py-3 px-3 text-center">
+                        {item.photos && item.photos.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPreview(item)}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium border transition-all cursor-pointer hover:scale-105 shadow-2xs',
+                              isDark
+                                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25'
+                                : 'bg-sky-100 border-sky-300 text-sky-700 hover:bg-sky-200'
+                            )}
+                            title={`คลิกเพื่อดูรูปถ่าย ${item.photos.length} รูป`}
+                          >
+                            <ImageIcon className="h-3.5 w-3.5" />
+                            <span>{item.photos.length} รูป</span>
+                          </button>
+                        ) : (
+                          <span className="text-xs opacity-40">-</span>
+                        )}
+                      </td>
+
+                      {/* Saved Time / Visit Date */}
                       <td
                         className={cn(
                           'py-3 px-3 text-right text-xs',
                           isDark ? 'text-slate-400' : 'text-slate-500'
                         )}
                       >
-                        {item.fields?.visitDate ? (
+                        {f.visitDate ? (
                           <div>
                             <div className={cn('font-medium', isDark ? 'text-slate-200' : 'text-slate-800')}>
-                              {item.fields.visitDate}
+                              {f.visitDate}
                             </div>
-                            <div className="text-[10.5px] opacity-75">
-                              บันทึก: {new Date(item.savedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                            <div className="text-[10.5px] opacity-75 font-mono">
+                              {new Date(item.savedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} {new Date(item.savedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </div>
                         ) : (
@@ -752,8 +861,25 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                         )}
                       </td>
 
+                      {/* Actions */}
                       <td className="py-3 pl-3 pr-3 text-center">
                         <div className="flex items-center justify-center gap-1 flex-nowrap">
+                          {/* Preview Details Button */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPreview(item)}
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              isDark
+                                ? 'border-sky-500/40 bg-sky-950/40 text-sky-300 hover:bg-sky-600/30 hover:border-sky-400 hover:text-white'
+                                : 'border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:border-sky-400'
+                            )}
+                            title="ดูรายละเอียดข้อมูลทั้งหมดและภาพถ่าย"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span className="hidden xl:inline">ดูข้อมูล</span>
+                          </button>
+
                           {/* Edit Button */}
                           <button
                             type="button"
@@ -789,7 +915,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                             <span className="hidden xl:inline">ลบ</span>
                           </button>
 
-                          {/* Export Button */}
+                          {/* Export Official A4 Button */}
                           <button
                             type="button"
                             onClick={() => setSelectedReport(item)}
@@ -811,7 +937,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className={cn('py-8 text-center', isDark ? 'text-slate-500' : 'text-slate-400')}>
+                  <td colSpan={10} className={cn('py-8 text-center', isDark ? 'text-slate-500' : 'text-slate-400')}>
                     {isFiltered ? (
                       <div className="flex flex-col items-center gap-2">
                         <span>ไม่พบข้อมูลที่ตรงกับคำค้นหาหรือตัวกรอง</span>
@@ -839,8 +965,35 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
+        {/* Footer: Pagination or All-Items Status */}
+        {pageSize === 'all' ? (
+          <div
+            className={cn(
+              'flex items-center justify-between pt-3 mt-2 border-t text-xs',
+              isDark ? 'border-slate-800/60 text-slate-400' : 'border-slate-200 text-slate-600'
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span>
+                กำลังแสดงข้อมูลครบถ้วนทั้งหมด <strong>{totalItems}</strong> สถานี (อัปเดตเรียลไทม์)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPageSize(25);
+                setCurrentPage(1);
+              }}
+              className="text-xs text-sky-400 hover:underline cursor-pointer"
+            >
+              สลับเป็นแบ่งหน้า (25 สถานี/หน้า)
+            </button>
+          </div>
+        ) : totalPages > 1 ? (
           <div
             className={cn(
               'flex items-center justify-between pt-3 mt-2 border-t text-xs',
@@ -923,7 +1076,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </GlassCard>
 
       {/* Survey Preview Modal (Detail & Photos with Download) */}

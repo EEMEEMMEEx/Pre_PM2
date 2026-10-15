@@ -135,15 +135,17 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
 
   // Register server surveys first
   for (const s of serverRecent) {
-    if (s && (s.recordId || s.station)) {
-      surveyMap.set(s.recordId || s.station, s);
+    if (s && s.recordId) {
+      surveyMap.set(s.recordId, s);
+    } else if (s && s.station) {
+      surveyMap.set(`${s.station}_${s.savedAt || ''}`, s);
     }
   }
 
   // Merge client local surveys
   for (const ls of localSurveys) {
     if (!ls) continue;
-    const key = ls.recordId || ls.station;
+    const key = ls.recordId || `${ls.station}_${ls.savedAt || ''}`;
     if (!surveyMap.has(key)) {
       surveyMap.set(key, ls);
     } else {
@@ -628,6 +630,7 @@ let clientGhSurveysCache = null;
 let clientGhLastFetchTime = 0;
 let lastSurveysCommitSha = null;
 let lastSurveysCommitETag = null;
+const knownFileShas = new Map();
 const CLIENT_GH_CACHE_TTL = 10000;
 
 export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
@@ -678,15 +681,28 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
     const jsonFiles = items.filter((f) => f.type === 'file' && f.name.endsWith('.json') && !f.name.startsWith('.'));
     jsonFiles.sort((a, b) => b.name.localeCompare(a.name));
 
-    // Only download files that are NOT in knownRecordIds (saving bandwidth & rate limits!)
+    const currentGhIds = new Set(jsonFiles.map((f) => f.name.replace(/\.json$/, '')));
+
+    // Download files that are NOT in knownRecordIds OR whose file SHA has changed (modified surveys)
     const filesToFetch = jsonFiles.filter((f) => {
       const recId = f.name.replace(/\.json$/, '');
-      return !knownRecordIds.has(recId);
+      const shaChanged = f.sha && knownFileShas.has(recId) && knownFileShas.get(recId) !== f.sha;
+      return !knownRecordIds.has(recId) || shaChanged;
     });
 
+    // Record latest SHAs
+    for (const f of jsonFiles) {
+      const recId = f.name.replace(/\.json$/, '');
+      if (f.sha) knownFileShas.set(recId, f.sha);
+    }
+
+    // Filter out deleted items from local cache
+    let updatedCache = (clientGhSurveysCache || []).filter((s) => currentGhIds.has(s.recordId));
+
     if (filesToFetch.length === 0) {
+      clientGhSurveysCache = updatedCache;
       clientGhLastFetchTime = now;
-      return clientGhSurveysCache || [];
+      return clientGhSurveysCache;
     }
 
     const rawSurveys = (
