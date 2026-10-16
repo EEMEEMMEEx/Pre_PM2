@@ -1,0 +1,32 @@
+{
+  "recordId": "PM-202610160122188-3826",
+  "savedAt": "2026-10-16T01:22:18.842Z",
+  "station": "หมู่ 5 หนองปรือ",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 5 หนองปรือ",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "หนองประดู่",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายมานะ สังข์ทอง",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 5 หนองปรือ",
+    "contactPhone": "097-951-6374",
+    "visitDate": "2026-10-09",
+    "summary": "",
+    "informantName": "นายมานะ สังข์ทอง",
+    "operatorName": "นายวัชระ มานะดี",
+    "photos": []
+  },
+  "photos": []
+}
