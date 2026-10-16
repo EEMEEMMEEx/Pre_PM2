@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610160204433-fa60",
-  "savedAt": "2026-10-16T02:04:43.360Z",
+  "savedAt": "2026-10-16T02:09:19.736Z",
+  "updatedAt": "2026-10-16T02:09:19.736Z",
   "station": "ที่ว่าการอำเภอย่านตาขาว",
   "province": "ตรัง",
   "permit": "อนุญาต",
@@ -26,12 +27,14 @@
     "accessLimit": "ไม่มี",
     "userProblem": "ไม่มี",
     "siteCondition": "ปกติ",
-    "antennaCondition": "ไม่มี",
+    "antennaCondition": "ปกติ",
     "workObstacle": "สภาพอากาศฝนตกเป็นช่วงเวลา",
     "summary": "ไม่มี",
-    "informantName": "นายสมประสงค์  มลฑลจุลเกศ",
+    "informantName": "นายนพดล แต้สกุล",
     "operatorName": "นายสมประสงค์  มลฑลจุลเกศ",
-    "photos": []
+    "photos": [],
+    "visitTime": "",
+    "recordId": "PM-202610160204433-fa60"
   },
   "photos": []
 }
