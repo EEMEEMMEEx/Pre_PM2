@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610160224444-ea1a",
-  "savedAt": "2026-10-16T02:24:44.419Z",
+  "savedAt": "2026-10-16T02:31:32.801Z",
+  "updatedAt": "2026-10-16T02:31:32.801Z",
   "station": "หมู่ 5 โคกสาร",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -25,12 +26,15 @@
     "visitDate": "2026-10-07",
     "informantName": "นายสมาน โกษาจันทร์",
     "operatorName": "ชนะ ปักษีเลิศ",
-    "summary": "ไม่มี",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
-    "userProblem": "ไม่มี",
-    "photos": []
+    "userProblem": "",
+    "photos": [],
+    "visitTime": "",
+    "accessLimit": "",
+    "recordId": "PM-202610160224444-ea1a"
   },
   "photos": []
 }
