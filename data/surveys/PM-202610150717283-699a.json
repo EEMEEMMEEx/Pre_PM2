@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150717283-699a",
-  "savedAt": "2026-10-15T07:32:22.810Z",
+  "savedAt": "2026-10-16T02:08:44.930Z",
+  "updatedAt": "2026-10-16T02:08:44.930Z",
   "station": "หมู่ 8 ลำประสาน",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -27,13 +28,13 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "ทางผู้ใหญ่บ้านมีการต่อเติมหลังคา ส่งผลให้ต้องย้ายแนว Feeder",
-    "operatorName": "นายชนะ ปักษีเลิศ",
+    "summary": "",
+    "operatorName": "ชนะ ปักษีเลิศ",
     "photos": [],
-    "informantName": "นายชนะ ปักษีเลิศ",
+    "informantName": "นายอาทิตย์ ทองอินทร์",
     "recordId": "PM-202610150717283-699a",
-    "accessLimit": "ไม่มี"
+    "accessLimit": "",
+    "visitTime": ""
   },
-  "photos": [],
-  "updatedAt": "2026-10-15T07:32:22.810Z"
+  "photos": []
 }
