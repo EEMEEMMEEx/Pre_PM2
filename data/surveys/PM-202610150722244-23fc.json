@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150722244-23fc",
-  "savedAt": "2026-10-15T08:27:00.426Z",
+  "savedAt": "2026-10-16T02:36:37.848Z",
+  "updatedAt": "2026-10-16T02:36:37.848Z",
   "station": "หมู่ 6 โคกยาว",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -28,8 +29,12 @@
     "workObstacle": "ไม่มี",
     "operatorName": "ชนะ ปักษีเลิศ",
     "photos": [],
-    "recordId": "PM-202610150722244-23fc"
+    "recordId": "PM-202610150722244-23fc",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "summary": "",
+    "informantName": "นายวิฑูรย์ ผูกฟัก"
   },
-  "photos": [],
-  "updatedAt": "2026-10-15T08:27:00.426Z"
+  "photos": []
 }
