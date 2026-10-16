@@ -1,7 +1,7 @@
 {
   "recordId": "PM-202610051505375-e592",
-  "savedAt": "2026-10-16T03:12:26.748Z",
-  "updatedAt": "2026-10-16T03:12:26.748Z",
+  "savedAt": "2026-10-16T03:14:33.526Z",
+  "updatedAt": "2026-10-16T03:14:33.526Z",
   "station": "BS คลองป่าหมู",
   "province": "นครราชสีมา",
   "permit": "อนุญาต",
@@ -11,7 +11,7 @@
     "district": "ปากช่อง",
     "province": "นครราชสีมา",
     "installationPlace": "ศาลาประชาคม",
-    "equipmentPlace": "Outdoor",
+    "equipmentPlace": "Outdoor Cabinet",
     "contactName": "นางบงกชศมน คำมี",
     "contactPosition": "ผู้ใหญ่บ้าน",
     "contactPhone": "064-932-4746",
@@ -33,7 +33,7 @@
     "summary": "ฝนตก และมีไฟฟ้าดับบ่อย ตรวจสอบระบบไฟในสถานีอยู่ในสภาพปกติ",
     "informantName": "นางบงกชศมน คำมี",
     "operatorName": "นายอุทัย หนาดสำโรง",
-    "accessLimit": "",
+    "accessLimit": "ไม่มี",
     "recordId": "PM-202610051505375-e592"
   },
   "photos": []
