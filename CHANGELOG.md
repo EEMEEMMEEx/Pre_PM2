@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.7] - 2026-10-16
+
+### Added
+- เพิ่มปุ่ม **กรองข้อมูล (Filter)** และ **Sort (จัดเรียง)** ตรง Toolbar เหนือตารางประวัติการกรอกข้อมูลการตรวจเยี่ยมทั้งหมด (`src/components/dashboard/RecentSurveys.jsx`):
+  - **ปุ่มกรองข้อมูล**: คลิกเพื่อเปิด/ปิดแผงตัวกรอง (Expandable Filter Panel) ได้อย่างสะดวก พร้อม Badge แสดงจำนวนเงื่อนไขตัวกรองที่ทำงานอยู่ (`activeFilterCount`)
+  - **ปุ่ม Sort (จัดเรียง)**: แสดงสถานะการเรียงปัจจุบัน (เช่น `Sort: ล่าสุด`, `Sort: สถานี ก-ฮ`, `Sort: จังหวัด ก-ฮ`) และคลิกเพื่อเปิด Dropdown Menu เลือกรูปแบบการจัดเรียงได้ทันที พร้อมไอคอนสถานะและการปิดอัตโนมัติเมื่อคลิกนอกพื้นที่หรือกด Escape
+  - **ปุ่มล้างตัวกรองด่วน (Quick Clear Filters)**: แสดงขึ้นมาทันทีเมื่อมีการกรองหรือเรียงลำดับที่ไม่ใช่ค่าเริ่มต้น เพื่อให้สามารถรีเซ็ตกลับสู่สถานะปกติได้ในคลิกเดียว
+  - ย้ายและปรับโครงสร้างแผงตัวกรอง (Filter Panel) ให้เปิด-ปิดอยู่ใต้ Toolbar ได้อย่างสวยงาม ไม่บดบังพื้นที่ตารางเมื่อไม่ได้ใช้งาน
+
+## [2.8.6] - 2026-10-16
+
+### Fixed
+- แก้ไขปัญหาการกดปุ่มลบรายการแล้วรายการยังคงแสดงอยู่: นำ Tombstone Pattern (`nbtc_pre_pm_deleted_surveys`) มาใช้เพื่อบันทึกรายการที่ถูกลบลงใน LocalStorage ทันที และตัดรายการดังกล่าวออกจาก `mergeDashboardWithLocal`, `fetchDashboardData`, `serverData.recent` และ GitHub cache ทำให้ข้อมูลที่ถูกลบหายไปทันที (0ms) และไม่กลับมาแสดงซ้ำแม้ static snapshot `/api/dashboard` บน Cloudflare R2 จะยังมีข้อมูลเก่าอยู่ (`src/lib/api.js`, `src/components/dashboard/RecentSurveys.jsx`).
+- คำนวณยอดรวมสถานี (KPI Cards) และสถิติจังหวัดใหม่ตามข้อมูลที่เหลืออยู่จริงหลังจากหักรายการที่ถูกลบออก (`src/lib/api.js`).
+- เพิ่ม `"githubDeleted": True` ในการตอบกลับของ `DatabaseService.delete_surveys` เพื่อให้ฝั่ง client ทราบว่าลบทั้งใน SQLite และ GitHub แล้ว (`database.py`).
+
+### Added
+- เพิ่มฟังก์ชั่นฟิลเตอร์และจัดเรียงข้อมูลแบบครบวงจรในประวัติการตรวจเยี่ยม (`src/components/dashboard/RecentSurveys.jsx`):
+  - **ตัวกรองจังหวัด (Province Filter)**: เลือกกรองตามจังหวัดแบบไดนามิกจากรายการที่มีอยู่จริง พร้อมแสดงจำนวนสถานีในแต่ละจังหวัด
+  - **ตัวกรองสถานะระบบ (System Status Filter)**: กรองตามระบบวิทยุสื่อสารและระบบไฟฟ้า (ปกติ / มีปัญหา)
+  - **ตัวกรองรูปภาพ (Photo Filter)**: กรองรายการที่มีรูปภาพ หรือไม่มีรูปภาพ
+  - **การจัดเรียง (Sorting)**: จัดเรียงตามเวลาบันทึก (ล่าสุด/เก่าสุด), ชื่อสถานี (ก-ฮ / ฮ-ก), จังหวัด (ก-ฮ / ฮ-ก), วันที่ลงพื้นที่ (ล่าสุด/เก่าสุด) และผลการขออนุญาต ทั้งผ่าน Dropdown ใน Toolbar และการคลิกที่หัวตาราง (`<thead>`) พร้อมไอคอนทิศทาง `ArrowUp`/`ArrowDown`/`ArrowUpDown`
+  - **ปุ่มล้างตัวกรอง (Clear Filters)**: รีเซ็ตเงื่อนไขการค้นหา กรอง และจัดเรียงทั้งหมดกลับเป็นค่าเริ่มต้นในคลิกเดียว
+
 ## [2.8.5] - 2026-10-16
 
 ### Fixed

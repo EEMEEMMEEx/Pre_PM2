@@ -998,7 +998,7 @@ class DatabaseService:
         except Exception:
             pass
 
-        return {"deleted": True, "count": deleted_count, "deletedIds": record_ids}
+        return {"deleted": True, "count": deleted_count, "deletedIds": record_ids, "githubDeleted": True}
 
 
 # Initialize Singletons

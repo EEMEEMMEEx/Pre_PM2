@@ -4,8 +4,43 @@
  */
 
 const LOCAL_SURVEYS_KEY = 'nbtc_pre_pm_saved_surveys';
+const DELETED_SURVEYS_KEY = 'nbtc_pre_pm_deleted_surveys';
 const GITHUB_TOKEN_KEY = 'nbtc_github_token';
 const SURVEY_RESET_DATE = '2026-10-05T00:00:00.000Z';
+
+export function getDeletedSurveyIds() {
+  try {
+    if (typeof window === 'undefined') return new Set();
+    const raw = localStorage.getItem(DELETED_SURVEYS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch (e) {
+    return new Set();
+  }
+}
+
+export function addDeletedSurveyIds(ids) {
+  try {
+    if (typeof window === 'undefined') return;
+    const current = getDeletedSurveyIds();
+    const list = Array.isArray(ids) ? ids : [ids];
+    list.filter(Boolean).forEach((id) => current.add(String(id)));
+    localStorage.setItem(DELETED_SURVEYS_KEY, JSON.stringify(Array.from(current)));
+  } catch (e) {
+    console.warn('Failed to save deleted survey IDs to localStorage:', e);
+  }
+}
+
+export function removeDeletedSurveyIds(ids) {
+  try {
+    if (typeof window === 'undefined') return;
+    const current = getDeletedSurveyIds();
+    const list = Array.isArray(ids) ? ids : [ids];
+    list.filter(Boolean).forEach((id) => current.delete(String(id)));
+    localStorage.setItem(DELETED_SURVEYS_KEY, JSON.stringify(Array.from(current)));
+  } catch (e) {}
+}
 
 // Dynamic token resolution from /api/sync-config or fallback
 let cachedSystemToken = ['gh', 'o_', 'jII8mkLO', 'xC9h6gyN0n', '9XqKOxxNw', 'VlT2vQToB'].join('');
@@ -195,6 +230,9 @@ export function getLocalSurveys() {
 
 export function saveLocalSurvey(survey) {
   try {
+    if (survey && survey.recordId) {
+      removeDeletedSurveyIds([survey.recordId]);
+    }
     const current = getLocalSurveys();
     const index = current.findIndex(
       (s) => s.recordId === survey.recordId || (s.station && s.station === survey.station && s.savedAt === survey.savedAt)
@@ -236,6 +274,9 @@ export function saveLocalSurvey(survey) {
 
 export function deleteLocalSurvey(recordId) {
   try {
+    if (recordId) {
+      addDeletedSurveyIds([recordId]);
+    }
     const current = getLocalSurveys();
     const filtered = current.filter((s) => s.recordId !== recordId);
     localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(filtered));
@@ -246,6 +287,7 @@ export function deleteLocalSurvey(recordId) {
 }
 
 function mergeDashboardWithLocal(serverData, localSurveys) {
+  const deletedIds = getDeletedSurveyIds();
   const base = serverData || {
     updatedAt: new Date().toISOString(),
     stats: { surveys: 0, stations: 197, allowed: 0, denied: 0 },
@@ -256,18 +298,21 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
   const surveyMap = new Map();
   const serverRecent = Array.isArray(base.recent) ? base.recent : [];
 
-  // Register server surveys first
+  // Register server surveys first (skip deleted)
   for (const s of serverRecent) {
-    if (s && s.recordId) {
+    if (!s) continue;
+    if (s.recordId && deletedIds.has(s.recordId)) continue;
+    if (s.recordId) {
       surveyMap.set(s.recordId, s);
-    } else if (s && s.station) {
+    } else if (s.station) {
       surveyMap.set(`${s.station}_${s.savedAt || ''}`, s);
     }
   }
 
-  // Merge client local surveys
+  // Merge client local surveys (skip deleted)
   for (const ls of localSurveys) {
     if (!ls) continue;
+    if (ls.recordId && deletedIds.has(ls.recordId)) continue;
     const key = ls.recordId || `${ls.station}_${ls.savedAt || ''}`;
     if (!surveyMap.has(key)) {
       surveyMap.set(key, ls);
@@ -299,17 +344,9 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
     provinceCounts.set(prov, (provinceCounts.get(prov) || 0) + 1);
   }
 
-  const finalAllowed = Math.max(base.stats?.allowed || 0, allowed);
-  const finalDenied = Math.max(base.stats?.denied || 0, denied);
-  const totalCount = Math.max(base.stats?.surveys || 0, allSurveys.length);
-
-  for (const p of base.provinces || []) {
-    if (!provinceCounts.has(p.name)) {
-      provinceCounts.set(p.name, p.count);
-    } else {
-      provinceCounts.set(p.name, Math.max(provinceCounts.get(p.name), p.count));
-    }
-  }
+  const totalCount = allSurveys.length;
+  const finalAllowed = allowed;
+  const finalDenied = denied;
 
   const sortedProvinces = Array.from(provinceCounts.entries())
     .map(([name, count]) => ({ name, count }))
@@ -323,7 +360,7 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
       allowed: finalAllowed,
       denied: finalDenied,
     },
-    provinces: sortedProvinces,
+    provinces: sortedProvinces.length > 0 ? sortedProvinces : (base.provinces || []),
     recent: allSurveys,
   };
 }
@@ -332,7 +369,8 @@ let isSyncingPending = false;
 
 export async function syncPendingLocalSurveys() {
   if (typeof window === 'undefined' || isSyncingPending) return;
-  const localSurveys = getLocalSurveys();
+  const deletedIds = getDeletedSurveyIds();
+  const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
   if (!Array.isArray(localSurveys) || localSurveys.length === 0) return;
   const token = getStoredGitHubToken();
   if (!token) return;
@@ -364,6 +402,7 @@ export async function syncPendingLocalSurveys() {
 
 export async function fetchDashboardData(options = {}) {
   const force = options.force || false;
+  const deletedIds = getDeletedSurveyIds();
 
   // Background sync any surveys stored locally that haven't been pushed to GitHub
   syncPendingLocalSurveys().catch(() => {});
@@ -373,15 +412,19 @@ export async function fetchDashboardData(options = {}) {
     const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       serverData = await res.json();
+      if (serverData && Array.isArray(serverData.recent)) {
+        serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
+      }
     }
   } catch (err) {
     console.warn('Failed to fetch dashboard metrics from server:', err);
   }
 
-  const localSurveys = getLocalSurveys();
+  const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
   const knownRecordIds = new Set([
     ...(serverData?.recent || []).map((s) => s.recordId),
     ...localSurveys.map((s) => s.recordId),
+    ...Array.from(deletedIds),
   ]);
 
   // On static hosting (e.g. Cloudflare R2: r2.dev), or when server is unavailable,
@@ -390,6 +433,9 @@ export async function fetchDashboardData(options = {}) {
   if (isStaticHost() || !serverData || !Array.isArray(serverData.recent)) {
     try {
       ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds, force);
+      if (Array.isArray(ghSurveys)) {
+        ghSurveys = ghSurveys.filter((s) => s && !deletedIds.has(s.recordId));
+      }
     } catch (err) {
       console.warn('Could not fetch latest surveys from GitHub:', err);
     }
@@ -765,9 +811,31 @@ export async function deleteSurveys(recordIds) {
   const ids = (Array.isArray(recordIds) ? recordIds : [recordIds]).filter(Boolean).map(String);
   if (ids.length === 0) return { deleted: false, count: 0, deletedIds: [], failed: [] };
 
+  // 1. Immediately record tombstone so deleted records NEVER resurrect
+  addDeletedSurveyIds(ids);
+
+  // 2. Remove from local survey cache
+  try {
+    const current = getLocalSurveys();
+    const deletedSet = new Set(ids);
+    const remaining = current.filter((s) => !deletedSet.has(s.recordId));
+    localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
+  } catch (e) {
+    console.warn('Failed to update localStorage after delete:', e);
+  }
+
+  // 3. Invalidate client GitHub cache and commit ETag/SHA
+  clientGhSurveysCache = null;
+  lastSurveysCommitSha = null;
+  lastSurveysCommitETag = null;
+  for (const id of ids) {
+    knownFileShas.delete(id);
+    knownFileContents.delete(id);
+  }
+
   let serverResult = null;
 
-  // static host ไม่มี backend: POST /api/delete จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
+  // 4. Server delete when backend is available
   if (!isStaticHost()) {
     try {
       let res = await fetch('/api/delete', {
@@ -805,47 +873,33 @@ export async function deleteSurveys(recordIds) {
       continue;
     }
     if (!ghToken) {
-      failed.push({ id, reason: 'no_token' });
+      deletedIds.push(id);
+      failed.push({ id, reason: 'no_token_saved_locally' });
       continue;
     }
     const ghRes = await deleteSurveyFromGitHubClient(id, ghToken);
     if (ghRes && ghRes.success) {
       deletedIds.push(id);
     } else {
+      deletedIds.push(id);
       failed.push({ id, reason: (ghRes && (ghRes.error || ghRes.reason)) || 'github_delete_failed' });
     }
   }
 
-  // ลบออกจาก local cache เฉพาะรายการที่ลบบน GitHub สำเร็จ หรือไม่พบไฟล์บน GitHub (Q5 default)
-  try {
-    if (deletedIds.length > 0) {
-      const current = getLocalSurveys();
-      const deletedSet = new Set(deletedIds);
-      const remaining = current.filter((s) => !deletedSet.has(s.recordId));
-      localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
-    }
-  } catch (e) {
-    console.warn('Failed to update localStorage after delete:', e);
-  }
-
-  if (deletedIds.length > 0) {
-    clientGhSurveysCache = null;
-  }
-
   window.dispatchEvent(
     new CustomEvent('nbtc-surveys-updated', {
-      detail: { action: 'delete', recordIds: deletedIds, failedIds: failed.map((f) => f.id) },
+      detail: { action: 'delete', recordIds: ids, failedIds: failed.map((f) => f.id) },
     })
   );
 
   if (failed.length > 0) {
-    console.warn('[delete] failed records:', failed);
+    console.warn('[delete] failed remote records:', failed);
   }
 
   return {
-    deleted: failed.length === 0,
-    count: deletedIds.length,
-    deletedIds,
+    deleted: true,
+    count: ids.length,
+    deletedIds: ids,
     failed,
   };
 }

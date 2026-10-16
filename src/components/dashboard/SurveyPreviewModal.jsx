@@ -134,7 +134,7 @@ export function SurveyPreviewModal({
           return changed ? next : prev;
         });
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -187,7 +187,7 @@ export function SurveyPreviewModal({
           year: 'numeric'
         });
       }
-    } catch {}
+    } catch { }
   }
 
   const rawTime = fields.visitTime || fields.visit_time;
@@ -335,8 +335,8 @@ export function SurveyPreviewModal({
                         ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                         : 'bg-emerald-50 border-emerald-300 text-emerald-700'
                       : isDark
-                      ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
-                      : 'bg-rose-50 border-rose-300 text-rose-700'
+                        ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                        : 'bg-rose-50 border-rose-300 text-rose-700'
                   )}
                 >
                   {isPermitted ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
@@ -439,7 +439,7 @@ export function SurveyPreviewModal({
             isDark ? 'bg-gradient-to-b from-slate-900/60 to-slate-950' : 'bg-slate-100/60'
           )}
         >
-          
+
           {/* Section 1: Station & Location Details */}
           <div className={sectionCardClass}>
             <h4 className={sectionTitleClass}>
@@ -511,9 +511,8 @@ export function SurveyPreviewModal({
               </div>
               <div>
                 <span className="text-slate-400 block mb-0.5">ผลการขออนุญาตเข้าพื้นที่</span>
-                <span className={`inline-flex items-center gap-1.5 font-semibold px-2.5 py-0.5 rounded-lg text-xs ${
-                  isPermitted ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                }`}>
+                <span className={`inline-flex items-center gap-1.5 font-semibold px-2.5 py-0.5 rounded-lg text-xs ${isPermitted ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  }`}>
                   {isPermitted ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
                   <span>{isPermitted ? 'อนุญาตให้เข้าพื้นที่' : 'ไม่อนุญาตให้เข้าพื้นที่'}</span>
                 </span>
@@ -544,9 +543,8 @@ export function SurveyPreviewModal({
                   <tr>
                     <td className={cn('py-2 px-2.5 font-medium', valMediumClass)}>1. สภาพการทำงานของเครื่องวิทยุคมนาคม</td>
                     <td className="py-2 px-2.5 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isRadioNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                      }`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${isRadioNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
                         {isRadioNormal ? 'ปกติ' : 'ไม่ปกติ'}
                       </span>
                     </td>
@@ -555,9 +553,8 @@ export function SurveyPreviewModal({
                   <tr>
                     <td className={cn('py-2 px-2.5 font-medium', valMediumClass)}>2. ภาครับ - ส่งสัญญาณ (Receiver & Transmitter Status)</td>
                     <td className="py-2 px-2.5 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isSignalNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                      }`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${isSignalNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
                         {isSignalNormal ? 'ปกติ' : 'ไม่ปกติ'}
                       </span>
                     </td>
@@ -566,9 +563,8 @@ export function SurveyPreviewModal({
                   <tr>
                     <td className={cn('py-2 px-2.5 font-medium', valMediumClass)}>3. ระบบไฟฟ้าหลักของสถานี (Power Supply)</td>
                     <td className="py-2 px-2.5 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isPowerNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                      }`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${isPowerNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
                         {isPowerNormal ? 'ปกติ' : 'ไม่ปกติ'}
                       </span>
                     </td>
@@ -577,9 +573,8 @@ export function SurveyPreviewModal({
                   <tr>
                     <td className={cn('py-2 px-2.5 font-medium', valMediumClass)}>4. แบตเตอรี่สำรอง (Backup Battery)</td>
                     <td className="py-2 px-2.5 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isBatteryNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                      }`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${isBatteryNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
                         {isBatteryNormal ? 'ปกติ' : 'ไม่ปกติ'}
                       </span>
                     </td>
@@ -588,9 +583,8 @@ export function SurveyPreviewModal({
                   <tr>
                     <td className={cn('py-2 px-2.5 font-medium', valMediumClass)}>5. ระบบกราวด์ ( Ground System )</td>
                     <td className="py-2 px-2.5 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
-                        isGroundNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
-                      }`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${isGroundNormal ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
                         {isGroundNormal ? 'ปกติ' : 'ไม่ปกติ'}
                       </span>
                     </td>
@@ -706,7 +700,7 @@ export function SurveyPreviewModal({
                                     e.currentTarget.src = b64;
                                   }
                                 })
-                                .catch(() => {});
+                                .catch(() => { });
                             }
                           }}
                         />
@@ -719,37 +713,37 @@ export function SurveyPreviewModal({
                         </div>
                       </div>
 
-                    {/* Photo Info & Download Button */}
-                    <div className={cn('p-2.5 flex items-center justify-between gap-2 transition-colors', isDark ? 'bg-slate-950/80' : 'bg-slate-50')}>
-                      <div className="min-w-0">
-                        <p className={cn('text-xs font-medium truncate', valMediumClass)} title={photo.name}>
-                          {photo.name || `photo_${index + 1}.jpg`}
-                        </p>
-                        {photo.size ? (
-                          <span className={cn('text-[11px]', labelClass)}>
-                            {formatSize(photo.size)}
-                          </span>
-                        ) : null}
-                      </div>
+                      {/* Photo Info & Download Button */}
+                      <div className={cn('p-2.5 flex items-center justify-between gap-2 transition-colors', isDark ? 'bg-slate-950/80' : 'bg-slate-50')}>
+                        <div className="min-w-0">
+                          <p className={cn('text-xs font-medium truncate', valMediumClass)} title={photo.name}>
+                            {photo.name || `photo_${index + 1}.jpg`}
+                          </p>
+                          {photo.size ? (
+                            <span className={cn('text-[11px]', labelClass)}>
+                              {formatSize(photo.size)}
+                            </span>
+                          ) : null}
+                        </div>
 
-                      <button
-                        type="button"
-                        onClick={(e) => handleDownloadPhoto(photo, e)}
-                        className={cn(
-                          'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all cursor-pointer shrink-0 shadow-2xs',
-                          isDark
-                            ? 'border-cyan-500/40 bg-cyan-950/60 text-cyan-300 hover:bg-cyan-600 hover:text-white'
-                            : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
-                        )}
-                        title="ดาวน์โหลดรูปภาพนี้"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>ดาวน์โหลด</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDownloadPhoto(photo, e)}
+                          className={cn(
+                            'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition-all cursor-pointer shrink-0 shadow-2xs',
+                            isDark
+                              ? 'border-cyan-500/40 bg-cyan-950/60 text-cyan-300 hover:bg-cyan-600 hover:text-white'
+                              : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
+                          )}
+                          title="ดาวน์โหลดรูปภาพนี้"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          <span>ดาวน์โหลด</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
             ) : (
               <div className={cn('flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl border border-dashed transition-colors', isDark ? 'bg-slate-900/40 border-slate-800' : 'bg-slate-50 border-slate-300')}>

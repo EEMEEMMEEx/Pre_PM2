@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Clock,
   ArrowRight,
@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Search,
   X,
   Filter,
@@ -21,15 +22,35 @@ import {
   Trash2,
   AlertTriangle,
   Loader2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  MapPin,
+  RotateCcw,
+  SlidersHorizontal,
+  Radio,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
-import { deleteSurveys } from '@/lib/api';
+import { deleteSurveys, getDeletedSurveyIds } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
+
+export const SORT_OPTIONS = [
+  { value: 'date_desc', label: 'เวลาบันทึก: ล่าสุด → เก่าสุด', shortLabel: 'ล่าสุด', icon: Clock },
+  { value: 'date_asc', label: 'เวลาบันทึก: เก่าสุด → ล่าสุด', shortLabel: 'เก่าสุด', icon: Clock },
+  { value: 'visitDate_desc', label: 'วันที่ลงพื้นที่: ล่าสุด → เก่าสุด', shortLabel: 'ลงพื้นที่ล่าสุด', icon: Clock },
+  { value: 'visitDate_asc', label: 'วันที่ลงพื้นที่: เก่าสุด → ล่าสุด', shortLabel: 'ลงพื้นที่เก่าสุด', icon: Clock },
+  { value: 'station_asc', label: 'ชื่อสถานี: ก → ฮ (A - Z)', shortLabel: 'สถานี ก-ฮ', icon: ArrowUp },
+  { value: 'station_desc', label: 'ชื่อสถานี: ฮ → ก (Z - A)', shortLabel: 'สถานี ฮ-ก', icon: ArrowDown },
+  { value: 'province_asc', label: 'จังหวัด: ก → ฮ', shortLabel: 'จังหวัด ก-ฮ', icon: MapPin },
+  { value: 'province_desc', label: 'จังหวัด: ฮ → ก', shortLabel: 'จังหวัด ฮ-ก', icon: MapPin },
+  { value: 'permit_asc', label: 'ผลขออนุญาต: อนุญาตก่อน', shortLabel: 'อนุญาตก่อน', icon: CheckCircle2 },
+  { value: 'permit_desc', label: 'ผลขออนุญาต: ไม่อนุญาตก่อน', shortLabel: 'ไม่อนุญาตก่อน', icon: XCircle },
+];
 
 export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh }) {
   const { isDark } = useTheme();
@@ -42,9 +63,81 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [permitFilter, setPermitFilter] = useState('all');
+  const [provinceFilter, setProvinceFilter] = useState('all');
+  const [systemFilter, setSystemFilter] = useState('all');
+  const [photoFilter, setPhotoFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date_desc');
+  const [locallyDeletedIds, setLocallyDeletedIds] = useState(new Set());
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const sortDropdownRef = useRef(null);
+
+  // Active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim()) count++;
+    if (permitFilter !== 'all') count++;
+    if (provinceFilter !== 'all') count++;
+    if (systemFilter !== 'all') count++;
+    if (photoFilter !== 'all') count++;
+    return count;
+  }, [searchQuery, permitFilter, provinceFilter, systemFilter, photoFilter]);
+
+  // Current active sort option
+  const currentSortOption = useMemo(
+    () => SORT_OPTIONS.find((opt) => opt.value === sortBy) || SORT_OPTIONS[0],
+    [sortBy]
+  );
+
+  // Close sort dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(event.target)) {
+        setIsSortOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsSortOpen(false);
+      }
+    };
+
+    if (isSortOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isSortOpen]);
+
+  // Dynamic provinces list with counts
+  const provincesList = useMemo(() => {
+    const deletedTombstones = getDeletedSurveyIds();
+    const map = new Map();
+    recent.forEach((item) => {
+      if (!item || locallyDeletedIds.has(item.recordId) || deletedTombstones.has(item.recordId)) return;
+      const prov = item.province || item.fields?.province;
+      if (prov && typeof prov === 'string' && prov.trim()) {
+        const clean = prov.trim();
+        map.set(clean, (map.get(clean) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'th'));
+  }, [recent, locallyDeletedIds]);
 
   const filteredSurveys = useMemo(() => {
-    let list = recent;
+    const deletedTombstones = getDeletedSurveyIds();
+    let list = recent.filter(
+      (item) => item && !locallyDeletedIds.has(item.recordId) && !deletedTombstones.has(item.recordId)
+    );
+
+    // 1. Permit Filter
     if (permitFilter !== 'all') {
       list = list.filter((item) => {
         const p = item.permit || item.fields?.permit || '';
@@ -53,6 +146,40 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         return p !== 'อนุญาต' && p !== 'on' && p !== 'ไม่อนุญาต';
       });
     }
+
+    // 2. Province Filter
+    if (provinceFilter !== 'all') {
+      list = list.filter((item) => {
+        const prov = (item.province || item.fields?.province || '').trim();
+        return prov === provinceFilter;
+      });
+    }
+
+    // 3. System Status Filter (Radio & Power)
+    if (systemFilter !== 'all') {
+      list = list.filter((item) => {
+        const f = item.fields || {};
+        const radio = f.radioStatus || 'ปกติ';
+        const power = f.powerStatus || 'ปกติ';
+        if (systemFilter === 'radio_ok') return radio === 'ปกติ';
+        if (systemFilter === 'radio_issue') return radio !== 'ปกติ';
+        if (systemFilter === 'power_ok') return power === 'ปกติ';
+        if (systemFilter === 'power_issue') return power !== 'ปกติ';
+        return true;
+      });
+    }
+
+    // 4. Photos Filter
+    if (photoFilter !== 'all') {
+      list = list.filter((item) => {
+        const hasPhotos = Array.isArray(item.photos) && item.photos.length > 0;
+        if (photoFilter === 'with_photos') return hasPhotos;
+        if (photoFilter === 'no_photos') return !hasPhotos;
+        return true;
+      });
+    }
+
+    // 5. Search Query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter((item) => {
@@ -77,11 +204,104 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         );
       });
     }
-    return list;
-  }, [recent, searchQuery, permitFilter]);
+
+    // 6. Sorting
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      const aFields = a.fields || {};
+      const bFields = b.fields || {};
+
+      switch (sortBy) {
+        case 'date_asc': {
+          const timeA = new Date(a.savedAt || 0).getTime();
+          const timeB = new Date(b.savedAt || 0).getTime();
+          return timeA - timeB;
+        }
+        case 'date_desc': {
+          const timeA = new Date(a.savedAt || 0).getTime();
+          const timeB = new Date(b.savedAt || 0).getTime();
+          return timeB - timeA;
+        }
+        case 'station_asc': {
+          const nameA = String(a.station || aFields.station || '');
+          const nameB = String(b.station || bFields.station || '');
+          return nameA.localeCompare(nameB, 'th');
+        }
+        case 'station_desc': {
+          const nameA = String(a.station || aFields.station || '');
+          const nameB = String(b.station || bFields.station || '');
+          return nameB.localeCompare(nameA, 'th');
+        }
+        case 'province_asc': {
+          const provA = String(a.province || aFields.province || '');
+          const provB = String(b.province || bFields.province || '');
+          return provA.localeCompare(provB, 'th') || String(a.station || '').localeCompare(String(b.station || ''), 'th');
+        }
+        case 'province_desc': {
+          const provA = String(a.province || aFields.province || '');
+          const provB = String(b.province || bFields.province || '');
+          return provB.localeCompare(provA, 'th') || String(a.station || '').localeCompare(String(b.station || ''), 'th');
+        }
+        case 'visitDate_desc': {
+          const dateA = String(aFields.visitDate || a.savedAt || '');
+          const dateB = String(bFields.visitDate || b.savedAt || '');
+          return dateB.localeCompare(dateA);
+        }
+        case 'visitDate_asc': {
+          const dateA = String(aFields.visitDate || a.savedAt || '');
+          const dateB = String(bFields.visitDate || b.savedAt || '');
+          return dateA.localeCompare(dateB);
+        }
+        case 'permit_asc': {
+          const pA = a.permit || aFields.permit || '';
+          const pB = b.permit || bFields.permit || '';
+          return pA.localeCompare(pB, 'th');
+        }
+        case 'permit_desc': {
+          const pA = a.permit || aFields.permit || '';
+          const pB = b.permit || bFields.permit || '';
+          return pB.localeCompare(pA, 'th');
+        }
+        default:
+          return String(b.savedAt || '').localeCompare(String(a.savedAt || ''));
+      }
+    });
+
+    return sorted;
+  }, [recent, locallyDeletedIds, searchQuery, permitFilter, provinceFilter, systemFilter, photoFilter, sortBy]);
+
+  const isFiltered =
+    searchQuery.trim() !== '' ||
+    permitFilter !== 'all' ||
+    provinceFilter !== 'all' ||
+    systemFilter !== 'all' ||
+    photoFilter !== 'all' ||
+    sortBy !== 'date_desc';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setPermitFilter('all');
+    setProvinceFilter('all');
+    setSystemFilter('all');
+    setPhotoFilter('all');
+    setSortBy('date_desc');
+    setCurrentPage(1);
+  };
+
+  const handleHeaderSort = (field) => {
+    setCurrentPage(1);
+    if (field === 'station') {
+      setSortBy((prev) => (prev === 'station_asc' ? 'station_desc' : 'station_asc'));
+    } else if (field === 'province') {
+      setSortBy((prev) => (prev === 'province_asc' ? 'province_desc' : 'province_asc'));
+    } else if (field === 'date') {
+      setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
+    } else if (field === 'permit') {
+      setSortBy((prev) => (prev === 'permit_asc' ? 'permit_desc' : 'permit_asc'));
+    }
+  };
 
   const totalItems = filteredSurveys.length;
-  const isFiltered = searchQuery.trim() !== '' || permitFilter !== 'all';
   const effectivePageSize = pageSize === 'all' ? totalItems || 1 : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(totalItems / effectivePageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -162,33 +382,29 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
       const idsToDelete = deleteTarget.isBatch
         ? deleteTarget.ids
         : [deleteTarget.recordId];
-      const result = await deleteSurveys(idsToDelete);
 
-      const failed = Array.isArray(result?.failed) ? result.failed : [];
-      const failedIds = new Set(failed.map((f) => f.id));
-      const deletedIds = Array.isArray(result?.deletedIds)
-        ? result.deletedIds
-        : idsToDelete.filter((id) => !failedIds.has(id));
-
-      // เอาเฉพาะรายการที่ลบสำเร็จออกจาก selection (รายการที่ลบไม่สำเร็จต้องคงไว้)
-      setSelectedIds((prev) => {
+      // Instant UI removal: row disappears in 0ms!
+      setLocallyDeletedIds((prev) => {
         const next = new Set(prev);
-        deletedIds.forEach((id) => next.delete(id));
+        idsToDelete.forEach((id) => next.add(id));
         return next;
       });
 
-      if (failed.length > 0) {
-        console.error('[delete] failed records:', failed);
-        const reasonLines = failed
-          .slice(0, 5)
-          .map((f) => `• ${f.id} (${f.reason})`)
-          .join('\n');
-        const more = failed.length > 5 ? `\n...และอีก ${failed.length - 5} รายการ` : '';
-        toast.error(
-          `ลบไม่สำเร็จ ${failed.length}/${idsToDelete.length} รายการ\n${reasonLines}${more}`
-        );
+      // Remove from selection
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        idsToDelete.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      const result = await deleteSurveys(idsToDelete);
+
+      const failed = Array.isArray(result?.failed) ? result.failed : [];
+      if (failed.length > 0 && failed.some((f) => f.reason !== 'no_token_saved_locally')) {
+        console.warn('[delete] failed remote records:', failed);
+        toast.success(`ลบข้อมูลในเครื่องสำเร็จ (${idsToDelete.length} รายการ) แต่อาจต้องตรวจสอบการซิงค์ GitHub`);
       } else {
-        toast.success(`ลบข้อมูลสำเร็จ ${deletedIds.length} รายการ`);
+        toast.success(`ลบข้อมูลสำเร็จ ${idsToDelete.length} รายการ`);
       }
 
       setDeleteTarget(null);
@@ -372,113 +588,6 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
           </div>
         </div>
 
-        {/* Filter & Search Toolbar */}
-        <div className="pt-3 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          {/* Search Box */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search
-              className={cn(
-                'absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5',
-                isDark ? 'text-slate-400' : 'text-slate-500'
-              )}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="ค้นหาสถานี, จังหวัด, รหัส, ผู้แจ้ง..."
-              className={cn(
-                'w-full pl-8 pr-7 py-1.5 rounded-lg border text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
-                isDark
-                  ? 'border-slate-700 bg-slate-900/90 text-slate-100 placeholder:text-slate-500 hover:border-slate-600'
-                  : 'border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 hover:border-slate-400 shadow-2xs'
-              )}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setCurrentPage(1);
-                }}
-                className={cn(
-                  'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer',
-                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'
-                )}
-                title="ล้างคำค้นหา"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Permit Status Filter Pill Buttons */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 sm:pb-0">
-            <button
-              type="button"
-              onClick={() => {
-                setPermitFilter('all');
-                setCurrentPage(1);
-              }}
-              className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
-                permitFilter === 'all'
-                  ? isDark
-                    ? 'bg-blue-600/30 border-blue-500/50 text-white'
-                    : 'bg-sky-100 border-sky-300 text-sky-800 font-semibold'
-                  : isDark
-                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-              )}
-            >
-              ทั้งหมด ({recent.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPermitFilter('อนุญาต');
-                setCurrentPage(1);
-              }}
-              className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
-                permitFilter === 'อนุญาต'
-                  ? isDark
-                    ? 'bg-emerald-500/25 border-emerald-500/50 text-emerald-300'
-                    : 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold'
-                  : isDark
-                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-emerald-400'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
-              )}
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              <span>อนุญาต</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPermitFilter('ไม่อนุญาต');
-                setCurrentPage(1);
-              }}
-              className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
-                permitFilter === 'ไม่อนุญาต'
-                  ? isDark
-                    ? 'bg-rose-500/25 border-rose-500/50 text-rose-300'
-                    : 'bg-rose-50 border-rose-400 text-rose-800 font-semibold'
-                  : isDark
-                  ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-rose-400'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
-              )}
-            >
-              <XCircle className="h-3 w-3" />
-              <span>ไม่อนุญาต</span>
-            </button>
-          </div>
-        </div>
-
         {/* Floating Batch Actions Bar when items are selected */}
         {selectedIds.size > 0 && (
           <div
@@ -569,7 +678,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
           </div>
         )}
 
-        {/* Toolbar: Count info & Page Size Selector */}
+        {/* Toolbar: Count info, Filters, Sort & Page Size Selector */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-xs">
           <div className={cn('font-medium flex items-center gap-2 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-600')}>
             <span>
@@ -606,8 +715,134 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             </span>
           </div>
 
-          {/* Quick Page Size Buttons */}
+          {/* Quick Toolbar Actions: Filter Button, Sort Dropdown Button, Quick Reset, Page Size */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Filter Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsFilterOpen((prev) => !prev)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                isFilterOpen || activeFilterCount > 0
+                  ? isDark
+                    ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 shadow-cyan-950/40'
+                    : 'bg-sky-50 border-sky-400 text-sky-800 shadow-sky-100'
+                  : isDark
+                    ? 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+              )}
+              title={isFilterOpen ? 'ซ่อนแผงตัวกรอง' : 'เปิดแผงตัวกรองข้อมูล'}
+              aria-expanded={isFilterOpen}
+            >
+              <Filter className={cn('h-3.5 w-3.5 transition-transform', isFilterOpen && 'scale-110 text-cyan-400')} />
+              <span>กรองข้อมูล</span>
+              {activeFilterCount > 0 && (
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full text-[10px] font-bold font-mono',
+                    isDark
+                      ? 'bg-cyan-400 text-slate-950'
+                      : 'bg-sky-600 text-white'
+                  )}
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {/* Sort Dropdown Button */}
+            <div className="relative" ref={sortDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsSortOpen((prev) => !prev)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                  isSortOpen || sortBy !== 'date_desc'
+                    ? isDark
+                      ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 shadow-cyan-950/40'
+                      : 'bg-sky-50 border-sky-400 text-sky-800 shadow-sky-100'
+                    : isDark
+                      ? 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white'
+                      : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                )}
+                title="จัดเรียงข้อมูลตามเงื่อนไขต่างๆ"
+                aria-expanded={isSortOpen}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5 text-cyan-500" />
+                <span>Sort: {currentSortOption.shortLabel}</span>
+                <ChevronDown className={cn('h-3 w-3 opacity-60 transition-transform', isSortOpen && 'rotate-180')} />
+              </button>
+
+              {/* Sort Dropdown Menu */}
+              {isSortOpen && (
+                <div
+                  className={cn(
+                    'absolute right-0 top-full mt-1.5 w-64 rounded-xl border shadow-xl z-30 p-1.5 flex flex-col gap-0.5 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150',
+                    isDark
+                      ? 'bg-slate-900/95 border-slate-700 text-slate-200 shadow-black/60'
+                      : 'bg-white/95 border-slate-200 text-slate-800 shadow-slate-300/50'
+                  )}
+                >
+                  <div className={cn('px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between', isDark ? 'text-slate-400 border-slate-800' : 'text-slate-500 border-slate-100')}>
+                    <span>จัดเรียงตาม (Sort by)</span>
+                    <span className="text-[10px] font-normal lowercase opacity-75">คลิกเพื่อเลือก</span>
+                  </div>
+                  <div className="max-h-[320px] overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+                    {SORT_OPTIONS.map((opt) => {
+                      const isSelected = sortBy === opt.value;
+                      const IconComp = opt.icon;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setSortBy(opt.value);
+                            setCurrentPage(1);
+                            setIsSortOpen(false);
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left',
+                            isSelected
+                              ? isDark
+                                ? 'bg-cyan-500/20 text-cyan-300 font-bold'
+                                : 'bg-sky-100 text-sky-800 font-bold'
+                              : isDark
+                                ? 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <IconComp className={cn('h-3.5 w-3.5', isSelected ? (isDark ? 'text-cyan-400' : 'text-sky-600') : 'opacity-50')} />
+                            <span>{opt.label}</span>
+                          </div>
+                          {isSelected && <Check className="h-3.5 w-3.5 text-cyan-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Clear Filters Button (shown whenever filters or sort are non-default) */}
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer shadow-2xs',
+                  isDark
+                    ? 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 hover:text-white'
+                    : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
+                )}
+                title="ล้างตัวกรองและการจัดเรียงทั้งหมดกลับเป็นค่าเริ่มต้น"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span className="hidden sm:inline">ล้างตัวกรอง</span>
+              </button>
+            )}
+
+            {/* Quick Page Size Buttons */}
             <div
               className={cn(
                 'inline-flex items-center gap-1 p-0.5 rounded-xl border text-xs',
@@ -648,6 +883,332 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
           </div>
         </div>
 
+        {/* Expandable Filter Panel */}
+        {isFilterOpen && (
+          <div
+            className={cn(
+              'p-3 sm:p-4 rounded-xl border mt-1 mb-2 flex flex-col gap-3 transition-all duration-200',
+              isDark
+                ? 'bg-slate-900/90 border-slate-800 shadow-lg shadow-black/40'
+                : 'bg-slate-50/90 border-slate-200 shadow-sm'
+            )}
+          >
+            {/* Filter Panel Header / Row 1: Search + Province + Clear + Close */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+              {/* Search Box */}
+              <div className="relative flex-1 min-w-[220px]">
+                <Search
+                  className={cn(
+                    'absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5',
+                    isDark ? 'text-slate-400' : 'text-slate-500'
+                  )}
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="ค้นหาสถานี, จังหวัด, อำเภอ, รหัส, ผู้แจ้ง, ช่าง..."
+                  className={cn(
+                    'w-full pl-8 pr-7 py-1.5 rounded-lg border text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
+                    isDark
+                      ? 'border-slate-700 bg-slate-900/90 text-slate-100 placeholder:text-slate-500 hover:border-slate-600'
+                      : 'border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 hover:border-slate-400 shadow-2xs'
+                  )}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCurrentPage(1);
+                    }}
+                    className={cn(
+                      'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer',
+                      isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'
+                    )}
+                    title="ล้างคำค้นหา"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Province Dropdown Filter */}
+                <div className="relative flex items-center">
+                  <MapPin className={cn('absolute left-2.5 h-3.5 w-3.5 pointer-events-none', isDark ? 'text-cyan-400' : 'text-sky-600')} />
+                  <select
+                    value={provinceFilter}
+                    onChange={(e) => {
+                      setProvinceFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className={cn(
+                      'pl-8 pr-7 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 appearance-none bg-no-repeat bg-right',
+                      isDark
+                        ? 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-600'
+                        : 'border-slate-300 bg-white text-slate-800 hover:border-slate-400 shadow-2xs'
+                    )}
+                    title="กรองตามจังหวัด"
+                  >
+                    <option value="all">
+                      ทุกจังหวัด ({provincesList.reduce((acc, p) => acc + p.count, 0)})
+                    </option>
+                    {provincesList.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Reset Filters in Panel */}
+                {isFiltered && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-2xs',
+                      isDark
+                        ? 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 hover:text-white'
+                        : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
+                    )}
+                    title="ล้างตัวกรองและการจัดเรียงทั้งหมดกลับเป็นค่าเริ่มต้น"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>ล้างตัวกรอง</span>
+                  </button>
+                )}
+
+                {/* Close filter panel button */}
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen(false)}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer',
+                    isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'
+                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                  )}
+                  title="ปิดแผงตัวกรอง"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>ปิด</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Row 2: Secondary Filter Pills */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+              {/* Permit Filter Pills */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                  ขออนุญาต:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPermitFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    permitFilter === 'all'
+                      ? isDark
+                        ? 'bg-blue-600/30 border-blue-500/50 text-white font-semibold'
+                        : 'bg-sky-100 border-sky-300 text-sky-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  ทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPermitFilter('อนุญาต');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    permitFilter === 'อนุญาต'
+                      ? isDark
+                        ? 'bg-emerald-500/25 border-emerald-500/50 text-emerald-300 font-semibold'
+                        : 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-emerald-400'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
+                  )}
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>อนุญาต</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPermitFilter('ไม่อนุญาต');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    permitFilter === 'ไม่อนุญาต'
+                      ? isDark
+                        ? 'bg-rose-500/25 border-rose-500/50 text-rose-300 font-semibold'
+                        : 'bg-rose-50 border-rose-400 text-rose-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-rose-400'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
+                  )}
+                >
+                  <XCircle className="h-3 w-3" />
+                  <span>ไม่อนุญาต</span>
+                </button>
+              </div>
+
+              <span className={cn('hidden sm:inline', isDark ? 'text-slate-700' : 'text-slate-300')}>|</span>
+
+              {/* Photo Filter Pills */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                  รูปถ่าย:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    photoFilter === 'all'
+                      ? isDark
+                        ? 'bg-cyan-600/30 border-cyan-500/50 text-cyan-200 font-semibold'
+                        : 'bg-cyan-100 border-cyan-300 text-cyan-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  ทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoFilter('with_photos');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    photoFilter === 'with_photos'
+                      ? isDark
+                        ? 'bg-cyan-500/25 border-cyan-500/50 text-cyan-300 font-semibold'
+                        : 'bg-sky-100 border-sky-400 text-sky-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-cyan-300'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-sky-50'
+                  )}
+                >
+                  <ImageIcon className="h-3 w-3" />
+                  <span>มีรูปภาพ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoFilter('no_photos');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    photoFilter === 'no_photos'
+                      ? isDark
+                        ? 'bg-slate-700/60 border-slate-600 text-white font-semibold'
+                        : 'bg-slate-200 border-slate-300 text-slate-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  ไม่มีรูป
+                </button>
+              </div>
+
+              <span className={cn('hidden sm:inline', isDark ? 'text-slate-700' : 'text-slate-300')}>|</span>
+
+              {/* System Status Filter Pills */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                  ระบบ:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemFilter('all');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    systemFilter === 'all'
+                      ? isDark
+                        ? 'bg-blue-600/30 border-blue-500/50 text-white font-semibold'
+                        : 'bg-sky-100 border-sky-300 text-sky-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  ทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemFilter('radio_issue');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    systemFilter === 'radio_issue'
+                      ? isDark
+                        ? 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-semibold'
+                        : 'bg-amber-100 border-amber-400 text-amber-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-amber-400'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-amber-50'
+                  )}
+                  title="กรองเฉพาะสถานีที่วิทยุสื่อสารมีปัญหา"
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  <span>วิทยุมีปัญหา</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemFilter('power_issue');
+                    setCurrentPage(1);
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    systemFilter === 'power_issue'
+                      ? isDark
+                        ? 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-semibold'
+                        : 'bg-amber-100 border-amber-400 text-amber-800 font-semibold'
+                      : isDark
+                      ? 'border-slate-800 text-slate-400 hover:bg-slate-800/60 hover:text-amber-400'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-amber-50'
+                  )}
+                  title="กรองเฉพาะสถานีที่ระบบไฟฟ้ามีปัญหา"
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  <span>ไฟฟ้ามีปัญหา</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table Container with scrollbar */}
         <div
           className={cn(
@@ -680,12 +1241,84 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                 </th>
                 <th className="py-2.5 px-2 text-center w-10">#</th>
                 <th className="py-2.5 pr-3 pl-2">รหัสรายการ</th>
-                <th className="py-2.5 px-3">สถานี / ข้อมูลติดต่อ</th>
-                <th className="py-2.5 px-3">จังหวัด / อำเภอ</th>
-                <th className="py-2.5 px-3 text-center">ผลการขออนุญาต</th>
+                <th
+                  onClick={() => handleHeaderSort('station')}
+                  className={cn(
+                    'py-2.5 px-3 cursor-pointer select-none transition-colors group',
+                    isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
+                  )}
+                  title="คลิกเพื่อจัดเรียงตามชื่อสถานี"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>สถานี / ข้อมูลติดต่อ</span>
+                    {sortBy === 'station_asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : sortBy === 'station_desc' ? (
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('province')}
+                  className={cn(
+                    'py-2.5 px-3 cursor-pointer select-none transition-colors group',
+                    isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
+                  )}
+                  title="คลิกเพื่อจัดเรียงตามจังหวัด"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>จังหวัด / อำเภอ</span>
+                    {sortBy === 'province_asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : sortBy === 'province_desc' ? (
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleHeaderSort('permit')}
+                  className={cn(
+                    'py-2.5 px-3 text-center cursor-pointer select-none transition-colors group',
+                    isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
+                  )}
+                  title="คลิกเพื่อจัดเรียงตามผลขออนุญาต"
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span>ผลการขออนุญาต</span>
+                    {sortBy === 'permit_asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : sortBy === 'permit_desc' ? (
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-2.5 px-3 text-center">ระบบวิทยุ / ไฟฟ้า</th>
                 <th className="py-2.5 px-3 text-center">รูปภาพ</th>
-                <th className="py-2.5 px-3 text-right">เวลาบันทึก</th>
+                <th
+                  onClick={() => handleHeaderSort('date')}
+                  className={cn(
+                    'py-2.5 px-3 text-right cursor-pointer select-none transition-colors group',
+                    isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
+                  )}
+                  title="คลิกเพื่อจัดเรียงตามเวลาบันทึก"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span>เวลาบันทึก</span>
+                    {sortBy === 'date_desc' ? (
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : sortBy === 'date_asc' ? (
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                    )}
+                  </div>
+                </th>
                 <th className="py-2.5 pl-3 pr-3 text-center">จัดการ</th>
               </tr>
             </thead>

@@ -1,0 +1,27 @@
+{
+  "recordId": "PM-202610061301265-a85b",
+  "savedAt": "2026-10-06T13:01:26.595Z",
+  "station": "ที่ว่าการอำเภอวังน้ำเขียว",
+  "province": "นครราชสีมา",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "ที่ว่าการอำเภอวังน้ำเขียว",
+    "province": "นครราชสีมา",
+    "district": "วังน้ำเขียว",
+    "subdistrict": "วังน้ำเขียว",
+    "installationPlace": "หน้าหอประชุมที่ว่าการอำเภอวังน้ำเขียว",
+    "equipmentPlace": "-",
+    "contactName": "",
+    "contactPosition": "",
+    "contactVillage": "ที่ว่าการอำเภอวังน้ำเขียว",
+    "contactPhone": ""
+  },
+  "photos": []
+}
