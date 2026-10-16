@@ -1,7 +1,7 @@
 {
   "recordId": "PM-202610150652082-155d",
-  "savedAt": "2026-10-16T01:57:12.843Z",
-  "updatedAt": "2026-10-16T01:57:12.843Z",
+  "savedAt": "2026-10-16T01:58:58.650Z",
+  "updatedAt": "2026-10-16T01:58:58.650Z",
   "station": "ที่ว่าการอำเภอดงเจริญ",
   "province": "พิจิตร",
   "permit": "อนุญาต",
@@ -15,16 +15,7 @@
     "contactName": "-",
     "contactPosition": "หน.ศสส.ปค",
     "contactPhone": "-",
-    "photos": [
-      {
-        "id": 123,
-        "name": "Original_AGWดงเจริญ_20261005_151316.jpg",
-        "contentType": "image/jpeg",
-        "size": 0,
-        "url": "/photos/123",
-        "dataUrl": null
-      }
-    ],
+    "photos": [],
     "permit": "อนุญาต",
     "radioStatus": "ปกติ",
     "receiveStatus": "ปกติ",
@@ -45,14 +36,5 @@
     "informantName": "-",
     "recordId": "PM-202610150652082-155d"
   },
-  "photos": [
-    {
-      "id": 123,
-      "name": "Original_AGWดงเจริญ_20261005_151316.jpg",
-      "contentType": "image/jpeg",
-      "size": 0,
-      "url": "/photos/123",
-      "dataUrl": null
-    }
-  ]
+  "photos": []
 }
