@@ -75,6 +75,107 @@ export function notifySurveysUpdated(payload = {}) {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * ตรวจว่าแอปรันอยู่บน static host (Cloudflare R2 / GitHub Pages) ที่ไม่มี backend ของ database.py
+ * บน static host: POST /api/* จะได้ 401/404 เสมอ -> ต้องใช้ GitHub Contents API โดยตรง
+ */
+export function isStaticHost() {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  return (
+    hostname.includes('r2.dev') ||
+    hostname.includes('github.io') ||
+    hostname.includes('cloudflare') ||
+    (hostname !== 'localhost' && hostname !== '127.0.0.1')
+  );
+}
+
+/** แจ้ง UI (Navbar) ให้เปิด GitHubTokenModal เมื่อ token หมดอายุ/ไม่มีสิทธิ์ */
+export function notifyGitHubTokenRequired(reason = 'bad_token') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nbtc-github-token-required', { detail: { reason } }));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GitHub write serialization
+// ทุกการเขียน GitHub Contents API ลง branch 'main' ต้อง serialize และ dedupe
+// เพื่อกัน commit ซ้ำ + 409/422 จาก sha ที่ไม่ตรงกัน
+// ---------------------------------------------------------------------------
+const inflightWrites = new Map(); // recordId -> { hash, promise }
+let globalWriteQueue = Promise.resolve();
+
+function hashString(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  }
+  return `${str.length}:${h}`;
+}
+
+function runWithRecordLock(recordId, task) {
+  const key = String(recordId || '');
+  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+    return navigator.locks.request(`gh-write:${key}`, task);
+  }
+  return task();
+}
+
+function enqueueGitHubWrite(task) {
+  const run = globalWriteQueue.then(task, task);
+  globalWriteQueue = run.then(
+    () => {},
+    () => {}
+  );
+  return run;
+}
+
+/**
+ * serialize write ของ recordId ลง global queue และ dedupe เฉพาะ khi payload เหมือนกัน
+ * (payload ต่างกันยังต้องเขียนจริง เพื่อไม่ให้ข้อมูลใหม่หาย)
+ */
+function queueRecordWrite(recordId, payloadHash, task) {
+  const key = String(recordId || '');
+  const existing = key ? inflightWrites.get(key) : null;
+  if (existing && existing.hash === payloadHash) {
+    return existing.promise;
+  }
+
+  const run = enqueueGitHubWrite(() => runWithRecordLock(key, task));
+  if (!key) return run;
+
+  const entry = { hash: payloadHash, promise: null };
+  const tracked = run.then(
+    (value) => {
+      if (inflightWrites.get(key) === entry) inflightWrites.delete(key);
+      return value;
+    },
+    (err) => {
+      if (inflightWrites.get(key) === entry) inflightWrites.delete(key);
+      throw err;
+    }
+  );
+  entry.promise = tracked;
+  inflightWrites.set(key, entry);
+  return tracked;
+}
+
+/** true เมื่อมี write ของ recordId นี้กำลังทำงานอยู่ (ใช้ข้ามใน syncPendingLocalSurveys) */
+export function isGitHubWritePending(recordId) {
+  return inflightWrites.has(String(recordId || ''));
+}
+
+const GITHUB_SYNCING_TTL_MS = 120000;
+
+/** true เมื่อเพิ่งเริ่ม write ของ record นี้ (กัน syncPending ซ้ำระหว่างที่ยังไม่เสร็จ) */
+function isSurveySyncing(survey) {
+  if (!survey || !survey.githubSyncing) return false;
+  const startedAt = Number(survey.githubSyncingAt) || 0;
+  return Date.now() - startedAt < GITHUB_SYNCING_TTL_MS;
+}
+
 export function getLocalSurveys() {
   try {
     const raw = localStorage.getItem(LOCAL_SURVEYS_KEY);
@@ -240,17 +341,20 @@ export async function syncPendingLocalSurveys() {
   try {
     for (const survey of localSurveys) {
       if (!survey || !survey.recordId) continue;
-      if (!survey.githubSynced) {
-        try {
-          const ghRes = await commitSurveyToGitHubClient(survey, token);
-          if (ghRes.success) {
-            survey.githubSynced = true;
-            saveLocalSurvey(survey);
-            console.log('Synced pending local survey to GitHub:', survey.recordId);
-          }
-        } catch (e) {
-          console.warn('Failed to sync pending survey:', survey.recordId, e);
+      if (survey.githubSynced) continue;
+      // ข้าม record ที่กำลังถูกเขียนอยู่ หรือเพิ่งเริ่มเขียน (กัน commit ซ้ำจากหลาย code path)
+      if (isGitHubWritePending(survey.recordId) || isSurveySyncing(survey)) continue;
+      try {
+        const ghRes = await commitSurveyToGitHubClient(survey, token);
+        if (ghRes.success) {
+          delete survey.githubSyncing;
+          delete survey.githubSyncingAt;
+          survey.githubSynced = true;
+          saveLocalSurvey(survey);
+          console.log('Synced pending local survey to GitHub:', survey.recordId);
         }
+      } catch (e) {
+        console.warn('Failed to sync pending survey:', survey.recordId, e);
       }
     }
   } finally {
@@ -282,15 +386,8 @@ export async function fetchDashboardData(options = {}) {
 
   // On static hosting (e.g. Cloudflare R2: r2.dev), or when server is unavailable,
   // actively check GitHub to fetch and merge surveys entered by other users!
-  const isStaticHost =
-    typeof window !== 'undefined' &&
-    (window.location.hostname.includes('r2.dev') ||
-      window.location.hostname.includes('github.io') ||
-      window.location.hostname.includes('cloudflare') ||
-      (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'));
-
   let ghSurveys = [];
-  if (isStaticHost || !serverData || !Array.isArray(serverData.recent)) {
+  if (isStaticHost() || !serverData || !Array.isArray(serverData.recent)) {
     try {
       ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds, force);
     } catch (err) {
@@ -431,29 +528,32 @@ export async function submitSurvey(arg1, arg2, arg3) {
   let serverResult = null;
   let serverError = null;
 
-  try {
-    let res = await fetch('/api/save', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ fields, photos }),
-    }).catch(() => null);
-
-    if (!res || res.status === 404) {
-      res = await fetch('/save', {
+  // static host ไม่มี backend: POST /api/save จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
+  if (!isStaticHost()) {
+    try {
+      let res = await fetch('/api/save', {
         method: 'POST',
         headers,
         body: JSON.stringify({ fields, photos }),
       }).catch(() => null);
-    }
 
-    if (res && res.ok) {
-      serverResult = await res.json();
-    } else if (res) {
-      const data = await res.json().catch(() => ({}));
-      serverError = data.message || data.error || 'บันทึกข้อมูลไม่สำเร็จ';
+      if (!res || res.status === 404) {
+        res = await fetch('/save', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ fields, photos }),
+        }).catch(() => null);
+      }
+
+      if (res && res.ok) {
+        serverResult = await res.json();
+      } else if (res) {
+        const data = await res.json().catch(() => ({}));
+        serverError = data.message || data.error || 'บันทึกข้อมูลไม่สำเร็จ';
+      }
+    } catch (err) {
+      serverError = err.message;
     }
-  } catch (err) {
-    serverError = err.message;
   }
 
   // Construct local survey snapshot to ensure instant display on Dashboard
@@ -490,6 +590,14 @@ export async function submitSurvey(arg1, arg2, arg3) {
     photos: formattedPhotos,
   };
 
+  // ทำเครื่องหมายก่อน saveLocalSurvey เพื่อให้ syncPendingLocalSurveys ที่ถูก trigger
+  // ทางอ้อม (DashboardView reload) ข้าม record นี้ไป แล้วรอ write ที่กำลังจะเริ่มแทน
+  const ghToken = getStoredGitHubToken();
+  if (ghToken) {
+    localSurvey.githubSyncing = true;
+    localSurvey.githubSyncingAt = Date.now();
+  }
+
   saveLocalSurvey(localSurvey);
 
   let finalResult = serverResult || {
@@ -500,10 +608,11 @@ export async function submitSurvey(arg1, arg2, arg3) {
   };
 
   if (!serverResult?.githubSynced) {
-    const ghToken = getStoredGitHubToken();
     if (ghToken) {
       try {
         const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
+        delete localSurvey.githubSyncing;
+        delete localSurvey.githubSyncingAt;
         if (ghRes.success) {
           finalResult.githubSynced = true;
           localSurvey.githubSynced = true;
@@ -512,6 +621,8 @@ export async function submitSurvey(arg1, arg2, arg3) {
           finalResult.githubError = ghRes.error || ghRes.reason;
         }
       } catch (e) {
+        delete localSurvey.githubSyncing;
+        delete localSurvey.githubSyncingAt;
         console.warn('GitHub client commit failed:', e);
         finalResult.githubError = e.message;
       }
@@ -547,29 +658,32 @@ export async function updateSurvey(arg1, arg2, arg3) {
   let serverResult = null;
   let serverError = null;
 
-  try {
-    let res = await fetch('/api/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordId, fields, photos }),
-    }).catch(() => null);
-
-    if (!res || res.status === 404) {
-      res = await fetch('/api/save', {
+  // static host ไม่มี backend: POST /api/update จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
+  if (!isStaticHost()) {
+    try {
+      let res = await fetch('/api/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordId, fields, photos, isUpdate: true }),
+        body: JSON.stringify({ recordId, fields, photos }),
       }).catch(() => null);
-    }
 
-    if (res && res.ok) {
-      serverResult = await res.json();
-    } else if (res) {
-      const data = await res.json().catch(() => ({}));
-      serverError = data.message || data.error || 'แก้ไขข้อมูลไม่สำเร็จ';
+      if (!res || res.status === 404) {
+        res = await fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId, fields, photos, isUpdate: true }),
+        }).catch(() => null);
+      }
+
+      if (res && res.ok) {
+        serverResult = await res.json();
+      } else if (res) {
+        const data = await res.json().catch(() => ({}));
+        serverError = data.message || data.error || 'แก้ไขข้อมูลไม่สำเร็จ';
+      }
+    } catch (err) {
+      serverError = err.message;
     }
-  } catch (err) {
-    serverError = err.message;
   }
 
   const formattedPhotos = (photos || []).map((p, idx) => ({
@@ -603,6 +717,12 @@ export async function updateSurvey(arg1, arg2, arg3) {
     photos: formattedPhotos,
   };
 
+  const ghToken = getStoredGitHubToken();
+  if (ghToken) {
+    localSurvey.githubSyncing = true;
+    localSurvey.githubSyncingAt = Date.now();
+  }
+
   saveLocalSurvey(localSurvey);
 
   clientGhSurveysCache = null;
@@ -617,10 +737,11 @@ export async function updateSurvey(arg1, arg2, arg3) {
   };
 
   if (!serverResult?.githubSynced) {
-    const ghToken = getStoredGitHubToken();
     if (ghToken) {
       try {
         const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
+        delete localSurvey.githubSyncing;
+        delete localSurvey.githubSyncingAt;
         if (ghRes.success) {
           finalResult.githubSynced = true;
           localSurvey.githubSynced = true;
@@ -629,6 +750,8 @@ export async function updateSurvey(arg1, arg2, arg3) {
           finalResult.githubError = ghRes.error || ghRes.reason;
         }
       } catch (e) {
+        delete localSurvey.githubSyncing;
+        delete localSurvey.githubSyncingAt;
         console.warn('GitHub client update commit failed:', e);
         finalResult.githubError = e.message;
       }
@@ -639,58 +762,92 @@ export async function updateSurvey(arg1, arg2, arg3) {
 }
 
 export async function deleteSurveys(recordIds) {
-  const ids = Array.isArray(recordIds) ? recordIds : [recordIds];
-  if (ids.length === 0) return { deleted: false, count: 0 };
+  const ids = (Array.isArray(recordIds) ? recordIds : [recordIds]).filter(Boolean).map(String);
+  if (ids.length === 0) return { deleted: false, count: 0, deletedIds: [], failed: [] };
 
   let serverResult = null;
-  let serverError = null;
 
-  try {
-    let res = await fetch('/api/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordIds: ids }),
-    }).catch(() => null);
-
-    if (!res || res.status === 404) {
-      res = await fetch('/delete', {
+  // static host ไม่มี backend: POST /api/delete จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
+  if (!isStaticHost()) {
+    try {
+      let res = await fetch('/api/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recordIds: ids }),
       }).catch(() => null);
-    }
 
-    if (res && res.ok) {
-      serverResult = await res.json();
-    }
-  } catch (err) {
-    serverError = err.message;
-  }
-
-  // If server did not delete from GitHub, try direct GitHub delete
-  if (!serverResult?.githubDeleted) {
-    const ghToken = getStoredGitHubToken();
-    if (ghToken) {
-      for (const id of ids) {
-        await deleteSurveyFromGitHubClient(id, ghToken).catch(() => {});
+      if (!res || res.status === 404) {
+        res = await fetch('/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordIds: ids }),
+        }).catch(() => null);
       }
+
+      if (res && res.ok) {
+        serverResult = await res.json();
+      }
+    } catch (err) {
+      console.warn('Server delete failed, falling back to GitHub:', err);
     }
   }
 
+  const deletedIds = [];
+  const failed = [];
+  const ghToken = getStoredGitHubToken();
+  const serverHandledGitHub = Boolean(serverResult?.githubDeleted);
+  const serverDeletedIds = Array.isArray(serverResult?.deletedIds) ? serverResult.deletedIds : null;
+
+  for (const id of ids) {
+    // server ยืนยันว่าลบทั้ง SQLite/files และ GitHub แล้ว -> ไม่ต้องยิง GitHub ซ้ำ
+    if (serverHandledGitHub && (!serverDeletedIds || serverDeletedIds.includes(id))) {
+      deletedIds.push(id);
+      continue;
+    }
+    if (!ghToken) {
+      failed.push({ id, reason: 'no_token' });
+      continue;
+    }
+    const ghRes = await deleteSurveyFromGitHubClient(id, ghToken);
+    if (ghRes && ghRes.success) {
+      deletedIds.push(id);
+    } else {
+      failed.push({ id, reason: (ghRes && (ghRes.error || ghRes.reason)) || 'github_delete_failed' });
+    }
+  }
+
+  // ลบออกจาก local cache เฉพาะรายการที่ลบบน GitHub สำเร็จ หรือไม่พบไฟล์บน GitHub (Q5 default)
   try {
-    const current = getLocalSurveys();
-    const idsSet = new Set(ids);
-    const remaining = current.filter((s) => !idsSet.has(s.recordId));
-    localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
+    if (deletedIds.length > 0) {
+      const current = getLocalSurveys();
+      const deletedSet = new Set(deletedIds);
+      const remaining = current.filter((s) => !deletedSet.has(s.recordId));
+      localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
+    }
   } catch (e) {
     console.warn('Failed to update localStorage after delete:', e);
   }
 
-  clientGhSurveysCache = null;
+  if (deletedIds.length > 0) {
+    clientGhSurveysCache = null;
+  }
 
-  window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'delete', recordIds: ids } }));
+  window.dispatchEvent(
+    new CustomEvent('nbtc-surveys-updated', {
+      detail: { action: 'delete', recordIds: deletedIds, failedIds: failed.map((f) => f.id) },
+    })
+  );
 
-  return serverResult || { deleted: true, count: ids.length, deletedIds: ids };
+  if (failed.length > 0) {
+    console.warn('[delete] failed records:', failed);
+  }
+
+  return {
+    deleted: failed.length === 0,
+    count: deletedIds.length,
+    deletedIds,
+    failed,
+  };
 }
 
 let clientGhSurveysCache = null;
@@ -698,6 +855,8 @@ let clientGhLastFetchTime = 0;
 let lastSurveysCommitSha = null;
 let lastSurveysCommitETag = null;
 const knownFileShas = new Map();
+// hash ของเนื้อหาที่เราเขียน/ยืนยันล่าสุดต่อ recordId -> ใช้ dedupe โดยไม่ต้อง GET ซ้ำ
+const knownFileContents = new Map();
 const CLIENT_GH_CACHE_TTL = 10000;
 
 export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
@@ -757,10 +916,15 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
       return !knownRecordIds.has(recId) || shaChanged;
     });
 
-    // Record latest SHAs
+    // Record latest SHAs (ถ้า sha เปลี่ยน ให้ล้าง content cache ของ record นั้น)
     for (const f of jsonFiles) {
       const recId = f.name.replace(/\.json$/, '');
-      if (f.sha) knownFileShas.set(recId, f.sha);
+      if (!f.sha) continue;
+      const previousSha = knownFileShas.get(recId);
+      if (previousSha && previousSha !== f.sha) {
+        knownFileContents.delete(recId);
+      }
+      knownFileShas.set(recId, f.sha);
     }
 
     // Filter out deleted items from local cache
@@ -828,118 +992,226 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
   }
 }
 
+const GITHUB_REPO = 'Thaidimaru/Pre_PM2';
+const GITHUB_BRANCH = 'main';
+const GITHUB_COMMITTER = { name: 'NBTC Survey System', email: 'survey-bot@nbtc.local' };
+const GITHUB_WRITE_RETRY_DELAYS = [500, 1000, 2000];
+
+function encodeBase64Utf8(str) {
+  // Base64 encode supporting UTF-8 / Thai characters
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+/**
+ * ตัด field ภายใน (client-only) ออกก่อนเขียนขึ้น GitHub เพื่อไม่ให้ schema ของไฟล์ survey เปลี่ยน
+ */
+function toCommittableSurvey(survey) {
+  const { githubSyncing, githubSyncingAt, githubSynced, ...rest } = survey || {};
+  return rest;
+}
+
+function githubAuthHeaders(token) {
+  return { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+}
+
+/**
+ * อ่านไฟล์ survey จาก GitHub แบบสด (cross-origin + _t กัน SW cache ส่ง sha เก่า)
+ * @returns {{found?:boolean, sha?:string|null, contentB64?:string, authError?:boolean, status?:number, error?:string}}
+ */
+async function fetchRemoteSurveyFile(token, recordId) {
+  const filePath = `data/surveys/${recordId}.json`;
+  const res = await fetch(
+    `https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}?ref=${GITHUB_BRANCH}&_t=${Date.now()}`,
+    { headers: githubAuthHeaders(token), cache: 'no-store' }
+  ).catch(() => null);
+
+  if (!res) return { error: 'network_error' };
+  if (res.status === 401 || res.status === 403) return { authError: true, status: res.status };
+  if (res.status === 404) return { found: false, sha: null };
+  if (!res.ok) return { error: `HTTP ${res.status}` };
+
+  const data = await res.json().catch(() => null);
+  if (!data) return { error: 'invalid_json' };
+  return {
+    found: true,
+    sha: data.sha || null,
+    // ไฟล์ใหญ่กว่า ~1MB จะได้ content: '' (encoding: none) -> เทียบเนื้อหาไม่ได้ ต้อง PUT ตาม sha
+    contentB64: String(data.content || '').replace(/\s+/g, ''),
+  };
+}
+
 export async function commitSurveyToGitHubClient(survey, customToken = null) {
   const token = customToken || getStoredGitHubToken();
   if (!token) return { success: false, reason: 'no_token' };
+  if (!survey || !survey.recordId) return { success: false, reason: 'no_record_id' };
 
-  const repo = 'Thaidimaru/Pre_PM2';
-  const branch = 'main';
-  const filePath = `data/surveys/${survey.recordId}.json`;
+  const recordId = String(survey.recordId);
+  const payloadHash = hashString(JSON.stringify(survey));
+  return queueRecordWrite(recordId, payloadHash, () => performSurveyCommit(recordId, survey, token));
+}
 
-  try {
-    let sha = null;
-    const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}?ref=${branch}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-      },
-      cache: 'no-store',
-    }).catch(() => null);
+async function performSurveyCommit(recordId, survey, token) {
+  const filePath = `data/surveys/${recordId}.json`;
+  const payloadStr = JSON.stringify(toCommittableSurvey(survey), null, 2);
+  const contentB64 = encodeBase64Utf8(payloadStr);
+  const contentHash = hashString(payloadStr);
+  const message = `feat(survey): Pre-PM survey ${recordId} - ${survey.station || 'Station'}`;
 
-    if (getRes && getRes.ok) {
-      const fileData = await getRes.json();
-      sha = fileData.sha;
+  // ถ้าเราเคยเขียนเนื้อหานี้ลง GitHub สำเร็จ และ sha ยังไม่เปลี่ยน -> ถือว่าซิงค์แล้ว ไม่ commit ซ้ำ
+  const cachedSha = knownFileShas.get(recordId) || null;
+  if (cachedSha && knownFileContents.get(recordId) === contentHash) {
+    return { success: true, deduplicated: true };
+  }
+
+  // ใช้ sha จาก directory listing ถ้ามี เพื่อลด GET 404
+  let sha = cachedSha;
+  let needDiscovery = !sha;
+  let lastError = '';
+
+  for (let attempt = 0; attempt <= GITHUB_WRITE_RETRY_DELAYS.length; attempt++) {
+    if (needDiscovery) {
+      const remote = await fetchRemoteSurveyFile(token, recordId);
+      if (remote.authError) {
+        notifyGitHubTokenRequired('bad_token');
+        return { success: false, error: 'bad_token', reason: 'bad_token', status: remote.status };
+      }
+      if (remote.error) {
+        return { success: false, error: remote.error };
+      }
+      if (remote.found) {
+        // เนื้อหาบน GitHub เหมือนกับ payload อยู่แล้ว -> ถือว่าสำเร็จ ไม่ commit ซ้ำ
+        if (remote.contentB64 && remote.contentB64 === contentB64) {
+          if (remote.sha) knownFileShas.set(recordId, remote.sha);
+          knownFileContents.set(recordId, contentHash);
+          clientGhSurveysCache = null;
+          return { success: true, deduplicated: true };
+        }
+        sha = remote.sha;
+        if (sha) knownFileShas.set(recordId, sha);
+      } else {
+        sha = null;
+      }
+      needDiscovery = false;
     }
 
-    const payloadStr = JSON.stringify(survey, null, 2);
-    // Base64 encode supporting UTF-8 / Thai characters
-    const contentB64 = btoa(unescape(encodeURIComponent(payloadStr)));
-
     const bodyObj = {
-      message: `feat(survey): Pre-PM survey ${survey.recordId} - ${survey.station || 'Station'}`,
+      message,
       content: contentB64,
-      branch,
-      committer: {
-        name: 'NBTC Survey System',
-        email: 'survey-bot@nbtc.local',
-      },
+      branch: GITHUB_BRANCH,
+      committer: GITHUB_COMMITTER,
     };
     if (sha) bodyObj.sha = sha;
 
-    const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+    const putRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
+      headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
       body: JSON.stringify(bodyObj),
-    });
+    }).catch(() => null);
 
-    if (putRes.ok) {
+    if (putRes && putRes.ok) {
+      const putData = await putRes.json().catch(() => null);
+      const newSha = putData?.content?.sha;
+      if (newSha) {
+        knownFileShas.set(recordId, newSha);
+        knownFileContents.set(recordId, contentHash);
+      } else {
+        knownFileShas.delete(recordId);
+        knownFileContents.delete(recordId);
+      }
       clientGhSurveysCache = null;
-      notifySurveysUpdated({ type: 'GITHUB_COMMITTED', recordId: survey.recordId });
+      notifySurveysUpdated({ type: 'GITHUB_COMMITTED', recordId });
       return { success: true };
     }
-    const errObj = await putRes.json().catch(() => ({}));
-    return { success: false, error: errObj.message || `HTTP ${putRes.status}` };
-  } catch (err) {
-    return { success: false, error: err.message };
+
+    if (putRes && (putRes.status === 401 || putRes.status === 403)) {
+      notifyGitHubTokenRequired('bad_token');
+      return { success: false, error: 'bad_token', reason: 'bad_token', status: putRes.status };
+    }
+
+    const errObj = putRes ? await putRes.json().catch(() => ({})) : {};
+    lastError = errObj.message || `HTTP ${putRes ? putRes.status : 'network_error'}`;
+
+    // 409/422 = sha ไม่ตรง (มี writer อื่นแทรก) -> GET sha ใหม่พร้อมเทียบเนื้อหาแล้วลองอีกครั้ง
+    const isConflict = putRes && (putRes.status === 409 || putRes.status === 422);
+    if (!isConflict || attempt >= GITHUB_WRITE_RETRY_DELAYS.length) {
+      return { success: false, error: lastError };
+    }
+
+    await sleep(GITHUB_WRITE_RETRY_DELAYS[attempt]);
+    sha = null;
+    needDiscovery = true;
   }
+
+  return { success: false, error: lastError || 'github_write_failed' };
 }
 
 export async function deleteSurveyFromGitHubClient(recordId, customToken = null) {
   const token = customToken || getStoredGitHubToken();
   if (!token) return { success: false, reason: 'no_token' };
+  if (!recordId) return { success: false, reason: 'no_record_id' };
 
-  const repo = 'Thaidimaru/Pre_PM2';
-  const branch = 'main';
+  const id = String(recordId);
+  return enqueueGitHubWrite(() => runWithRecordLock(id, () => performSurveyDelete(id, token)));
+}
+
+async function performSurveyDelete(recordId, token) {
   const filePath = `data/surveys/${recordId}.json`;
+  let lastError = '';
 
-  try {
-    const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}?ref=${branch}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-      },
-      cache: 'no-store',
-    }).catch(() => null);
+  for (let attempt = 0; attempt <= GITHUB_WRITE_RETRY_DELAYS.length; attempt++) {
+    const remote = await fetchRemoteSurveyFile(token, recordId);
 
-    if (!getRes || !getRes.ok) {
+    if (remote.authError) {
+      notifyGitHubTokenRequired('bad_token');
+      return { success: false, error: 'bad_token', reason: 'bad_token', status: remote.status };
+    }
+    if (remote.error) {
+      return { success: false, error: remote.error };
+    }
+    if (!remote.found || !remote.sha) {
+      // ไม่พบไฟล์บน GitHub (อาจถูกลบไปแล้ว) -> ถือว่าลบสำเร็จ
+      knownFileShas.delete(recordId);
+      knownFileContents.delete(recordId);
+      clientGhSurveysCache = null;
       return { success: true, reason: 'file_not_found_on_github' };
     }
 
-    const fileData = await getRes.json();
-    const sha = fileData.sha;
-    if (!sha) return { success: true };
-
-    const delRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+    const delRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${filePath}`, {
       method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
+      headers: { ...githubAuthHeaders(token), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: `chore(survey): Delete Pre-PM survey ${recordId}`,
-        sha,
-        branch,
-        committer: {
-          name: 'NBTC Survey System',
-          email: 'survey-bot@nbtc.local',
-        },
+        sha: remote.sha,
+        branch: GITHUB_BRANCH,
+        committer: GITHUB_COMMITTER,
       }),
-    });
+    }).catch(() => null);
 
-    if (delRes.ok) {
+    if (delRes && delRes.ok) {
       clientGhSurveysCache = null;
+      knownFileShas.delete(recordId);
+      knownFileContents.delete(recordId);
       notifySurveysUpdated({ type: 'GITHUB_DELETED', recordId });
       return { success: true };
     }
-    return { success: false };
-  } catch (err) {
-    return { success: false, error: err.message };
+
+    if (delRes && (delRes.status === 401 || delRes.status === 403)) {
+      notifyGitHubTokenRequired('bad_token');
+      return { success: false, error: 'bad_token', reason: 'bad_token', status: delRes.status };
+    }
+
+    const errObj = delRes ? await delRes.json().catch(() => ({})) : {};
+    lastError = errObj.message || `HTTP ${delRes ? delRes.status : 'network_error'}`;
+
+    const isConflict = delRes && (delRes.status === 409 || delRes.status === 422);
+    if (!isConflict || attempt >= GITHUB_WRITE_RETRY_DELAYS.length) {
+      return { success: false, error: lastError };
+    }
+
+    await sleep(GITHUB_WRITE_RETRY_DELAYS[attempt]);
   }
+
+  return { success: false, error: lastError || 'github_delete_failed' };
 }
 
 export async function fetchGitHubStatus() {

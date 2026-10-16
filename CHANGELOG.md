@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2026-10-16
+
+### Fixed
+- ปุ่ม "ดาวน์โหลด PDF" บน static host (r2.dev) เดิมชี้ไปที่ `/api/export-pdf` ซึ่งมีเฉพาะ local server ทำให้ได้ 404/401: เปลี่ยนมาสร้าง PDF ฝั่ง client ด้วย `html2canvas-pro` ที่รองรับสี `oklch()` ของ Tailwind v4 (`src/components/export/SurveyReportModal.jsx`).
+- การสร้าง PDF ล้มเหลวแบบเงียบและไม่แจ้งผู้ใช้: เพิ่ม progress "กำลังสร้าง PDF หน้า i/N", รอ `document.fonts.ready` และรอรูปโหลดครบก่อน capture, capture ทีละ 8 หน้า, ปรับเป็น `scale: 1.5` / JPEG 0.85 และคืนหน่วยความจำ canvas หลังใช้; เมื่อ error จะแจ้งผ่าน toast และไม่เรียก `window.print()` อัตโนมัติ (`SurveyReportModal.jsx`).
+- `409/422` และ commit ซ้ำจาก sha เก่า: Service Worker ไม่ดักจับ request ข้าม origin (`api.github.com`, `raw.githubusercontent.com`), `blob:`/`data:` และ non-GET อีกต่อไป และผูก cache name กับ `APP_VERSION` ผ่าน `register('/sw.js?v=' + APP_VERSION)` (`public/sw.js`, `src/main.jsx`).
+- `POST /api/delete → 401` บน static host: ข้าม `/api/save`, `/api/update`, `/api/delete` เมื่อตรวจพบ static host แล้วใช้ GitHub Contents API โดยตรง (`src/lib/api.js`).
+- ลบข้อมูลไม่สำเร็จแต่ไม่มีอะไรแจ้ง: `deleteSurveys` คืน `{ deletedIds, failed }`, serialize การเขียน, retry 409/422 พร้อมเทียบเนื้อหาก่อนเขียน/ลบ และลบออกจาก local cache เฉพาะรายการที่สำเร็จหรือไม่พบไฟล์บน GitHub (`src/lib/api.js`, `src/components/dashboard/RecentSurveys.jsx`).
+- `SurveyPreviewModal` เรียก GitHub raw JSON ซ้ำไม่หยุด: effect ผูก dependency กับ state ที่ตัวเองเป็นคนเซ็ต (`resolvedPhotos`) ทำให้เกิด loop — แก้เป็น dependency `[isOpen, recordId]`, เพิ่ม `AbortController` และอัปเดต state เฉพาะเมื่อข้อมูลรูปเปลี่ยนจริง (`src/components/dashboard/SurveyPreviewModal.jsx`).
+- กัน field ภายในฝั่ง client (`githubSyncing`, `githubSyncingAt`, `githubSynced`) หลุดขึ้นไฟล์ survey บน GitHub ซึ่งจะทำให้ schema เพี้ยนและ dedupe ไม่ทำงาน (`src/lib/api.js`).
+
+### Added
+- Global toast component (`src/components/ui/toast.jsx`) ใช้แทน `alert()` สำหรับ PDF/delete/token error พร้อม mount ใน `App.jsx` และเปิด GitHubTokenModal อัตโนมัติเมื่อ token หมดอายุ (`src/components/Navbar.jsx`).
+- `<meta name="mobile-web-app-capable" content="yes">` สำหรับ PWA บน Android (`index.html`).
+
+### Changed
+- ลด commit ซ้ำด้วย write queue + payload dedupe (`inflightWrites`), `navigator.locks` ต่อ record และให้ `syncPendingLocalSurveys` ข้าม record ที่กำลังเขียนอยู่ (`src/lib/api.js`).
+
 ## [2.0.6] - 2026-09-09
 
 ### Fixed

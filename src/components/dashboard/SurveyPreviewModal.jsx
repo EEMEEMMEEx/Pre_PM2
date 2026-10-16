@@ -53,15 +53,102 @@ export function SurveyPreviewModal({
   const [copied, setCopied] = useState(false);
   const [activePhoto, setActivePhoto] = useState(null);
 
-  if (!isOpen) return null;
-
   const rawFields = surveyData.fields || {};
   const fields = { ...surveyData, ...rawFields };
+  const recordId = surveyData.recordId || fields.recordId || fields.record_id || '-';
+
+  // Photos with full base64 data resolution
+  const rawPhotos = Array.isArray(surveyData.photos) && surveyData.photos.length > 0
+    ? surveyData.photos
+    : (Array.isArray(fields.photos) && fields.photos.length > 0 ? fields.photos : []);
+
+  const [resolvedPhotos, setResolvedPhotos] = useState(() => {
+    return rawPhotos.map((p, idx) => {
+      const src = getPhotoSrc(p);
+      return {
+        ...p,
+        id: p.id || idx + 1,
+        name: p.name || `photo_${idx + 1}.jpg`,
+        dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+        url: src || (p.id ? `/api/photos/${p.id}` : ''),
+      };
+    });
+  });
+
+  // Re-sync when surveyData changes
+  useEffect(() => {
+    setResolvedPhotos(
+      rawPhotos.map((p, idx) => {
+        const src = getPhotoSrc(p);
+        return {
+          ...p,
+          id: p.id || idx + 1,
+          name: p.name || `photo_${idx + 1}.jpg`,
+          dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
+          url: src || (p.id ? `/api/photos/${p.id}` : ''),
+        };
+      })
+    );
+  }, [surveyData]);
+
+  // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
+  // NOTE: ต้องไม่ผูก dependency กับ resolvedPhotos ไม่งั้น setResolvedPhotos ข้างในจะ trigger ตัวเองวนไม่จบ
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!recordId || recordId === '-') return;
+
+    const hasMissingDataUrl = resolvedPhotos.some((p) => !p.dataUrl);
+    const isStaticHost =
+      typeof window !== 'undefined' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+    if (!hasMissingDataUrl && !isStaticHost) return;
+
+    const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
+    let cancelled = false;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+    fetch(ghUrl, controller ? { signal: controller.signal } : undefined)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data || !Array.isArray(data.photos) || data.photos.length === 0) return;
+        setResolvedPhotos((prev) => {
+          let changed = false;
+          const next = prev.map((photo, idx) => {
+            if (photo.dataUrl) return photo;
+            const match =
+              data.photos[idx] ||
+              data.photos.find((p) => p.name === photo.name) ||
+              data.photos[0];
+            if (!match || !match.data) return photo;
+            const b64 = match.data.startsWith('data:')
+              ? match.data
+              : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
+            changed = true;
+            return {
+              ...photo,
+              dataUrl: b64,
+              url: b64,
+            };
+          });
+          return changed ? next : prev;
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (controller) controller.abort();
+    };
+  }, [isOpen, recordId]);
+
+  if (!isOpen) return null;
+
+  const photos = resolvedPhotos;
 
   const stationName = fields.station || fields.village || fields.stationSelect || surveyData.station || 'สถานีวิทยุคมนาคม NBTC Microwave';
   const stationLookup = findStationByName(stationName);
 
-  const recordId = surveyData.recordId || fields.recordId || fields.record_id || '-';
   const province = fields.province || surveyData.province || stationLookup?.province || '';
   const district = fields.district || surveyData.district || stationLookup?.district || '';
   const subdistrict = fields.subdistrict || surveyData.subdistrict || stationLookup?.subdistrict || '';
@@ -149,81 +236,7 @@ export function SurveyPreviewModal({
   const informantName = fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : '');
   const operatorName = fields.operatorName || fields.operator_name || 'วิศวกรผู้ควบคุมงาน';
 
-  // Photos with full base64 data resolution
-  const rawPhotos = Array.isArray(surveyData.photos) && surveyData.photos.length > 0
-    ? surveyData.photos
-    : (Array.isArray(fields.photos) && fields.photos.length > 0 ? fields.photos : []);
 
-  const [resolvedPhotos, setResolvedPhotos] = useState(() => {
-    return rawPhotos.map((p, idx) => {
-      const src = getPhotoSrc(p);
-      return {
-        ...p,
-        id: p.id || idx + 1,
-        name: p.name || `photo_${idx + 1}.jpg`,
-        dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
-        url: src || (p.id ? `/api/photos/${p.id}` : ''),
-      };
-    });
-  });
-
-  // Re-sync when surveyData changes
-  useEffect(() => {
-    setResolvedPhotos(
-      rawPhotos.map((p, idx) => {
-        const src = getPhotoSrc(p);
-        return {
-          ...p,
-          id: p.id || idx + 1,
-          name: p.name || `photo_${idx + 1}.jpg`,
-          dataUrl: src.startsWith('data:') ? src : (p.dataUrl || null),
-          url: src || (p.id ? `/api/photos/${p.id}` : ''),
-        };
-      })
-    );
-  }, [surveyData]);
-
-  const photos = resolvedPhotos;
-
-  // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
-  useEffect(() => {
-    if (!isOpen) return;
-    const hasMissingDataUrl = resolvedPhotos.some((p) => !p.dataUrl);
-    const isStaticHost =
-      typeof window !== 'undefined' &&
-      window.location.hostname !== 'localhost' &&
-      window.location.hostname !== '127.0.0.1';
-
-    if (recordId && recordId !== '-' && (hasMissingDataUrl || isStaticHost)) {
-      const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
-      fetch(ghUrl)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.photos) && data.photos.length > 0) {
-            setResolvedPhotos((prev) =>
-              prev.map((photo, idx) => {
-                const match =
-                  data.photos[idx] ||
-                  data.photos.find((p) => p.name === photo.name) ||
-                  data.photos[0];
-                if (match && match.data) {
-                  const b64 = match.data.startsWith('data:')
-                    ? match.data
-                    : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
-                  return {
-                    ...photo,
-                    dataUrl: b64,
-                    url: b64,
-                  };
-                }
-                return photo;
-              })
-            );
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen, recordId]);
 
   // Format file size
   const formatSize = (bytes) => {

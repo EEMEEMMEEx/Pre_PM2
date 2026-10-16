@@ -27,13 +27,13 @@ import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
 import { deleteSurveys } from '@/lib/api';
+import { toast } from '@/components/ui/toast';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
 export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh }) {
   const { isDark } = useTheme();
-  const [selectedReport, setSelectedReport] = useState(null);
-  const [batchReportSurveys, setBatchReportSurveys] = useState(null);
+  const [reportSurveys, setReportSurveys] = useState(null);
   const [selectedPreview, setSelectedPreview] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -132,9 +132,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
     const listToExport = customList
       ? customList
       : selectedIds.size > 0
-      ? recent.filter((r) => selectedIds.has(r.recordId))
-      : filteredSurveys;
-    if (listToExport.length === 0) return;
+      ? recent.filter((r) => selectedIds.has(r.recordId) || (r.fields?.recordId && selectedIds.has(r.fields.recordId)))
+      : filteredSurveys.length > 0
+      ? filteredSurveys
+      : recent;
+    if (!listToExport || listToExport.length === 0) return;
     const filename =
       selectedIds.size > 0
         ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.xlsx`
@@ -145,10 +147,12 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
   const handleExportBatchPdf = () => {
     const listToExport =
       selectedIds.size > 0
-        ? recent.filter((r) => selectedIds.has(r.recordId))
-        : filteredSurveys;
-    if (listToExport.length === 0) return;
-    setBatchReportSurveys(listToExport);
+        ? recent.filter((r) => selectedIds.has(r.recordId) || (r.fields?.recordId && selectedIds.has(r.fields.recordId)))
+        : filteredSurveys.length > 0
+        ? filteredSurveys
+        : recent;
+    if (!listToExport || listToExport.length === 0) return;
+    setReportSurveys(listToExport);
   };
 
   const handleExecuteDelete = async () => {
@@ -158,17 +162,40 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
       const idsToDelete = deleteTarget.isBatch
         ? deleteTarget.ids
         : [deleteTarget.recordId];
-      await deleteSurveys(idsToDelete);
+      const result = await deleteSurveys(idsToDelete);
+
+      const failed = Array.isArray(result?.failed) ? result.failed : [];
+      const failedIds = new Set(failed.map((f) => f.id));
+      const deletedIds = Array.isArray(result?.deletedIds)
+        ? result.deletedIds
+        : idsToDelete.filter((id) => !failedIds.has(id));
+
+      // เอาเฉพาะรายการที่ลบสำเร็จออกจาก selection (รายการที่ลบไม่สำเร็จต้องคงไว้)
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        idsToDelete.forEach((id) => next.delete(id));
+        deletedIds.forEach((id) => next.delete(id));
         return next;
       });
+
+      if (failed.length > 0) {
+        console.error('[delete] failed records:', failed);
+        const reasonLines = failed
+          .slice(0, 5)
+          .map((f) => `• ${f.id} (${f.reason})`)
+          .join('\n');
+        const more = failed.length > 5 ? `\n...และอีก ${failed.length - 5} รายการ` : '';
+        toast.error(
+          `ลบไม่สำเร็จ ${failed.length}/${idsToDelete.length} รายการ\n${reasonLines}${more}`
+        );
+      } else {
+        toast.success(`ลบข้อมูลสำเร็จ ${deletedIds.length} รายการ`);
+      }
+
       setDeleteTarget(null);
       if (onRefresh) onRefresh();
     } catch (err) {
       console.error('Delete error:', err);
-      alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + err.message);
+      toast.error('เกิดข้อผิดพลาดในการลบข้อมูล: ' + (err?.message || 'unknown error'));
     } finally {
       setIsDeleting(false);
     }
@@ -276,17 +303,9 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Export PDF Button (All or Selected) */}
-            <a
-              href={
-                selectedIds.size > 0
-                  ? `/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`
-                  : '/api/export-pdf'
-              }
-              download={
-                selectedIds.size > 0
-                  ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`
-                  : `SURVEY_REPORTS_ALL_${recent.length || 63}.pdf`
-              }
+            <button
+              type="button"
+              onClick={handleExportBatchPdf}
               className={cn(
                 'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
                 selectedIds.size > 0
@@ -297,8 +316,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               )}
               title={
                 selectedIds.size > 0
-                  ? `ดาวน์โหลดไฟล์ PDF ทางการสำหรับ ${selectedIds.size} สถานีที่เลือก`
-                  : `ดาวน์โหลดรายงานผลการสำรวจทางการทั้งหมด (PDF รวม ${recent.length} สถานี พร้อมรูปถ่าย)`
+                  ? `เปิดพรีวิวและดาวน์โหลด/พิมพ์ PDF รายงานทางการสำหรับ ${selectedIds.size} สถานีที่เลือก`
+                  : `เปิดพรีวิวและดาวน์โหลด/พิมพ์ PDF รายงานทางการทั้งหมด (${recent.length} สถานี พร้อมรูปถ่าย)`
               }
             >
               <FileDown className="h-3.5 w-3.5" />
@@ -307,7 +326,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   ? `Export PDF ที่เลือก (${selectedIds.size})`
                   : `Export PDF ทั้งหมด (${recent.length})`}
               </span>
-            </a>
+            </button>
 
             {/* Export Excel Button */}
             <button
@@ -492,26 +511,15 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Direct PDF Download from Server */}
-              <a
-                href={`/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`}
-                download={`SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md hover:from-blue-500 hover:to-cyan-400 cursor-pointer transition-all"
-                title="ดาวน์โหลดไฟล์ PDF รวมสำหรับสถานีที่เลือกโดยตรง"
-              >
-                <FileDown className="h-3.5 w-3.5" />
-                <span>ดาวน์โหลด PDF ({selectedIds.size})</span>
-              </a>
-
-              {/* Printable A4 Modal (Batch Print) */}
+              {/* Batch PDF Export / Print */}
               <button
                 type="button"
                 onClick={handleExportBatchPdf}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-md cursor-pointer transition-all border border-indigo-500/40"
-                title="เปิดพรีวิวและพิมพ์เอกสาร A4 ทางการรวมทุกรายการที่เลือก"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md hover:from-blue-500 hover:to-cyan-400 cursor-pointer transition-all border border-cyan-400/40"
+                title="เปิดพรีวิวและดาวน์โหลด/พิมพ์เอกสารรายงาน A4 ทางการ (PDF) สำหรับสถานีที่เลือก"
               >
-                <Printer className="h-3.5 w-3.5" />
-                <span>พิมพ์ / พรีวิว A4 ({selectedIds.size})</span>
+                <FileDown className="h-3.5 w-3.5" />
+                <span>Export PDF ที่เลือก ({selectedIds.size})</span>
               </button>
 
               {/* Batch Excel Export */}
@@ -918,7 +926,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           {/* Export Official A4 Button */}
                           <button
                             type="button"
-                            onClick={() => setSelectedReport(item)}
+                            onClick={() => setReportSurveys([item])}
                             className={cn(
                               'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
                               isDark
@@ -1085,7 +1093,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         onClose={() => setSelectedPreview(null)}
         surveyData={selectedPreview || {}}
         onOpenOfficialReport={(reportData) => {
-          setSelectedReport(reportData);
+          setSelectedPreview(null);
+          setReportSurveys([reportData]);
         }}
         onEdit={(item) => {
           setSelectedPreview(null);
@@ -1098,18 +1107,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         }}
       />
 
-      {/* Single Survey Official A4 Printable Report Modal */}
+      {/* Unified Official A4 Printable Report Modal */}
       <SurveyReportModal
-        isOpen={Boolean(selectedReport)}
-        onClose={() => setSelectedReport(null)}
-        surveyData={selectedReport || {}}
-      />
-
-      {/* Batch Survey Official A4 Printable Report Modal */}
-      <SurveyReportModal
-        isOpen={Boolean(batchReportSurveys && batchReportSurveys.length > 0)}
-        onClose={() => setBatchReportSurveys(null)}
-        surveys={batchReportSurveys || []}
+        isOpen={Boolean(reportSurveys && reportSurveys.length > 0)}
+        onClose={() => setReportSurveys(null)}
+        surveys={reportSurveys || []}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -1,0 +1,31 @@
+{
+  "recordId": "PM-202610160220146-0987",
+  "savedAt": "2026-10-16T02:20:14.610Z",
+  "station": "หมู่ 7 หนองเจริญสุข",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 7 หนองเจริญสุข",
+    "province": "กาญจนบุรี",
+    "district": "ห้วยกระเจา",
+    "subdistrict": "สระลงเรือ",
+    "installationPlace": "ที่ทำการบ้านกำนัน",
+    "equipmentPlace": "ที่ทำการบ้านกำนัน",
+    "contactName": "นายสมยศ เชาว์รักษ์",
+    "contactPosition": "กำนัน",
+    "contactVillage": "หมู่ 7 หนองเจริญสุข",
+    "contactPhone": "089-547-6644, 080-660-4890",
+    "visitDate": "2026-10-07",
+    "informantName": "นายสมยศ เชาว์รักษ์",
+    "operatorName": "นายวัชระ มานะดี",
+    "photos": []
+  },
+  "photos": []
+}

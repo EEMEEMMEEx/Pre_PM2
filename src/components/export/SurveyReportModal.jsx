@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X, FileText } from 'lucide-react';
+import { Printer, X, FileText, Download, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 import { findStationByName } from '@/lib/api';
+import { toast } from '@/components/ui/toast';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 import forthLogo from '@/assets/images/forth-logo.png';
 
@@ -705,6 +706,10 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
  * Supports both single station report and multi-station batch printable report.
  */
 export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = [] }) {
+  const { isDark } = useTheme();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(null);
+
   // Manage body class for zero-offset print layout and scroll lock
   useEffect(() => {
     if (isOpen) {
@@ -717,10 +722,6 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     };
   }, [isOpen]);
 
-  const { isDark } = useTheme();
-
-  if (!isOpen) return null;
-
   const activeSurveys =
     Array.isArray(surveys) && surveys.length > 0
       ? surveys
@@ -728,10 +729,8 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
       ? [surveyData]
       : [];
 
-  if (activeSurveys.length === 0) return null;
-
   const isMulti = activeSurveys.length > 1;
-  const firstSurvey = activeSurveys[0];
+  const firstSurvey = activeSurveys[0] || {};
   const firstStation = firstSurvey.station || firstSurvey.fields?.station || 'สถานี';
   const firstRecord = firstSurvey.recordId || firstSurvey.fields?.recordId || '';
 
@@ -740,10 +739,141 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     window.print();
   };
 
+  // รอให้รูปทั้งหมดใน sheet โหลด/ถอดรหัสเสร็จก่อน capture (กันรูปหายใน PDF)
+  const waitForSheetImages = async (root) => {
+    const images = Array.from(root.querySelectorAll('img'));
+    await Promise.all(
+      images.map((img) => {
+        if (img.complete && img.naturalWidth > 0) {
+          return typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve();
+        }
+        return new Promise((resolve) => {
+          const done = () => resolve();
+          img.addEventListener('load', done, { once: true });
+          img.addEventListener('error', done, { once: true });
+          setTimeout(done, 8000);
+        });
+      })
+    );
+  };
+
+  // ดาวน์โหลด blob: <a download> ปกติ, iOS standalone ใช้ Web Share API ก่อน
+  const downloadPdfBlob = async (blob, filename) => {
+    const isIosStandalone =
+      typeof navigator !== 'undefined' &&
+      /iP(hone|ad|od)/.test(navigator.userAgent) &&
+      (window.navigator.standalone === true ||
+        (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches));
+
+    if (isIosStandalone) {
+      try {
+        const file = new File([blob], filename, { type: 'application/pdf' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        }
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === 'AbortError') return;
+      }
+      const shareUrl = URL.createObjectURL(blob);
+      window.open(shareUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(shareUrl), 60000);
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  // Direct Client-Side PDF Generation and Download
+  const handleDownloadPdfDirect = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    setPdfProgress({ current: 0, total: 0 });
+
+    try {
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+        await document.fonts.ready.catch(() => {});
+      }
+
+      const { jsPDF } = await import('jspdf');
+      // html2canvas-pro รองรับสี oklch() ของ Tailwind v4 (html2canvas 1.4.1 parse ไม่ได้)
+      const html2canvas = (await import('html2canvas-pro')).default;
+      const reportArea = document.getElementById('printable-report-area');
+      if (!reportArea) throw new Error('ไม่พบพื้นที่รายงาน');
+
+      const sheets = Array.from(reportArea.querySelectorAll('.a4-sheet'));
+      if (sheets.length === 0) throw new Error('ไม่พบหน้ารายงาน');
+
+      setPdfProgress({ current: 0, total: sheets.length });
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+
+      const CHUNK_SIZE = 8;
+      for (let i = 0; i < sheets.length; i++) {
+        if (i > 0) pdf.addPage('a4', 'portrait');
+        const sheet = sheets[i];
+        await waitForSheetImages(sheet);
+
+        const canvas = await html2canvas(sheet, {
+          scale: 1.5,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          windowWidth: 1200,
+        });
+        const imgData = canvas.toDataURL('image/jpeg', 0.85);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+
+        // คืนหน่วยความจำ canvas ทันที (32 สถานี × หลายหน้า บนมือถือ)
+        canvas.width = 0;
+        canvas.height = 0;
+
+        setPdfProgress({ current: i + 1, total: sheets.length });
+
+        // yield ระหว่างชุด เพื่อไม่ให้ main thread/หน่วยความจำตึง
+        if ((i + 1) % CHUNK_SIZE === 0 && i + 1 < sheets.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+
+      const cleanName = (firstStation || 'STATION').replace(/[\s/\\?%*:|"<>]/g, '_');
+      const filename = isMulti
+        ? `SURVEY_SELECTED_${activeSurveys.length}_STATIONS.pdf`
+        : `SURVEY_REPORT_${cleanName}_${firstRecord || ''}.pdf`;
+
+      const blob = pdf.output('blob');
+      await downloadPdfBlob(blob, filename);
+    } catch (err) {
+      const recordIds = activeSurveys.map((s) => s.recordId || s.fields?.recordId).filter(Boolean);
+      console.error('[PDF]', recordIds, err);
+      toast.error(
+        `สร้างไฟล์ PDF ไม่สำเร็จ: ${err?.message || 'unknown error'}\nลองใช้ปุ่ม "พิมพ์ / บันทึก PDF" แทน`
+      );
+    } finally {
+      setIsGeneratingPdf(false);
+      setPdfProgress(null);
+    }
+  };
+
+  if (!isOpen || activeSurveys.length === 0) return null;
+
   return createPortal(
     <div
       id="survey-report-modal-portal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block"
     >
       {/* Modal Container */}
       <div
@@ -783,7 +913,7 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
                     <strong className={cn('font-bold', isDark ? 'text-cyan-300' : 'text-sky-700')}>
                       {activeSurveys.length} สถานี
                     </strong>{' '}
-                    | คลิก "พิมพ์เอกสาร (Print)" เพื่อพิมพ์หรือบันทึกเป็นไฟล์ PDF รวม
+                    | ดาวน์โหลดไฟล์ .pdf โดยตรง หรือพิมพ์/บันทึกผ่าน Print Dialog
                   </span>
                 ) : (
                   <span>
@@ -802,15 +932,45 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 self-end sm:self-auto shrink-0">
-            {/* Button 1: Print Document */}
+            {/* Button 1: Direct PDF Download */}
+            <button
+              type="button"
+              disabled={isGeneratingPdf}
+              aria-busy={isGeneratingPdf}
+              onClick={handleDownloadPdfDirect}
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-400 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              title="ดาวน์โหลดไฟล์ .pdf โดยตรงลงเครื่องคอมพิวเตอร์"
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span>
+                {isGeneratingPdf
+                  ? pdfProgress && pdfProgress.total > 0
+                    ? `กำลังสร้าง PDF หน้า ${pdfProgress.current}/${pdfProgress.total}...`
+                    : 'กำลังเตรียมไฟล์ PDF...'
+                  : isMulti
+                  ? `ดาวน์โหลด PDF (${activeSurveys.length})`
+                  : 'ดาวน์โหลด PDF'}
+              </span>
+            </button>
+
+            {/* Button 2: Print Document / Save as PDF via Browser */}
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-400 transition-all duration-200 cursor-pointer"
-              title="พิมพ์เอกสารออกเครื่องพิมพ์ หรือบันทึกเป็น PDF ผ่านคำสั่งพิมพ์ของระบบ (Ctrl+P)"
+              className={cn(
+                'inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border px-3 sm:px-3.5 py-2 text-xs font-bold transition-all duration-200 cursor-pointer shadow-sm',
+                isDark
+                  ? 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
+                  : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-400'
+              )}
+              title="พิมพ์เอกสารออกเครื่องพิมพ์ หรือบันทึกเป็น PDF ทางการผ่านหน้าต่างพิมพ์ (Ctrl+P)"
             >
               <Printer className="h-4 w-4" />
-              <span>{isMulti ? `พิมพ์ PDF ที่เลือก (${activeSurveys.length})` : 'พิมพ์เอกสาร (Print)'}</span>
+              <span>พิมพ์ / บันทึก PDF</span>
             </button>
 
             {/* Close Modal Button */}
@@ -856,3 +1016,5 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     document.body
   );
 }
+
+export default SurveyReportModal;

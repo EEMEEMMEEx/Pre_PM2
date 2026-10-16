@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150719191-a97a",
-  "savedAt": "2026-10-15T07:24:37.760Z",
+  "savedAt": "2026-10-16T02:38:42.596Z",
+  "updatedAt": "2026-10-16T02:38:42.596Z",
   "station": "หมู่ 3 กล้วย",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -28,8 +29,12 @@
     "workObstacle": "ไม่มี",
     "operatorName": "ชนะ ปักษีเลิศ",
     "photos": [],
-    "recordId": "PM-202610150719191-a97a"
+    "recordId": "PM-202610150719191-a97a",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "summary": "",
+    "informantName": "นายสิทธิชัย ลำภูพวง"
   },
-  "photos": [],
-  "updatedAt": "2026-10-15T07:24:37.760Z"
+  "photos": []
 }
