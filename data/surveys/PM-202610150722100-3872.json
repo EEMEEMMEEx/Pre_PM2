@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150722100-3872",
-  "savedAt": "2026-10-15T07:22:10.041Z",
+  "savedAt": "2026-10-16T02:18:00.666Z",
+  "updatedAt": "2026-10-16T02:18:00.666Z",
   "station": "หมู่ 8 หนองใหญ่",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -23,15 +24,17 @@
     "contactVillage": "หมู่ 8 หนองใหญ่",
     "contactPhone": "065-4536394",
     "visitDate": "2026-10-09",
-    "accessLimit": "ไม่มี",
+    "accessLimit": "",
     "userProblem": "ไม่มี",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
     "summary": "ไม่มี",
-    "informantName": "นายชนะ ปักษีเลิศ",
-    "operatorName": "นายชนะ ปักษีเลิศ",
-    "photos": []
+    "informantName": "นายกมนทรรศน์  ศรีทรงเมือง",
+    "operatorName": "ชนะ ปักษีเลิศ",
+    "photos": [],
+    "visitTime": "",
+    "recordId": "PM-202610150722100-3872"
   },
   "photos": []
 }
