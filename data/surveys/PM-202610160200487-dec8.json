@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610160200487-dec8",
-  "savedAt": "2026-10-16T02:00:48.769Z",
+  "savedAt": "2026-10-16T02:05:00.719Z",
+  "updatedAt": "2026-10-16T02:05:00.719Z",
   "station": "BS ช่อง",
   "province": "ตรัง",
   "permit": "อนุญาต",
@@ -27,11 +28,13 @@
     "userProblem": "ไม่มี",
     "siteCondition": "ปกติ",
     "antennaCondition": "ไม่มี",
-    "workObstacle": "ไม่มี",
+    "workObstacle": "สภาพอากาศฝนตกเป็นช่วงเวลา",
     "summary": "ไม่มี",
     "informantName": "นายสมประสงค์  มลฑลจุลเกศ",
     "operatorName": "นายสมประสงค์  มลฑลจุลเกศ",
-    "photos": []
+    "photos": [],
+    "visitTime": "",
+    "recordId": "PM-202610160200487-dec8"
   },
   "photos": []
 }
