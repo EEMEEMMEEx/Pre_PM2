@@ -1,0 +1,31 @@
+{
+  "recordId": "PM-202610160122537-4737",
+  "savedAt": "2026-10-16T01:22:53.742Z",
+  "station": "หมู่ 6 น้ำโจน",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 6 น้ำโจน",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "หนองประดู่",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายรมยกร ศรีรัตน์",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 6 น้ำโจน",
+    "contactPhone": "080-324-4524",
+    "visitDate": "2026-10-07",
+    "informantName": "นายรมยกร ศรีรัตน์",
+    "operatorName": "นายวัชระ มานะดี",
+    "photos": []
+  },
+  "photos": []
+}
