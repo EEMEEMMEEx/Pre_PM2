@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610160221257-155b",
-  "savedAt": "2026-10-16T02:21:25.701Z",
+  "savedAt": "2026-10-16T02:26:53.344Z",
+  "updatedAt": "2026-10-16T02:26:53.344Z",
   "station": "หมู่ 7 ถ้ำแก้ว",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -22,14 +23,18 @@
     "contactPosition": "กำนัน",
     "contactVillage": "หมู่ 7 ถ้ำแก้ว",
     "contactPhone": "092-9538116",
-    "visitDate": "2026-10-08",
+    "visitDate": "2026-10-06",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
     "summary": "ไม่มี",
     "operatorName": "ชนะ ปักษีเลิศ",
     "informantName": "นายจักกฤช สุกใส",
-    "photos": []
+    "photos": [],
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "recordId": "PM-202610160221257-155b"
   },
   "photos": []
 }
