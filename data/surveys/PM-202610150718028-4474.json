@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150718028-4474",
-  "savedAt": "2026-10-15T07:24:27.525Z",
+  "savedAt": "2026-10-16T02:38:59.444Z",
+  "updatedAt": "2026-10-16T02:38:59.444Z",
   "station": "หมู่ 10 โคกหนองจอก",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -28,8 +29,12 @@
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
     "photos": [],
-    "recordId": "PM-202610150718028-4474"
+    "recordId": "PM-202610150718028-4474",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "summary": "",
+    "informantName": "นายวีรยุทธ์  ลำภูพวง"
   },
-  "photos": [],
-  "updatedAt": "2026-10-15T07:24:27.525Z"
+  "photos": []
 }
