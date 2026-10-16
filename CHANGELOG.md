@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.5] - 2026-10-16
+
+### Fixed
+- แก้ไข GitHub Actions deploy step (`deploy_r2.py`) ล้มเหลวด้วย exit code 1 เมื่อตัวแปร R2 ว่างเปล่า: เพิ่ม fallback สำหรับ `R2_ACCOUNT_ID` (`da30eb228f7c6f596214e6d5e0bef68d`) และ `R2_BUCKET` (`thaidimaru`) ผ่าน `secrets || vars || default` ป้องกัน endpoint กลายเป็น `https://.r2.cloudflarestorage.com` (`.github/workflows/deploy-r2.yml`).
+- ป้องกัน `deploy_r2.py` รับค่าสตริงว่าง `""` จาก CLI argument แล้วไปเขียนทับ default bucket / endpoint พร้อมเพิ่ม fallback และระบบ graceful skip เมื่อรันบน fork ที่ยังไม่ได้ตั้งค่า secret (`deploy_r2.py`, `.github/workflows/deploy-r2.yml`).
+
 ## [2.8.4] - 2026-10-16
 
 ### Fixed

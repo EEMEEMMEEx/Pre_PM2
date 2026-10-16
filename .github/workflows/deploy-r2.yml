@@ -56,11 +56,16 @@ jobs:
         env:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID || 'da30eb228f7c6f596214e6d5e0bef68d' }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'thaidimaru' }}
         run: |
+          if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "::warning title=R2 Deployment Skipped::Cloudflare R2 credentials (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) are not configured in repository secrets. Skipping R2 deployment."
+            exit 0
+          fi
           python deploy_r2.py \
             --key "$R2_ACCESS_KEY_ID" \
             --secret "$R2_SECRET_ACCESS_KEY" \
             --bucket "$R2_BUCKET" \
             --endpoint "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
