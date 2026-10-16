@@ -1,0 +1,31 @@
+{
+  "recordId": "PM-202610160134183-940c",
+  "savedAt": "2026-10-16T01:34:18.398Z",
+  "station": "หมู่ 7 หนองมะสังข์",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 7 หนองมะสังข์",
+    "province": "กาญจนบุรี",
+    "district": "ห้วยกระเจา",
+    "subdistrict": "วังไผ่",
+    "installationPlace": "ศาลาประชาคม",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายสุบรรณ แผนสมบูรณ์",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 7 หนองมะสังข์",
+    "contactPhone": "092-253-9502",
+    "visitDate": "2026-10-05",
+    "informantName": "นายสุบรรณ แผนสมบูรณ์",
+    "operatorName": "นายวัชระ มานะดี",
+    "photos": []
+  },
+  "photos": []
+}
