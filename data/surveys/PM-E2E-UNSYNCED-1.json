@@ -1,0 +1,13 @@
+{
+  "recordId": "PM-E2E-UNSYNCED-1",
+  "savedAt": "2026-10-16T09:00:00.000Z",
+  "station": "สถานีทดสอบ token ผิด",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "photos": [],
+  "fields": {
+    "station": "สถานีทดสอบ token ผิด",
+    "province": "กาญจนบุรี",
+    "permit": "อนุญาต"
+  }
+}
