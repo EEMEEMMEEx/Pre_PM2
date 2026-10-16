@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { fetchGitHubStatus, fetchOneDriveStatus } from '@/lib/api';
 import { GitHubTokenModal } from '@/components/auth/GitHubTokenModal';
 import { OneDriveSyncModal } from '@/components/auth/OneDriveSyncModal';
+import { toast } from '@/components/ui/toast';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 
 export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
@@ -46,6 +47,16 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
     window.addEventListener('nbtc-surveys-updated', handleUpdated);
     return () => window.removeEventListener('nbtc-surveys-updated', handleUpdated);
   }, [refreshGitHubStatus]);
+
+  // 401/403 จาก GitHub API -> แจ้งเตือนและเปิด GitHubTokenModal ให้ใส่ token ใหม่
+  useEffect(() => {
+    const handleTokenRequired = () => {
+      setIsTokenModalOpen(true);
+      toast.error('GitHub Token ไม่ถูกต้องหรือหมดอายุ — กรุณาใส่ Token ใหม่เพื่อซิงค์ข้อมูล');
+    };
+    window.addEventListener('nbtc-github-token-required', handleTokenRequired);
+    return () => window.removeEventListener('nbtc-github-token-required', handleTokenRequired);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {

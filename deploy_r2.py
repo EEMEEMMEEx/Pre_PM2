@@ -37,8 +37,11 @@ mimetypes.add_type("text/html", ".html")
 
 def load_credentials(args):
     """Load R2 credentials from CLI, environment, or r2-credentials.json."""
-    key_id = args.key or os.environ.get("R2_ACCESS_KEY_ID")
-    secret = args.secret or os.environ.get("R2_SECRET_ACCESS_KEY")
+    raw_key = (args.key or "").strip()
+    raw_secret = (args.secret or "").strip()
+
+    key_id = raw_key or os.environ.get("R2_ACCESS_KEY_ID", "").strip() or None
+    secret = raw_secret or os.environ.get("R2_SECRET_ACCESS_KEY", "").strip() or None
 
     if not key_id or not secret:
         if CREDENTIALS_FILE.exists():
@@ -211,12 +214,27 @@ if __name__ == "__main__":
     parser.add_argument("--key", help="R2 Access Key ID")
     parser.add_argument("--secret", help="R2 Secret Access Key")
     parser.add_argument("--bucket", default=DEFAULT_BUCKET, help=f"R2 Bucket name (default: {DEFAULT_BUCKET})")
-    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help=f"R2 Endpoint URL")
+    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help="R2 Endpoint URL")
+    parser.add_argument("--allow-skip", action="store_true", help="Skip deployment with warning if credentials are not configured")
 
     args = parser.parse_args()
     key_id, secret = load_credentials(args)
 
+    raw_bucket = (args.bucket or "").strip()
+    bucket = raw_bucket or os.environ.get("R2_BUCKET", "").strip() or DEFAULT_BUCKET
+
+    raw_endpoint = (args.endpoint or "").strip()
+    if not raw_endpoint or raw_endpoint.startswith("https://.r2"):
+        account_id = os.environ.get("R2_ACCOUNT_ID", "").strip() or DEFAULT_ACCOUNT_ID
+        endpoint = f"https://{account_id}.r2.cloudflarestorage.com"
+    else:
+        endpoint = raw_endpoint
+
     if not key_id or not secret:
+        if args.allow_skip or os.environ.get("R2_ALLOW_SKIP") == "1":
+            print("\n[WARN] Cloudflare R2 credentials (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY) not set. Skipping deployment.")
+            sys.exit(0)
+
         print("\n[ERROR] Missing R2 credentials!")
         print("Please provide credentials using one of the following methods:")
         print("  1) CLI Arguments: python deploy_r2.py --key <ACCESS_KEY_ID> --secret <SECRET_ACCESS_KEY>")
@@ -225,4 +243,5 @@ if __name__ == "__main__":
         print("     {\n       \"accessKeyId\": \"your-key-id\",\n       \"secretAccessKey\": \"your-secret-key\"\n     }\n")
         sys.exit(1)
 
-    deploy_frontend_to_r2(key_id, secret, args.bucket, args.endpoint)
+    deploy_frontend_to_r2(key_id, secret, bucket, endpoint)
+

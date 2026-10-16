@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Spotlight } from '@/components/ui/spotlight';
+import { ToastHost } from '@/components/ui/toast';
 import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
 import { DashboardView } from '@/components/dashboard/DashboardView';
@@ -98,6 +99,9 @@ export function App() {
           </div>
         </div>
       </div>
+
+      {/* Global toast notifications (PDF/delete/sync errors) */}
+      <ToastHost />
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
 import { deleteSurveys } from '@/lib/api';
+import { toast } from '@/components/ui/toast';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
@@ -161,17 +162,40 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
       const idsToDelete = deleteTarget.isBatch
         ? deleteTarget.ids
         : [deleteTarget.recordId];
-      await deleteSurveys(idsToDelete);
+      const result = await deleteSurveys(idsToDelete);
+
+      const failed = Array.isArray(result?.failed) ? result.failed : [];
+      const failedIds = new Set(failed.map((f) => f.id));
+      const deletedIds = Array.isArray(result?.deletedIds)
+        ? result.deletedIds
+        : idsToDelete.filter((id) => !failedIds.has(id));
+
+      // เอาเฉพาะรายการที่ลบสำเร็จออกจาก selection (รายการที่ลบไม่สำเร็จต้องคงไว้)
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        idsToDelete.forEach((id) => next.delete(id));
+        deletedIds.forEach((id) => next.delete(id));
         return next;
       });
+
+      if (failed.length > 0) {
+        console.error('[delete] failed records:', failed);
+        const reasonLines = failed
+          .slice(0, 5)
+          .map((f) => `• ${f.id} (${f.reason})`)
+          .join('\n');
+        const more = failed.length > 5 ? `\n...และอีก ${failed.length - 5} รายการ` : '';
+        toast.error(
+          `ลบไม่สำเร็จ ${failed.length}/${idsToDelete.length} รายการ\n${reasonLines}${more}`
+        );
+      } else {
+        toast.success(`ลบข้อมูลสำเร็จ ${deletedIds.length} รายการ`);
+      }
+
       setDeleteTarget(null);
       if (onRefresh) onRefresh();
     } catch (err) {
       console.error('Delete error:', err);
-      alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + err.message);
+      toast.error('เกิดข้อผิดพลาดในการลบข้อมูล: ' + (err?.message || 'unknown error'));
     } finally {
       setIsDeleting(false);
     }

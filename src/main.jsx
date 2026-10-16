@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
+import { APP_VERSION } from './version.js';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -16,7 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 if ('serviceWorker' in navigator && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register(`/sw.js?v=${APP_VERSION}`)
       .then((reg) => {
         console.log('[PWA] Service Worker registered successfully:', reg.scope);
       })

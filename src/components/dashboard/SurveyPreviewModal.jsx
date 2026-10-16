@@ -92,44 +92,55 @@ export function SurveyPreviewModal({
   }, [surveyData]);
 
   // Preload photos from GitHub raw JSON if missing base64 or running on static hosting
+  // NOTE: ต้องไม่ผูก dependency กับ resolvedPhotos ไม่งั้น setResolvedPhotos ข้างในจะ trigger ตัวเองวนไม่จบ
   useEffect(() => {
     if (!isOpen) return;
+    if (!recordId || recordId === '-') return;
+
     const hasMissingDataUrl = resolvedPhotos.some((p) => !p.dataUrl);
     const isStaticHost =
       typeof window !== 'undefined' &&
       window.location.hostname !== 'localhost' &&
       window.location.hostname !== '127.0.0.1';
+    if (!hasMissingDataUrl && !isStaticHost) return;
 
-    if (recordId && recordId !== '-' && (hasMissingDataUrl || isStaticHost)) {
-      const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
-      fetch(ghUrl)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.photos) && data.photos.length > 0) {
-            setResolvedPhotos((prev) =>
-              prev.map((photo, idx) => {
-                const match =
-                  data.photos[idx] ||
-                  data.photos.find((p) => p.name === photo.name) ||
-                  data.photos[0];
-                if (match && match.data) {
-                  const b64 = match.data.startsWith('data:')
-                    ? match.data
-                    : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
-                  return {
-                    ...photo,
-                    dataUrl: b64,
-                    url: b64,
-                  };
-                }
-                return photo;
-              })
-            );
-          }
-        })
-        .catch(() => {});
-    }
-  }, [isOpen, recordId, resolvedPhotos]);
+    const ghUrl = `https://raw.githubusercontent.com/Thaidimaru/Pre_PM2/main/data/surveys/${encodeURIComponent(recordId)}.json`;
+    let cancelled = false;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+    fetch(ghUrl, controller ? { signal: controller.signal } : undefined)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data || !Array.isArray(data.photos) || data.photos.length === 0) return;
+        setResolvedPhotos((prev) => {
+          let changed = false;
+          const next = prev.map((photo, idx) => {
+            if (photo.dataUrl) return photo;
+            const match =
+              data.photos[idx] ||
+              data.photos.find((p) => p.name === photo.name) ||
+              data.photos[0];
+            if (!match || !match.data) return photo;
+            const b64 = match.data.startsWith('data:')
+              ? match.data
+              : `data:${match.type || match.contentType || 'image/jpeg'};base64,${match.data}`;
+            changed = true;
+            return {
+              ...photo,
+              dataUrl: b64,
+              url: b64,
+            };
+          });
+          return changed ? next : prev;
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (controller) controller.abort();
+    };
+  }, [isOpen, recordId]);
 
   if (!isOpen) return null;
 
