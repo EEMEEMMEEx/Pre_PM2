@@ -1,7 +1,7 @@
 {
   "recordId": "PM-202610150648548-ad56",
-  "savedAt": "2026-10-16T01:56:13.787Z",
-  "updatedAt": "2026-10-16T01:56:13.787Z",
+  "savedAt": "2026-10-16T01:59:20.640Z",
+  "updatedAt": "2026-10-16T01:59:20.640Z",
   "station": "BS วังงิ้ว",
   "province": "พิจิตร",
   "permit": "อนุญาต",
@@ -15,16 +15,7 @@
     "contactName": "-",
     "contactPosition": "หน.ศสส.ปค",
     "contactPhone": "-",
-    "photos": [
-      {
-        "id": 122,
-        "name": "Original_BS-วังงิ้ว_20261006_084130.jpg",
-        "contentType": "image/jpeg",
-        "size": 0,
-        "url": "/photos/122",
-        "dataUrl": null
-      }
-    ],
+    "photos": [],
     "permit": "อนุญาต",
     "radioStatus": "ปกติ",
     "receiveStatus": "ปกติ",
@@ -45,14 +36,5 @@
     "informantName": "-",
     "recordId": "PM-202610150648548-ad56"
   },
-  "photos": [
-    {
-      "id": 122,
-      "name": "Original_BS-วังงิ้ว_20261006_084130.jpg",
-      "contentType": "image/jpeg",
-      "size": 0,
-      "url": "/photos/122",
-      "dataUrl": null
-    }
-  ]
+  "photos": []
 }
