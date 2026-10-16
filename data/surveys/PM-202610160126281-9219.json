@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610160126281-9219",
-  "savedAt": "2026-10-16T01:26:28.176Z",
+  "savedAt": "2026-10-16T01:26:49.288Z",
+  "updatedAt": "2026-10-16T01:26:49.288Z",
   "station": "หมู่ 11 วังสมบูรณ์",
   "province": "กาญจนบุรี",
   "permit": "อนุญาต",
@@ -24,7 +25,16 @@
     "contactPhone": "080-331-7971",
     "visitDate": "2026-10-05",
     "informantName": "นายประวิทย์ ใคร่ครวญ",
-    "photos": []
+    "photos": [],
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "siteCondition": "",
+    "antennaCondition": "",
+    "workObstacle": "",
+    "summary": "",
+    "operatorName": "นายวัชระ มานะดี",
+    "recordId": "PM-202610160126281-9219"
   },
   "photos": []
 }
