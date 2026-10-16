@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X, FileText } from 'lucide-react';
+import { Printer, X, FileText, Download, Loader2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 import { findStationByName } from '@/lib/api';
@@ -735,9 +735,59 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
   const firstStation = firstSurvey.station || firstSurvey.fields?.station || 'สถานี';
   const firstRecord = firstSurvey.recordId || firstSurvey.fields?.recordId || '';
 
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   // Native Print Action (triggers Chrome/Edge print dialog)
   const handlePrint = () => {
     window.print();
+  };
+
+  // Direct Client-Side PDF Generation and Download
+  const handleDownloadPdfDirect = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const html2canvas = (await import('html2canvas')).default;
+      const reportArea = document.getElementById('printable-report-area');
+      if (!reportArea) throw new Error('Report element not found');
+
+      const sheets = reportArea.querySelectorAll('.a4-sheet');
+      if (sheets.length === 0) throw new Error('No pages found');
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
+
+      for (let i = 0; i < sheets.length; i++) {
+        if (i > 0) pdf.addPage('a4', 'portrait');
+        const sheet = sheets[i];
+        const canvas = await html2canvas(sheet, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          windowWidth: 1200,
+        });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      }
+
+      const cleanName = (firstStation || 'STATION').replace(/[\s/\\?%*:|"<>]/g, '_');
+      const filename = isMulti
+        ? `SURVEY_REPORT_SELECTED_${activeSurveys.length}_STATIONS.pdf`
+        : `SURVEY_REPORT_${cleanName}_${firstRecord || ''}.pdf`;
+
+      pdf.save(filename);
+    } catch (err) {
+      console.warn('Direct PDF canvas generation failed, falling back to window.print():', err);
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return createPortal(
@@ -783,7 +833,7 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
                     <strong className={cn('font-bold', isDark ? 'text-cyan-300' : 'text-sky-700')}>
                       {activeSurveys.length} สถานี
                     </strong>{' '}
-                    | คลิก "พิมพ์เอกสาร (Print)" เพื่อพิมพ์หรือบันทึกเป็นไฟล์ PDF รวม
+                    | ดาวน์โหลดไฟล์ .pdf โดยตรง หรือพิมพ์/บันทึกผ่าน Print Dialog
                   </span>
                 ) : (
                   <span>
@@ -802,15 +852,42 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5 self-end sm:self-auto shrink-0">
-            {/* Button 1: Print Document */}
+            {/* Button 1: Direct PDF Download */}
+            <button
+              type="button"
+              disabled={isGeneratingPdf}
+              onClick={handleDownloadPdfDirect}
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-400 transition-all duration-200 cursor-pointer disabled:opacity-60"
+              title="ดาวน์โหลดไฟล์ .pdf โดยตรงลงเครื่องคอมพิวเตอร์"
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span>
+                {isGeneratingPdf
+                  ? 'กำลังสร้างไฟล์ PDF...'
+                  : isMulti
+                  ? `ดาวน์โหลด PDF (${activeSurveys.length})`
+                  : 'ดาวน์โหลด PDF'}
+              </span>
+            </button>
+
+            {/* Button 2: Print Document / Save as PDF via Browser */}
             <button
               type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-3.5 sm:px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/25 hover:from-blue-500 hover:to-cyan-400 transition-all duration-200 cursor-pointer"
-              title="พิมพ์เอกสารออกเครื่องพิมพ์ หรือบันทึกเป็น PDF ผ่านคำสั่งพิมพ์ของระบบ (Ctrl+P)"
+              className={cn(
+                'inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border px-3 sm:px-3.5 py-2 text-xs font-bold transition-all duration-200 cursor-pointer shadow-sm',
+                isDark
+                  ? 'border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
+                  : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-400'
+              )}
+              title="พิมพ์เอกสารออกเครื่องพิมพ์ หรือบันทึกเป็น PDF ทางการผ่านหน้าต่างพิมพ์ (Ctrl+P)"
             >
               <Printer className="h-4 w-4" />
-              <span>{isMulti ? `พิมพ์ PDF ที่เลือก (${activeSurveys.length})` : 'พิมพ์เอกสาร (Print)'}</span>
+              <span>พิมพ์ / บันทึก PDF</span>
             </button>
 
             {/* Close Modal Button */}

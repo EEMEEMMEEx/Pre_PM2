@@ -132,9 +132,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
     const listToExport = customList
       ? customList
       : selectedIds.size > 0
-      ? recent.filter((r) => selectedIds.has(r.recordId))
-      : filteredSurveys;
-    if (listToExport.length === 0) return;
+      ? recent.filter((r) => selectedIds.has(r.recordId) || (r.fields?.recordId && selectedIds.has(r.fields.recordId)))
+      : filteredSurveys.length > 0
+      ? filteredSurveys
+      : recent;
+    if (!listToExport || listToExport.length === 0) return;
     const filename =
       selectedIds.size > 0
         ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.xlsx`
@@ -145,9 +147,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
   const handleExportBatchPdf = () => {
     const listToExport =
       selectedIds.size > 0
-        ? recent.filter((r) => selectedIds.has(r.recordId))
-        : filteredSurveys;
-    if (listToExport.length === 0) return;
+        ? recent.filter((r) => selectedIds.has(r.recordId) || (r.fields?.recordId && selectedIds.has(r.fields.recordId)))
+        : filteredSurveys.length > 0
+        ? filteredSurveys
+        : recent;
+    if (!listToExport || listToExport.length === 0) return;
     setBatchReportSurveys(listToExport);
   };
 
@@ -276,17 +280,9 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Export PDF Button (All or Selected) */}
-            <a
-              href={
-                selectedIds.size > 0
-                  ? `/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`
-                  : '/api/export-pdf'
-              }
-              download={
-                selectedIds.size > 0
-                  ? `SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`
-                  : `SURVEY_REPORTS_ALL_${recent.length || 63}.pdf`
-              }
+            <button
+              type="button"
+              onClick={handleExportBatchPdf}
               className={cn(
                 'group inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
                 selectedIds.size > 0
@@ -297,8 +293,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               )}
               title={
                 selectedIds.size > 0
-                  ? `ดาวน์โหลดไฟล์ PDF ทางการสำหรับ ${selectedIds.size} สถานีที่เลือก`
-                  : `ดาวน์โหลดรายงานผลการสำรวจทางการทั้งหมด (PDF รวม ${recent.length} สถานี พร้อมรูปถ่าย)`
+                  ? `เปิดพรีวิวและดาวน์โหลด/พิมพ์ PDF รายงานทางการสำหรับ ${selectedIds.size} สถานีที่เลือก`
+                  : `เปิดพรีวิวและดาวน์โหลด/พิมพ์ PDF รายงานทางการทั้งหมด (${recent.length} สถานี พร้อมรูปถ่าย)`
               }
             >
               <FileDown className="h-3.5 w-3.5" />
@@ -307,7 +303,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   ? `Export PDF ที่เลือก (${selectedIds.size})`
                   : `Export PDF ทั้งหมด (${recent.length})`}
               </span>
-            </a>
+            </button>
 
             {/* Export Excel Button */}
             <button
@@ -492,26 +488,15 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Direct PDF Download from Server */}
-              <a
-                href={`/api/export-pdf?ids=${encodeURIComponent(Array.from(selectedIds).join(','))}`}
-                download={`SURVEY_SELECTED_${selectedIds.size}_STATIONS.pdf`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md hover:from-blue-500 hover:to-cyan-400 cursor-pointer transition-all"
-                title="ดาวน์โหลดไฟล์ PDF รวมสำหรับสถานีที่เลือกโดยตรง"
-              >
-                <FileDown className="h-3.5 w-3.5" />
-                <span>ดาวน์โหลด PDF ({selectedIds.size})</span>
-              </a>
-
-              {/* Printable A4 Modal (Batch Print) */}
+              {/* Batch PDF Export / Print */}
               <button
                 type="button"
                 onClick={handleExportBatchPdf}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-md cursor-pointer transition-all border border-indigo-500/40"
-                title="เปิดพรีวิวและพิมพ์เอกสาร A4 ทางการรวมทุกรายการที่เลือก"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md hover:from-blue-500 hover:to-cyan-400 cursor-pointer transition-all border border-cyan-400/40"
+                title="เปิดพรีวิวและดาวน์โหลด/พิมพ์เอกสารรายงาน A4 ทางการ (PDF) สำหรับสถานีที่เลือก"
               >
-                <Printer className="h-3.5 w-3.5" />
-                <span>พิมพ์ / พรีวิว A4 ({selectedIds.size})</span>
+                <FileDown className="h-3.5 w-3.5" />
+                <span>Export PDF ที่เลือก ({selectedIds.size})</span>
               </button>
 
               {/* Batch Excel Export */}
