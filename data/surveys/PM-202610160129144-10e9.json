@@ -1,0 +1,31 @@
+{
+  "recordId": "PM-202610160129144-10e9",
+  "savedAt": "2026-10-16T01:29:14.424Z",
+  "station": "หมู่ 3 นาตามิ่ง",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 3 นาตามิ่ง",
+    "province": "กาญจนบุรี",
+    "district": "ห้วยกระเจา",
+    "subdistrict": "วังไผ่",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "ธีรวัจน์ ปทุมสูต",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 3 นาตามิ่ง",
+    "contactPhone": "081-944-4316",
+    "visitDate": "2026-10-05",
+    "informantName": "นายธีรวัจน์ ปทุมสูต",
+    "operatorName": "นายวัชระ มานะดี",
+    "photos": []
+  },
+  "photos": []
+}
