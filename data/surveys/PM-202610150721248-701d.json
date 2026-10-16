@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150721248-701d",
-  "savedAt": "2026-10-15T07:24:58.612Z",
+  "savedAt": "2026-10-16T02:38:01.188Z",
+  "updatedAt": "2026-10-16T02:38:01.188Z",
   "station": "หมู่ 1 บ้านลาดแค",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -28,8 +29,12 @@
     "workObstacle": "ไม่มี",
     "operatorName": "ชนะ ปักษีเลิศ",
     "photos": [],
-    "recordId": "PM-202610150721248-701d"
+    "recordId": "PM-202610150721248-701d",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": "",
+    "summary": "",
+    "informantName": "นายภูวนารถ คำเล็ก"
   },
-  "photos": [],
-  "updatedAt": "2026-10-15T07:24:58.612Z"
+  "photos": []
 }
