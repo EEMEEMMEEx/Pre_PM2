@@ -705,6 +705,9 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
  * Supports both single station report and multi-station batch printable report.
  */
 export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = [] }) {
+  const { isDark } = useTheme();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   // Manage body class for zero-offset print layout and scroll lock
   useEffect(() => {
     if (isOpen) {
@@ -717,10 +720,6 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     };
   }, [isOpen]);
 
-  const { isDark } = useTheme();
-
-  if (!isOpen) return null;
-
   const activeSurveys =
     Array.isArray(surveys) && surveys.length > 0
       ? surveys
@@ -728,14 +727,10 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
       ? [surveyData]
       : [];
 
-  if (activeSurveys.length === 0) return null;
-
   const isMulti = activeSurveys.length > 1;
-  const firstSurvey = activeSurveys[0];
+  const firstSurvey = activeSurveys[0] || {};
   const firstStation = firstSurvey.station || firstSurvey.fields?.station || 'สถานี';
   const firstRecord = firstSurvey.recordId || firstSurvey.fields?.recordId || '';
-
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Native Print Action (triggers Chrome/Edge print dialog)
   const handlePrint = () => {
@@ -790,10 +785,12 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     }
   };
 
+  if (!isOpen || activeSurveys.length === 0) return null;
+
   return createPortal(
     <div
       id="survey-report-modal-portal"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:static print:overflow-visible print:block"
     >
       {/* Modal Container */}
       <div
@@ -933,3 +930,5 @@ export function SurveyReportModal({ isOpen, onClose, surveyData = {}, surveys = 
     document.body
   );
 }
+
+export default SurveyReportModal;

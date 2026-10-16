@@ -32,8 +32,7 @@ import { cn } from '@/lib/utils';
 
 export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh }) {
   const { isDark } = useTheme();
-  const [selectedReport, setSelectedReport] = useState(null);
-  const [batchReportSurveys, setBatchReportSurveys] = useState(null);
+  const [reportSurveys, setReportSurveys] = useState(null);
   const [selectedPreview, setSelectedPreview] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -152,7 +151,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         ? filteredSurveys
         : recent;
     if (!listToExport || listToExport.length === 0) return;
-    setBatchReportSurveys(listToExport);
+    setReportSurveys(listToExport);
   };
 
   const handleExecuteDelete = async () => {
@@ -903,7 +902,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           {/* Export Official A4 Button */}
                           <button
                             type="button"
-                            onClick={() => setSelectedReport(item)}
+                            onClick={() => setReportSurveys([item])}
                             className={cn(
                               'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
                               isDark
@@ -1070,7 +1069,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         onClose={() => setSelectedPreview(null)}
         surveyData={selectedPreview || {}}
         onOpenOfficialReport={(reportData) => {
-          setSelectedReport(reportData);
+          setSelectedPreview(null);
+          setReportSurveys([reportData]);
         }}
         onEdit={(item) => {
           setSelectedPreview(null);
@@ -1083,18 +1083,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         }}
       />
 
-      {/* Single Survey Official A4 Printable Report Modal */}
+      {/* Unified Official A4 Printable Report Modal */}
       <SurveyReportModal
-        isOpen={Boolean(selectedReport)}
-        onClose={() => setSelectedReport(null)}
-        surveyData={selectedReport || {}}
-      />
-
-      {/* Batch Survey Official A4 Printable Report Modal */}
-      <SurveyReportModal
-        isOpen={Boolean(batchReportSurveys && batchReportSurveys.length > 0)}
-        onClose={() => setBatchReportSurveys(null)}
-        surveys={batchReportSurveys || []}
+        isOpen={Boolean(reportSurveys && reportSurveys.length > 0)}
+        onClose={() => setReportSurveys(null)}
+        surveys={reportSurveys || []}
       />
 
       {/* Delete Confirmation Dialog */}
