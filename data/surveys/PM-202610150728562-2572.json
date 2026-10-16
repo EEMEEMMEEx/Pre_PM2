@@ -1,6 +1,7 @@
 {
   "recordId": "PM-202610150728562-2572",
-  "savedAt": "2026-10-15T07:28:56.221Z",
+  "savedAt": "2026-10-16T02:11:27.311Z",
+  "updatedAt": "2026-10-16T02:11:27.311Z",
   "station": "หมู่ 2 ดงลาน",
   "province": "เพชรบูรณ์",
   "permit": "อนุญาต",
@@ -23,15 +24,17 @@
     "contactVillage": "หมู่ 2 ดงลาน",
     "contactPhone": "084-6195706",
     "visitDate": "2026-10-09",
-    "accessLimit": "ไม่มี",
+    "accessLimit": "",
     "userProblem": "ไม่มี",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
-    "workObstacle": "ปกติ",
+    "workObstacle": "ไม่มี",
     "summary": "ไม่มี",
-    "informantName": "นายชนะ ปักษีเลิศ",
-    "operatorName": "นายชนะ ปักษีเลิศ",
-    "photos": []
+    "informantName": "นายสุนทร พิมใจ",
+    "operatorName": "ชนะ ปักษีเลิศ",
+    "photos": [],
+    "visitTime": "",
+    "recordId": "PM-202610150728562-2572"
   },
   "photos": []
 }
