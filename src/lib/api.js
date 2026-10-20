@@ -286,7 +286,7 @@ export function deleteLocalSurvey(recordId) {
   }
 }
 
-function mergeDashboardWithLocal(serverData, localSurveys) {
+function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) {
   const deletedIds = getDeletedSurveyIds();
   const base = serverData || {
     updatedAt: new Date().toISOString(),
@@ -296,34 +296,42 @@ function mergeDashboardWithLocal(serverData, localSurveys) {
   };
 
   const surveyMap = new Map();
-  const serverRecent = Array.isArray(base.recent) ? base.recent : [];
+  const inputList = Array.isArray(localSurveys) ? localSurveys : (base.recent || []);
 
-  // Register server surveys first (skip deleted)
-  for (const s of serverRecent) {
+  for (const s of inputList) {
     if (!s) continue;
-    if (s.recordId && deletedIds.has(s.recordId)) continue;
-    if (s.recordId) {
-      surveyMap.set(s.recordId, s);
-    } else if (s.station) {
-      surveyMap.set(`${s.station}_${s.savedAt || ''}`, s);
-    }
-  }
+    const recId = s.recordId;
+    if (recId && deletedIds.has(recId)) continue;
 
-  // Merge client local surveys (skip deleted)
-  for (const ls of localSurveys) {
-    if (!ls) continue;
-    if (ls.recordId && deletedIds.has(ls.recordId)) continue;
-    const key = ls.recordId || `${ls.station}_${ls.savedAt || ''}`;
+    // Prune surveys that were confirmed deleted from GitHub (unless they are unsynced pending local drafts)
+    if (recId && currentGhIds && currentGhIds.size > 0 && !currentGhIds.has(recId)) {
+      if (s.githubSynced || (!s.githubSyncing && !s._isLocalDraft)) {
+        continue;
+      }
+    }
+
+    const key = recId || `${s.station}_${s.savedAt || ''}`;
     if (!surveyMap.has(key)) {
-      surveyMap.set(key, ls);
+      surveyMap.set(key, s);
     } else {
       const existing = surveyMap.get(key);
-      surveyMap.set(key, {
-        ...existing,
-        ...ls,
-        fields: { ...(existing.fields || {}), ...(ls.fields || {}) },
-        photos: ls.photos && ls.photos.length > 0 ? ls.photos : existing.photos || [],
-      });
+      const isSLocalSynced = s.githubSynced && !s.githubSyncing;
+      if (isSLocalSynced) {
+        // If s was already synced, keep existing fields (which could be fresher from GitHub)
+        surveyMap.set(key, {
+          ...s,
+          ...existing,
+          fields: { ...(s.fields || {}), ...(existing.fields || {}) },
+          photos: (existing.photos && existing.photos.length > 0) ? existing.photos : (s.photos || []),
+        });
+      } else {
+        surveyMap.set(key, {
+          ...existing,
+          ...s,
+          fields: { ...(existing.fields || {}), ...(s.fields || {}) },
+          photos: (s.photos && s.photos.length > 0) ? s.photos : (existing.photos || []),
+        });
+      }
     }
   }
 
@@ -420,34 +428,48 @@ export async function fetchDashboardData(options = {}) {
     console.warn('Failed to fetch dashboard metrics from server:', err);
   }
 
-  const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
-  const knownRecordIds = new Set([
-    ...(serverData?.recent || []).map((s) => s.recordId),
-    ...localSurveys.map((s) => s.recordId),
-    ...Array.from(deletedIds),
-  ]);
-
-  // On static hosting (e.g. Cloudflare R2: r2.dev), or when server is unavailable,
-  // actively check GitHub to fetch and merge surveys entered by other users!
-  let ghSurveys = [];
-  if (isStaticHost() || !serverData || !Array.isArray(serverData.recent)) {
-    try {
-      ghSurveys = await fetchSurveysFromGitHubClient(knownRecordIds, force);
-      if (Array.isArray(ghSurveys)) {
-        ghSurveys = ghSurveys.filter((s) => s && !deletedIds.has(s.recordId));
-      }
-    } catch (err) {
-      console.warn('Could not fetch latest surveys from GitHub:', err);
-    }
+  // Pre-seed client in-memory cache if serverData has recent entries
+  if (serverData && Array.isArray(serverData.recent)) {
+    seedClientGhSurveysFromSnapshot(serverData.recent);
   }
+
+  // Always attempt to fetch latest live surveys from GitHub so all devices stay in sync
+  let ghSurveys = [];
+  let currentGhIds = null;
+  try {
+    ghSurveys = await fetchSurveysFromGitHubClient(new Set(), force);
+    currentGhIds = getLatestGitHubRecordIds();
+  } catch (err) {
+    console.warn('Could not fetch latest surveys from GitHub:', err);
+  }
+
+  // If we know the live set of GitHub files, prune deleted records from serverData and localSurveys
+  if (currentGhIds && currentGhIds.size > 0) {
+    if (serverData && Array.isArray(serverData.recent)) {
+      serverData.recent = serverData.recent.filter((s) => s && currentGhIds.has(s.recordId));
+    }
+    try {
+      const localSurveys = getLocalSurveys();
+      const prunedLocal = localSurveys.filter((s) => {
+        if (!s || !s.recordId) return false;
+        if (s.githubSynced && !currentGhIds.has(s.recordId)) return false;
+        return !deletedIds.has(s.recordId);
+      });
+      if (prunedLocal.length !== localSurveys.length) {
+        localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(prunedLocal));
+      }
+    } catch (e) {}
+  }
+
+  const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
 
   const allCombinedSurveys = [
     ...(serverData?.recent || []),
-    ...ghSurveys,
+    ...(Array.isArray(ghSurveys) ? ghSurveys : []),
     ...localSurveys,
   ];
 
-  return mergeDashboardWithLocal(serverData, allCombinedSurveys);
+  return mergeDashboardWithLocal(serverData, allCombinedSurveys, currentGhIds);
 }
 
 export const THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
@@ -645,6 +667,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
   }
 
   saveLocalSurvey(localSurvey);
+  registerClientSurvey(localSurvey);
 
   let finalResult = serverResult || {
     saved: true,
@@ -770,8 +793,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
   }
 
   saveLocalSurvey(localSurvey);
-
-  clientGhSurveysCache = null;
+  registerClientSurvey(localSurvey);
 
   window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'update', recordId } }));
 
@@ -825,13 +847,11 @@ export async function deleteSurveys(recordIds) {
   }
 
   // 3. Invalidate client GitHub cache and commit ETag/SHA
-  clientGhSurveysCache = null;
+  for (const id of ids) {
+    unregisterClientSurvey(id);
+  }
   lastSurveysCommitSha = null;
   lastSurveysCommitETag = null;
-  for (const id of ids) {
-    knownFileShas.delete(id);
-    knownFileContents.delete(id);
-  }
 
   let serverResult = null;
 
@@ -904,14 +924,113 @@ export async function deleteSurveys(recordIds) {
   };
 }
 
+const GH_FILE_SHAS_KEY = 'nbtc_pre_pm_gh_file_shas';
+
+function getStoredFileShas() {
+  try {
+    if (typeof window === 'undefined') return new Map();
+    const raw = localStorage.getItem(GH_FILE_SHAS_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw);
+    return new Map(Object.entries(parsed || {}));
+  } catch (e) {
+    return new Map();
+  }
+}
+
+function saveStoredFileShas(map) {
+  try {
+    if (typeof window === 'undefined') return;
+    const obj = {};
+    for (const [k, v] of map.entries()) {
+      if (v) obj[k] = v;
+    }
+    localStorage.setItem(GH_FILE_SHAS_KEY, JSON.stringify(obj));
+  } catch (e) {}
+}
+
+const knownFileShas = getStoredFileShas();
+// hash ของเนื้อหาที่เราเขียน/ยืนยันล่าสุดต่อ recordId -> ใช้ dedupe โดยไม่ต้อง GET ซ้ำ
+const knownFileContents = new Map();
+const clientGhSurveysMap = new Map();
+let latestGitHubRecordIds = new Set();
 let clientGhSurveysCache = null;
 let clientGhLastFetchTime = 0;
 let lastSurveysCommitSha = null;
 let lastSurveysCommitETag = null;
-const knownFileShas = new Map();
-// hash ของเนื้อหาที่เราเขียน/ยืนยันล่าสุดต่อ recordId -> ใช้ dedupe โดยไม่ต้อง GET ซ้ำ
-const knownFileContents = new Map();
 const CLIENT_GH_CACHE_TTL = 10000;
+
+export function getLatestGitHubRecordIds() {
+  return latestGitHubRecordIds;
+}
+
+export function seedClientGhSurveysFromSnapshot(recentList = []) {
+  if (!Array.isArray(recentList)) return;
+  for (const s of recentList) {
+    if (s && s.recordId && !clientGhSurveysMap.has(s.recordId)) {
+      clientGhSurveysMap.set(s.recordId, s);
+    }
+  }
+  clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+}
+
+export function registerClientSurvey(survey) {
+  if (!survey || !survey.recordId) return;
+  clientGhSurveysMap.set(survey.recordId, survey);
+  latestGitHubRecordIds.add(survey.recordId);
+  clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+}
+
+export function unregisterClientSurvey(recordId) {
+  if (!recordId) return;
+  const id = String(recordId);
+  clientGhSurveysMap.delete(id);
+  latestGitHubRecordIds.delete(id);
+  knownFileShas.delete(id);
+  knownFileContents.delete(id);
+  saveStoredFileShas(knownFileShas);
+  clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+}
+
+function formatRemoteSurveyItem(s, sha = null) {
+  if (!s || !s.recordId) return null;
+  const rawPhotos = Array.isArray(s.photos) && s.photos.length > 0
+    ? s.photos
+    : Array.isArray(s.fields?.photos) && s.fields.photos.length > 0
+    ? s.fields.photos
+    : [];
+
+  const formattedPhotos = rawPhotos.map((p, idx) => {
+    let dataUrl = p.dataUrl || null;
+    if (!dataUrl && p.data) {
+      dataUrl = p.data.startsWith('data:')
+        ? p.data
+        : `data:${p.type || p.contentType || 'image/jpeg'};base64,${p.data}`;
+    }
+    return {
+      ...p,
+      id: p.id || idx + 1,
+      name: p.name || `photo_${idx + 1}.jpg`,
+      contentType: p.type || p.contentType || 'image/jpeg',
+      dataUrl,
+      url: dataUrl || p.url || `/api/photos/${p.id || encodeURIComponent(p.name || '')}`,
+    };
+  });
+
+  const enrichedFields = enrichSurveyFields(s);
+  return {
+    ...s,
+    station: s.station || enrichedFields.station,
+    province: s.province || enrichedFields.province,
+    permit: s.permit || (enrichedFields.permit === 'on' ? 'อนุญาต' : (enrichedFields.permit || 'ยังไม่ระบุ')),
+    photos: formattedPhotos,
+    fields: {
+      ...enrichedFields,
+      photos: formattedPhotos,
+    },
+    _ghSha: sha || s._ghSha || null,
+  };
+}
 
 export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
   const now = Date.now();
@@ -926,13 +1045,14 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
     }
 
     const commitRes = await fetch(
-      `https://api.github.com/repos/Thaidimaru/Pre_PM2/commits?path=data/surveys&per_page=1&_t=${now}`,
+      `https://api.github.com/repos/${GITHUB_REPO}/commits?path=data/surveys&per_page=1&_t=${now}`,
       { headers: commitHeaders, cache: 'no-store' }
     ).catch(() => null);
 
     // If 304 Not Modified, nothing has changed on GitHub!
-    if (commitRes && commitRes.status === 304 && clientGhSurveysCache) {
+    if (commitRes && commitRes.status === 304 && clientGhSurveysMap.size > 0 && !force) {
       clientGhLastFetchTime = now;
+      clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
       return clientGhSurveysCache;
     }
 
@@ -942,107 +1062,121 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
       const commits = await commitRes.json().catch(() => []);
       const latestSha = commits[0]?.sha;
 
-      if (latestSha && latestSha === lastSurveysCommitSha && clientGhSurveysCache && !force) {
+      if (latestSha && latestSha === lastSurveysCommitSha && clientGhSurveysMap.size > 0 && !force) {
         clientGhLastFetchTime = now;
+        clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
         return clientGhSurveysCache;
       }
       if (latestSha) lastSurveysCommitSha = latestSha;
     }
 
     // 2. Fetch directory items when commit changed or first run
-    const res = await fetch(`https://api.github.com/repos/Thaidimaru/Pre_PM2/contents/data/surveys?ref=main&_t=${now}`, {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys?ref=${GITHUB_BRANCH}&_t=${now}`, {
       headers: { Accept: 'application/vnd.github+json', ...authHeaders },
       cache: 'no-store',
     });
-    if (!res.ok) return clientGhSurveysCache || [];
+    if (!res.ok) {
+      clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+      return clientGhSurveysCache;
+    }
     const items = await res.json();
-    if (!Array.isArray(items)) return clientGhSurveysCache || [];
+    if (!Array.isArray(items)) {
+      clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+      return clientGhSurveysCache;
+    }
 
     const jsonFiles = items.filter((f) => f.type === 'file' && f.name.endsWith('.json') && !f.name.startsWith('.'));
     jsonFiles.sort((a, b) => b.name.localeCompare(a.name));
 
     const currentGhIds = new Set(jsonFiles.map((f) => f.name.replace(/\.json$/, '')));
+    latestGitHubRecordIds = currentGhIds;
 
-    // Download files that are NOT in knownRecordIds OR whose file SHA has changed (modified surveys)
-    const filesToFetch = jsonFiles.filter((f) => {
-      const recId = f.name.replace(/\.json$/, '');
-      const shaChanged = f.sha && knownFileShas.has(recId) && knownFileShas.get(recId) !== f.sha;
-      return !knownRecordIds.has(recId) || shaChanged;
-    });
-
-    // Record latest SHAs (ถ้า sha เปลี่ยน ให้ล้าง content cache ของ record นั้น)
-    for (const f of jsonFiles) {
-      const recId = f.name.replace(/\.json$/, '');
-      if (!f.sha) continue;
-      const previousSha = knownFileShas.get(recId);
-      if (previousSha && previousSha !== f.sha) {
+    // Prune deleted items from in-memory cache
+    for (const recId of Array.from(clientGhSurveysMap.keys())) {
+      if (!currentGhIds.has(recId)) {
+        clientGhSurveysMap.delete(recId);
+        knownFileShas.delete(recId);
         knownFileContents.delete(recId);
       }
-      knownFileShas.set(recId, f.sha);
     }
 
-    // Filter out deleted items from local cache
-    let updatedCache = (clientGhSurveysCache || []).filter((s) => currentGhIds.has(s.recordId));
+    // Download files that:
+    // - Are not in clientGhSurveysMap
+    // - OR whose Git blob SHA has changed (modified on another device)
+    // - OR force is requested
+    const filesToFetch = jsonFiles.filter((f) => {
+      const recId = f.name.replace(/\.json$/, '');
+      const hasSurvey = clientGhSurveysMap.has(recId);
+      const cachedSha = knownFileShas.get(recId);
+      const shaChanged = !cachedSha || (f.sha && cachedSha !== f.sha);
+      return !hasSurvey || shaChanged || force;
+    });
 
     if (filesToFetch.length === 0) {
-      clientGhSurveysCache = updatedCache;
+      saveStoredFileShas(knownFileShas);
       clientGhLastFetchTime = now;
+      clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
       return clientGhSurveysCache;
     }
 
-    const rawSurveys = (
-      await Promise.all(
-        filesToFetch.slice(0, 200).map(async (file) => {
+    // Download files in chunks with auth and cache-busting
+    const CHUNK_SIZE = 25;
+    for (let i = 0; i < filesToFetch.length; i += CHUNK_SIZE) {
+      const chunk = filesToFetch.slice(i, i + CHUNK_SIZE);
+      const rawChunk = await Promise.all(
+        chunk.map(async (file) => {
           try {
-            const fileRes = await fetch(file.download_url);
-            if (fileRes.ok) return await fileRes.json();
-          } catch {}
+            const fetchUrl = file.download_url
+              ? `${file.download_url}${file.download_url.includes('?') ? '&' : '?'}_t=${now}`
+              : `https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys/${file.name}?ref=${GITHUB_BRANCH}&_t=${now}`;
+            const fileHeaders = {
+              Accept: 'application/vnd.github+json',
+              ...(ghAuthToken ? { Authorization: `Bearer ${ghAuthToken}` } : {}),
+            };
+            const fileRes = await fetch(fetchUrl, { headers: fileHeaders, cache: 'no-store' });
+            if (fileRes.ok) {
+              const data = await fileRes.json();
+              if (data && data.content && !data.recordId) {
+                try {
+                  const decoded = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\s+/g, '')))));
+                  return formatRemoteSurveyItem(decoded, file.sha);
+                } catch {}
+              }
+              return formatRemoteSurveyItem(data, file.sha);
+            }
+          } catch (e) {
+            console.warn('Failed to download survey:', file.name, e);
+          }
           return null;
         })
-      )
-    ).filter((s) => s && s.recordId);
+      );
 
-    const newSurveys = rawSurveys.map((s) => {
-      const rawPhotos = Array.isArray(s.photos) && s.photos.length > 0
-        ? s.photos
-        : Array.isArray(s.fields?.photos) && s.fields.photos.length > 0
-        ? s.fields.photos
-        : [];
-
-      const formattedPhotos = rawPhotos.map((p, idx) => {
-        let dataUrl = p.dataUrl || null;
-        if (!dataUrl && p.data) {
-          dataUrl = p.data.startsWith('data:')
-            ? p.data
-            : `data:${p.type || p.contentType || 'image/jpeg'};base64,${p.data}`;
+      for (const item of rawChunk) {
+        if (item && item.recordId) {
+          clientGhSurveysMap.set(item.recordId, item);
+          if (item._ghSha) {
+            knownFileShas.set(item.recordId, item._ghSha);
+          }
         }
-        return {
-          ...p,
-          id: p.id || idx + 1,
-          name: p.name || `photo_${idx + 1}.jpg`,
-          contentType: p.type || p.contentType || 'image/jpeg',
-          dataUrl,
-          url: dataUrl || p.url || `/api/photos/${p.id || encodeURIComponent(p.name || '')}`,
-        };
-      });
+      }
+    }
 
-      return {
-        ...s,
-        photos: formattedPhotos,
-        fields: {
-          ...(s.fields || {}),
-          photos: formattedPhotos,
-        },
-      };
-    });
+    // Set SHAs for all verified files
+    for (const f of jsonFiles) {
+      const recId = f.name.replace(/\.json$/, '');
+      if (f.sha && clientGhSurveysMap.has(recId)) {
+        knownFileShas.set(recId, f.sha);
+      }
+    }
 
-    const combined = [...(clientGhSurveysCache || []), ...newSurveys];
-    clientGhSurveysCache = combined;
+    saveStoredFileShas(knownFileShas);
     clientGhLastFetchTime = now;
-    return combined;
+    clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+    return clientGhSurveysCache;
   } catch (e) {
     console.warn('fetchSurveysFromGitHubClient error:', e);
-    return clientGhSurveysCache || [];
+    clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+    return clientGhSurveysCache;
   }
 }
 

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.9] - 2026-10-20
+
+### Fixed
+
+- แก้ไขปัญหาข้อมูลไม่ยอมซิงค์ให้เท่ากันเมื่อกรอก แก้ไข หรือลบข้อมูลจากเครื่องอื่น (`src/lib/api.js`, `database.py`):
+  - **ซิงค์การลบข้อมูลข้ามเครื่อง (Delete Synchronization)**: ยึดรายการไฟล์บน GitHub (`currentGhIds`) เป็น Single Source of Truth; รายการใดที่อยู่ใน R2 static snapshot หรือ `localStorage` แต่ไม่มีไฟล์อยู่บน GitHub แล้ว จะถูกตัดออกจาก Dashboard ทันทีและล้างออกจากแคช ป้องกันปัญหารายการที่ถูกลบไปแล้วฟื้นคืนชีพกลับมาแสดงซ้ำ
+  - **ตรวจจับและซิงค์การแก้ไขข้อมูลข้ามเครื่อง (Edit Detection via Git SHA)**: บันทึกและเปรียบเทียบ Git Blob SHA (`nbtc_pre_pm_gh_file_shas`) เพื่อตรวจจับไฟล์ที่ถูกแก้ไขบนเครื่องอื่นและดึงข้อมูลเวอร์ชันใหม่ล่าสุดมาอัปเดตทันที พร้อมปรับการ Merge ให้ข้อมูลจริงจาก GitHub มีความสำคัญเหนือแคชเก่าของเบราว์เซอร์
+  - **แก้ปัญหาการดึงข้อมูลและ Rate Limit**: เพิ่มการแนบ Authorization Header และ Cache-Busting (`_t=...`) ในการดาวน์โหลดไฟล์สำรวจจาก GitHub ป้องกันการติดแคช 5 นาทีของ CDN และ Rate limit
+  - **เปิดการซิงค์ข้อมูลสดบน Localhost / Dev**: ปรับ `fetchDashboardData` ให้สามารถเรียกซิงค์ไฟล์สำรวจล่าสุดจาก GitHub ได้ในทุกสภาพแวดล้อม
+  - **อัปเดต SQLite Seeding ใน Backend**: ปรับ `_seed_surveys_from_json` ใน `database.py` ให้ใช้ `ON CONFLICT(record_id) DO UPDATE` และล้างข้อมูลที่ถูกลบออกจาก SQLite โดยอัตโนมัติ
+
 ## [2.8.8] - 2026-10-20
 
 ### Changed

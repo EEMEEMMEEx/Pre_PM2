@@ -313,21 +313,18 @@ class DatabaseService:
             except Exception as e:
                 print(f"Warning: Failed to seed {path.name}: {e}")
 
-        # 2. Seed from all survey JSON directories (Git data/surveys and OneDrive surveys)
-        survey_dirs = []
+        # 2. Seed from survey JSON directories (Git data/surveys is authoritative SOT)
         git_surveys_dir = AppConfig.ROOT / "data" / "surveys"
-        if git_surveys_dir.exists():
-            survey_dirs.append(git_surveys_dir)
-        if AppConfig.DATA_DIR != AppConfig.ROOT:
-            od_surveys_dir = AppConfig.DATA_DIR / "surveys"
+        od_surveys_dir = AppConfig.DATA_DIR / "surveys" if AppConfig.DATA_DIR != AppConfig.ROOT else None
+        if od_surveys_dir:
             od_surveys_dir.mkdir(parents=True, exist_ok=True)
-            if od_surveys_dir not in survey_dirs:
-                survey_dirs.append(od_surveys_dir)
 
+        primary_dir = git_surveys_dir if git_surveys_dir.exists() else od_surveys_dir
         seen_files = set()
-        for s_dir in survey_dirs:
-            for path in sorted(s_dir.glob("*.json")):
-                if path.name in seen_files:
+
+        if primary_dir and primary_dir.exists():
+            for path in sorted(primary_dir.glob("*.json")):
+                if not path.is_file() or path.name.startswith("."):
                     continue
                 seen_files.add(path.name)
                 try:
@@ -338,10 +335,12 @@ class DatabaseService:
                         path.stat().st_mtime, dt.timezone.utc
                     ).isoformat()
                     fields = record.get("fields", {})
-                    conn.execute(
-                        "INSERT OR IGNORE INTO surveys(record_id, saved_at, fields_json) VALUES (?, ?, ?)",
-                        (record_id, saved_at, json.dumps(fields, ensure_ascii=False))
-                    )
+                    conn.execute("""
+                        INSERT INTO surveys(record_id, saved_at, fields_json) VALUES (?, ?, ?)
+                        ON CONFLICT(record_id) DO UPDATE SET
+                            saved_at = excluded.saved_at,
+                            fields_json = excluded.fields_json
+                    """, (record_id, saved_at, json.dumps(fields, ensure_ascii=False)))
                     s_row = conn.execute("SELECT id FROM surveys WHERE record_id = ?", (record_id,)).fetchone()
                     if s_row:
                         s_id = s_row[0]
@@ -360,17 +359,41 @@ class DatabaseService:
                                     except Exception:
                                         pass
 
-                    # Sync file across survey directories
-                    for other_dir in survey_dirs:
-                        if other_dir != path.parent:
-                            target_file = other_dir / path.name
-                            if not target_file.exists():
-                                try:
-                                    target_file.write_text(content_text, encoding="utf-8")
-                                except Exception:
-                                    pass
+                    # Backup to OneDrive if enabled
+                    if od_surveys_dir and od_surveys_dir != primary_dir:
+                        od_file = od_surveys_dir / path.name
+                        if not od_file.exists() or od_file.stat().st_mtime < path.stat().st_mtime:
+                            try:
+                                od_file.write_text(content_text, encoding="utf-8")
+                            except Exception:
+                                pass
                 except Exception as e:
                     print(f"Warning: Failed to seed {path.name}: {e}")
+
+            # If primary was Git, clean up any deleted surveys from OneDrive so they do not resurrect
+            if od_surveys_dir and od_surveys_dir != primary_dir and od_surveys_dir.exists():
+                for od_f in list(od_surveys_dir.glob("*.json")):
+                    if od_f.name not in seen_files:
+                        try:
+                            od_f.unlink()
+                        except Exception:
+                            pass
+
+        # Prune surveys from SQLite if their JSON file was deleted from disk
+        if seen_files:
+            try:
+                db_records = [
+                    r[0] for r in conn.execute(
+                        "SELECT record_id FROM surveys WHERE saved_at >= ?",
+                        (AppConfig.SURVEY_RESET_DATE,)
+                    ).fetchall()
+                ]
+                for db_rec in db_records:
+                    if f"{db_rec}.json" not in seen_files:
+                        conn.execute("DELETE FROM survey_photos WHERE survey_id IN (SELECT id FROM surveys WHERE record_id = ?)", (db_rec,))
+                        conn.execute("DELETE FROM surveys WHERE record_id = ?", (db_rec,))
+            except Exception as e:
+                print(f"Warning: Failed to prune deleted surveys from SQLite: {e}")
 
     @staticmethod
     def _read_xlsx_rows(path: Path) -> list:
