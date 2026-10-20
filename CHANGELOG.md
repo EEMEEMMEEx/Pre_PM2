@@ -5,9 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.8] - 2026-10-20
+
+### Changed
+
+- ปรับขนาดและสัดส่วนของตัวอักษรให้อ่านง่าย สบายตา และสวยงามทั่วทั้งตารางประวัติการตรวจเยี่ยม (`src/components/dashboard/RecentSurveys.jsx`):
+  - **แก้ไขการตัดบรรทัดรหัสรายการและวันที่**: เพิ่ม `whitespace-nowrap` และกำหนดความกว้างขั้นต่ำของคอลัมน์ (`min-w`) ป้องกันรหัสรายการยาว (เช่น `PM-20261015...`) และวันที่ (เช่น `2026-10-08`) แตกกระจายเป็น 3-4 บรรทัดย่อย
+  - **ฟอร์แมตวันที่แบบไทยให้อ่านง่าย**: แปลงรูปแบบวันที่ตรวจเยี่ยมให้อ่านเข้าใจง่ายในทันที (เช่น `8 ต.ค. 69` พร้อมระบุเวลาบันทึก `16 ต.ค. 10:28 น.` ด้านล่างอย่างเป็นระเบียบ)
+  - **จัดลำดับชั้นข้อมูลชื่อสถานีและผู้ติดต่อ**: ขยายขนาดชื่อสถานีให้อ่านชัดเจน (`15px font-bold`) และมีชื่อสถานี fallback ที่ถูกต้องเสมอ ปรับขนาดข้อมูลผู้ให้ข้อมูล เบอร์โทรศัพท์ และช่าง ให้มีวรรคตอนและสัดส่วนที่ลงตัว
+  - **ป้องกันปุ่มจัดการ (Actions) ตัดบรรทัดเบียดกัน**: จัดกลุ่มปุ่ม `ดูข้อมูล`, `แก้ไข`, `ลบ`, `A4` ให้อยู่ในแถวเดียวพร้อมขนาดไอคอนและช่องว่างที่พอดี ป้องกันตัวหนังสือตกบรรทัดหรือไอคอนซ้อนทับตัวอักษร
+  - **ปรับขนาดและระยะห่างของตัวกรองและข้อความ Toolbar**: ขยายขนาดช่องค้นหาและตัวเลือกจังหวัดเป็น `text-sm` และปรับปุ่ม Filter Pills ให้กดง่ายและเห็นชัดเจนทั้งโหมดสว่างและมืด
+
 ## [2.8.7] - 2026-10-16
 
 ### Added
+
 - เพิ่มปุ่ม **กรองข้อมูล (Filter)** และ **Sort (จัดเรียง)** ตรง Toolbar เหนือตารางประวัติการกรอกข้อมูลการตรวจเยี่ยมทั้งหมด (`src/components/dashboard/RecentSurveys.jsx`):
   - **ปุ่มกรองข้อมูล**: คลิกเพื่อเปิด/ปิดแผงตัวกรอง (Expandable Filter Panel) ได้อย่างสะดวก พร้อม Badge แสดงจำนวนเงื่อนไขตัวกรองที่ทำงานอยู่ (`activeFilterCount`)
   - **ปุ่ม Sort (จัดเรียง)**: แสดงสถานะการเรียงปัจจุบัน (เช่น `Sort: ล่าสุด`, `Sort: สถานี ก-ฮ`, `Sort: จังหวัด ก-ฮ`) และคลิกเพื่อเปิด Dropdown Menu เลือกรูปแบบการจัดเรียงได้ทันที พร้อมไอคอนสถานะและการปิดอัตโนมัติเมื่อคลิกนอกพื้นที่หรือกด Escape
@@ -17,11 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.8.6] - 2026-10-16
 
 ### Fixed
+
 - แก้ไขปัญหาการกดปุ่มลบรายการแล้วรายการยังคงแสดงอยู่: นำ Tombstone Pattern (`nbtc_pre_pm_deleted_surveys`) มาใช้เพื่อบันทึกรายการที่ถูกลบลงใน LocalStorage ทันที และตัดรายการดังกล่าวออกจาก `mergeDashboardWithLocal`, `fetchDashboardData`, `serverData.recent` และ GitHub cache ทำให้ข้อมูลที่ถูกลบหายไปทันที (0ms) และไม่กลับมาแสดงซ้ำแม้ static snapshot `/api/dashboard` บน Cloudflare R2 จะยังมีข้อมูลเก่าอยู่ (`src/lib/api.js`, `src/components/dashboard/RecentSurveys.jsx`).
 - คำนวณยอดรวมสถานี (KPI Cards) และสถิติจังหวัดใหม่ตามข้อมูลที่เหลืออยู่จริงหลังจากหักรายการที่ถูกลบออก (`src/lib/api.js`).
 - เพิ่ม `"githubDeleted": True` ในการตอบกลับของ `DatabaseService.delete_surveys` เพื่อให้ฝั่ง client ทราบว่าลบทั้งใน SQLite และ GitHub แล้ว (`database.py`).
 
 ### Added
+
 - เพิ่มฟังก์ชั่นฟิลเตอร์และจัดเรียงข้อมูลแบบครบวงจรในประวัติการตรวจเยี่ยม (`src/components/dashboard/RecentSurveys.jsx`):
   - **ตัวกรองจังหวัด (Province Filter)**: เลือกกรองตามจังหวัดแบบไดนามิกจากรายการที่มีอยู่จริง พร้อมแสดงจำนวนสถานีในแต่ละจังหวัด
   - **ตัวกรองสถานะระบบ (System Status Filter)**: กรองตามระบบวิทยุสื่อสารและระบบไฟฟ้า (ปกติ / มีปัญหา)
@@ -32,12 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.8.5] - 2026-10-16
 
 ### Fixed
+
 - แก้ไข GitHub Actions deploy step (`deploy_r2.py`) ล้มเหลวด้วย exit code 1 เมื่อตัวแปร R2 ว่างเปล่า: เพิ่ม fallback สำหรับ `R2_ACCOUNT_ID` (`da30eb228f7c6f596214e6d5e0bef68d`) และ `R2_BUCKET` (`thaidimaru`) ผ่าน `secrets || vars || default` ป้องกัน endpoint กลายเป็น `https://.r2.cloudflarestorage.com` (`.github/workflows/deploy-r2.yml`).
 - ป้องกัน `deploy_r2.py` รับค่าสตริงว่าง `""` จาก CLI argument แล้วไปเขียนทับ default bucket / endpoint พร้อมเพิ่ม fallback และระบบ graceful skip เมื่อรันบน fork ที่ยังไม่ได้ตั้งค่า secret (`deploy_r2.py`, `.github/workflows/deploy-r2.yml`).
 
 ## [2.8.4] - 2026-10-16
 
 ### Fixed
+
 - ปุ่ม "ดาวน์โหลด PDF" บน static host (r2.dev) เดิมชี้ไปที่ `/api/export-pdf` ซึ่งมีเฉพาะ local server ทำให้ได้ 404/401: เปลี่ยนมาสร้าง PDF ฝั่ง client ด้วย `html2canvas-pro` ที่รองรับสี `oklch()` ของ Tailwind v4 (`src/components/export/SurveyReportModal.jsx`).
 - การสร้าง PDF ล้มเหลวแบบเงียบและไม่แจ้งผู้ใช้: เพิ่ม progress "กำลังสร้าง PDF หน้า i/N", รอ `document.fonts.ready` และรอรูปโหลดครบก่อน capture, capture ทีละ 8 หน้า, ปรับเป็น `scale: 1.5` / JPEG 0.85 และคืนหน่วยความจำ canvas หลังใช้; เมื่อ error จะแจ้งผ่าน toast และไม่เรียก `window.print()` อัตโนมัติ (`SurveyReportModal.jsx`).
 - `409/422` และ commit ซ้ำจาก sha เก่า: Service Worker ไม่ดักจับ request ข้าม origin (`api.github.com`, `raw.githubusercontent.com`), `blob:`/`data:` และ non-GET อีกต่อไป และผูก cache name กับ `APP_VERSION` ผ่าน `register('/sw.js?v=' + APP_VERSION)` (`public/sw.js`, `src/main.jsx`).
@@ -47,25 +63,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - กัน field ภายในฝั่ง client (`githubSyncing`, `githubSyncingAt`, `githubSynced`) หลุดขึ้นไฟล์ survey บน GitHub ซึ่งจะทำให้ schema เพี้ยนและ dedupe ไม่ทำงาน (`src/lib/api.js`).
 
 ### Added
+
 - Global toast component (`src/components/ui/toast.jsx`) ใช้แทน `alert()` สำหรับ PDF/delete/token error พร้อม mount ใน `App.jsx` และเปิด GitHubTokenModal อัตโนมัติเมื่อ token หมดอายุ (`src/components/Navbar.jsx`).
 - `<meta name="mobile-web-app-capable" content="yes">` สำหรับ PWA บน Android (`index.html`).
 
 ### Changed
+
 - ลด commit ซ้ำด้วย write queue + payload dedupe (`inflightWrites`), `navigator.locks` ต่อ record และให้ `syncPendingLocalSurveys` ข้าม record ที่กำลังเขียนอยู่ (`src/lib/api.js`).
 
 ## [2.0.6] - 2026-09-09
 
 ### Fixed
+
 - Fixed radial gradient styling in `ProvinceChart.jsx` using Tailwind CSS v4 compatible syntax (`bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))]`).
 - Cleaned up unused Lucide React icon imports across dashboard components (`BarChart3`, `Sparkles`).
 
 ### Added
+
 - Added standalone lightweight Node.js API server (`server.js`) and photo export script (`scripts/export-photos.js`).
 - Updated `vercel.json` route rewrites and function packaging configuration.
 
 ## [2.0.3] - 2026-09-08
 
 ### Fixed
+
 - Fixed Thai font rendering, text alignment, and diacritic clipping issues across the application.
 - Integrated comprehensive Google Fonts (`Noto Sans Thai`, `Prompt`, `Sarabun`, and `Inter`) with full weights in `index.html`.
 - Configured font fallback stack and modern typography standards in `src/index.css` (`font-size-adjust: from-font`, `letter-spacing: normal`, `line-break: relaxed`, `text-wrap: pretty`, and line-height `1.6`).
@@ -75,11 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.2] - 2026-09-08
 
 ### Fixed
+
 - Fixed 404 error when loading `nbtc-logo-dashboard.png` by configuring the `public/` directory with static assets and importing the image module directly in `Navbar` and `LoginView`.
 
 ## [2.0.1] - 2026-09-08
 
 ### Changed
+
 - Modernized frontend architecture to Single Page Application (SPA) powered by React 18, Vite 5, Tailwind CSS 4, and Radix UI accessible primitives.
 - Upgraded UI styling to responsive Dark Cyber Glassmorphism theme with Framer Motion animations and Lucide React icons.
 - Centralized application version management with authoritative single source of truth (`src/version.js`).
@@ -89,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-09-08
 
 ### Added
+
 - **Survey Control Room Dashboard**:
   - Live statistics display (total surveys, database stations, access granted / denied).
   - Provincial distribution bar chart with real-time station count.

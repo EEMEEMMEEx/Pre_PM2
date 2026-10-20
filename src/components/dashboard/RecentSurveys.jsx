@@ -417,19 +417,67 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
     }
   };
 
+  // Clean phone number helper (strips newlines, normalizes spaces and commas)
+  const formatPhone = (phone) => {
+    if (!phone) return '';
+    return String(phone)
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/\s*,\s*/g, ', ')
+      .trim();
+  };
+
+  // Safe Thai Date formatter (guarantees date never awkwardly line-breaks on hyphens)
+  const formatVisitDate = (rawDate) => {
+    if (!rawDate) return '-';
+    try {
+      const d =
+        typeof rawDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+          ? new Date(`${rawDate}T12:00:00`)
+          : new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('th-TH', {
+          day: 'numeric',
+          month: 'short',
+          year: '2-digit',
+        });
+      }
+    } catch {}
+    return String(rawDate);
+  };
+
+  // Safe short time & date formatter for saved records
+  const formatSavedTime = (rawSaved) => {
+    if (!rawSaved) return '-';
+    try {
+      const d = new Date(rawSaved);
+      if (!isNaN(d.getTime())) {
+        const datePart = d.toLocaleDateString('th-TH', {
+          day: 'numeric',
+          month: 'short',
+        });
+        const timePart = d.toLocaleTimeString('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return `${datePart} ${timePart}`;
+      }
+    } catch {}
+    return String(rawSaved);
+  };
+
   const getBadge = (permit) => {
     if (permit === 'อนุญาต') {
       return (
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border',
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border whitespace-nowrap shadow-2xs',
             isDark
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
               : 'bg-emerald-50 border-emerald-300 text-emerald-700'
           )}
         >
-          <CheckCircle2 className="h-3 w-3" />
-          {permit}
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span>{permit}</span>
         </span>
       );
     }
@@ -437,28 +485,28 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
       return (
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border',
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border whitespace-nowrap shadow-2xs',
             isDark
               ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
               : 'bg-rose-50 border-rose-300 text-rose-700'
           )}
         >
-          <XCircle className="h-3 w-3" />
-          {permit}
+          <XCircle className="h-3.5 w-3.5 shrink-0" />
+          <span>{permit}</span>
         </span>
       );
     }
     return (
       <span
         className={cn(
-          'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border',
+          'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border whitespace-nowrap shadow-2xs',
           isDark
             ? 'bg-purple-500/15 border-purple-500/30 text-purple-400'
             : 'bg-purple-50 border-purple-300 text-purple-700'
         )}
       >
-        <AlertCircle className="h-3 w-3" />
-        {permit || 'รอพิจารณา'}
+        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+        <span>{permit || 'รอพิจารณา'}</span>
       </span>
     );
   };
@@ -491,7 +539,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   </span>
                   <h2
                     className={cn(
-                      'text-lg font-bold tracking-normal leading-tight',
+                      'text-xl font-bold tracking-tight leading-tight',
                       isDark ? 'text-white' : 'text-slate-900'
                     )}
                   >
@@ -500,18 +548,18 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                 </div>
                 <span
                   className={cn(
-                    'rounded-full px-2.5 py-0.5 text-xs font-mono font-bold border flex items-center gap-1.5',
+                    'rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold border flex items-center gap-1.5 shadow-2xs',
                     isDark
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                       : 'bg-emerald-50 text-emerald-800 border-emerald-300'
                   )}
                 >
-                  <span>เรียลไทม์</span>
+                  <span className="font-sans font-medium">เรียลไทม์</span>
                   <span className="opacity-40">•</span>
                   <span>{recent.length} สถานี</span>
                 </span>
               </div>
-              <p className={cn('text-xs mt-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+              <p className={cn('text-sm mt-1 leading-normal', isDark ? 'text-slate-400' : 'text-slate-500')}>
                 แสดงข้อมูลภาคสนามครบถ้วนทุกรายการแบบเรียลไทม์ คลิกที่ชื่อสถานีเพื่อดูรายละเอียดและภาพถ่าย หรือเลือกเพื่อ Export
               </p>
             </div>
@@ -679,20 +727,20 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         )}
 
         {/* Toolbar: Count info, Filters, Sort & Page Size Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-xs">
-          <div className={cn('font-medium flex items-center gap-2 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-600')}>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-1 text-sm">
+          <div className={cn('font-medium flex items-center gap-2.5 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-600')}>
             <span>
               แสดง{' '}
-              <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
+              <span className={cn('font-bold font-mono text-base', isDark ? 'text-cyan-400' : 'text-sky-600')}>
                 {totalItems > 0 ? startIndex + 1 : 0} - {endIndex}
               </span>{' '}
               จาก{isFiltered ? 'ที่ค้นพบ ' : 'ทั้งหมด '}
-              <span className={cn('font-bold font-mono', isDark ? 'text-cyan-300' : 'text-sky-600')}>
+              <span className={cn('font-bold font-mono text-base', isDark ? 'text-cyan-400' : 'text-sky-600')}>
                 {totalItems}
               </span>{' '}
               สถานี
               {isFiltered && (
-                <span className={cn('ml-1', isDark ? 'text-slate-500' : 'text-slate-400')}>
+                <span className={cn('ml-1 text-xs', isDark ? 'text-slate-500' : 'text-slate-400')}>
                   (จากประวัติทั้งหมด {recent.length} สถานี)
                 </span>
               )}
@@ -701,7 +749,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             {/* Real-time Indicator Pill */}
             <span
               className={cn(
-                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold border',
+                'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border shadow-2xs',
                 isDark
                   ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
                   : 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -894,12 +942,12 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
             )}
           >
             {/* Filter Panel Header / Row 1: Search + Province + Clear + Close */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               {/* Search Box */}
-              <div className="relative flex-1 min-w-[220px]">
+              <div className="relative flex-1 min-w-[240px]">
                 <Search
                   className={cn(
-                    'absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5',
+                    'absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4',
                     isDark ? 'text-slate-400' : 'text-slate-500'
                   )}
                 />
@@ -912,7 +960,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   }}
                   placeholder="ค้นหาสถานี, จังหวัด, อำเภอ, รหัส, ผู้แจ้ง, ช่าง..."
                   className={cn(
-                    'w-full pl-8 pr-7 py-1.5 rounded-lg border text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
+                    'w-full pl-9 pr-8 py-2 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500',
                     isDark
                       ? 'border-slate-700 bg-slate-900/90 text-slate-100 placeholder:text-slate-500 hover:border-slate-600'
                       : 'border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 hover:border-slate-400 shadow-2xs'
@@ -926,12 +974,12 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       setCurrentPage(1);
                     }}
                     className={cn(
-                      'absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer',
+                      'absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors cursor-pointer',
                       isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'
                     )}
                     title="ล้างคำค้นหา"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
@@ -939,7 +987,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               <div className="flex flex-wrap items-center gap-2">
                 {/* Province Dropdown Filter */}
                 <div className="relative flex items-center">
-                  <MapPin className={cn('absolute left-2.5 h-3.5 w-3.5 pointer-events-none', isDark ? 'text-cyan-400' : 'text-sky-600')} />
+                  <MapPin className={cn('absolute left-3 h-4 w-4 pointer-events-none', isDark ? 'text-cyan-400' : 'text-sky-600')} />
                   <select
                     value={provinceFilter}
                     onChange={(e) => {
@@ -947,7 +995,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       setCurrentPage(1);
                     }}
                     className={cn(
-                      'pl-8 pr-7 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 appearance-none bg-no-repeat bg-right',
+                      'pl-9 pr-8 py-2 rounded-xl border text-sm font-normal cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-500 appearance-none bg-no-repeat bg-right',
                       isDark
                         ? 'border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-600'
                         : 'border-slate-300 bg-white text-slate-800 hover:border-slate-400 shadow-2xs'
@@ -971,14 +1019,14 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     type="button"
                     onClick={handleResetFilters}
                     className={cn(
-                      'inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer shadow-2xs',
+                      'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer shadow-2xs',
                       isDark
                         ? 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 hover:text-white'
                         : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
                     )}
                     title="ล้างตัวกรองและการจัดเรียงทั้งหมดกลับเป็นค่าเริ่มต้น"
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-3.5 w-3.5" />
                     <span>ล้างตัวกรอง</span>
                   </button>
                 )}
@@ -988,24 +1036,24 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   type="button"
                   onClick={() => setIsFilterOpen(false)}
                   className={cn(
-                    'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer',
+                    'inline-flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer',
                     isDark
                       ? 'border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'
                       : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
                   )}
                   title="ปิดแผงตัวกรอง"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                   <span>ปิด</span>
                 </button>
               </div>
             </div>
 
             {/* Row 2: Secondary Filter Pills */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
+            <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800 text-xs">
               {/* Permit Filter Pills */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={cn('text-xs font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
                   ขออนุญาต:
                 </span>
                 <button
@@ -1015,7 +1063,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
                     permitFilter === 'all'
                       ? isDark
                         ? 'bg-blue-600/30 border-blue-500/50 text-white font-semibold'
@@ -1034,7 +1082,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1.5',
                     permitFilter === 'อนุญาต'
                       ? isDark
                         ? 'bg-emerald-500/25 border-emerald-500/50 text-emerald-300 font-semibold'
@@ -1044,7 +1092,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-emerald-50'
                   )}
                 >
-                  <CheckCircle2 className="h-3 w-3" />
+                  <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>อนุญาต</span>
                 </button>
                 <button
@@ -1054,7 +1102,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1.5',
                     permitFilter === 'ไม่อนุญาต'
                       ? isDark
                         ? 'bg-rose-500/25 border-rose-500/50 text-rose-300 font-semibold'
@@ -1064,7 +1112,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-rose-50'
                   )}
                 >
-                  <XCircle className="h-3 w-3" />
+                  <XCircle className="h-3.5 w-3.5" />
                   <span>ไม่อนุญาต</span>
                 </button>
               </div>
@@ -1072,8 +1120,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               <span className={cn('hidden sm:inline', isDark ? 'text-slate-700' : 'text-slate-300')}>|</span>
 
               {/* Photo Filter Pills */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={cn('text-xs font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
                   รูปถ่าย:
                 </span>
                 <button
@@ -1083,7 +1131,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
                     photoFilter === 'all'
                       ? isDark
                         ? 'bg-cyan-600/30 border-cyan-500/50 text-cyan-200 font-semibold'
@@ -1102,7 +1150,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1.5',
                     photoFilter === 'with_photos'
                       ? isDark
                         ? 'bg-cyan-500/25 border-cyan-500/50 text-cyan-300 font-semibold'
@@ -1112,7 +1160,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-sky-50'
                   )}
                 >
-                  <ImageIcon className="h-3 w-3" />
+                  <ImageIcon className="h-3.5 w-3.5" />
                   <span>มีรูปภาพ</span>
                 </button>
                 <button
@@ -1122,7 +1170,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
                     photoFilter === 'no_photos'
                       ? isDark
                         ? 'bg-slate-700/60 border-slate-600 text-white font-semibold'
@@ -1139,8 +1187,8 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               <span className={cn('hidden sm:inline', isDark ? 'text-slate-700' : 'text-slate-300')}>|</span>
 
               {/* System Status Filter Pills */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className={cn('text-[11px] font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={cn('text-xs font-semibold mr-0.5', isDark ? 'text-slate-400' : 'text-slate-500')}>
                   ระบบ:
                 </span>
                 <button
@@ -1150,7 +1198,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border',
                     systemFilter === 'all'
                       ? isDark
                         ? 'bg-blue-600/30 border-blue-500/50 text-white font-semibold'
@@ -1169,7 +1217,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1.5',
                     systemFilter === 'radio_issue'
                       ? isDark
                         ? 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-semibold'
@@ -1180,7 +1228,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   )}
                   title="กรองเฉพาะสถานีที่วิทยุสื่อสารมีปัญหา"
                 >
-                  <AlertCircle className="h-3 w-3" />
+                  <AlertCircle className="h-3.5 w-3.5" />
                   <span>วิทยุมีปัญหา</span>
                 </button>
                 <button
@@ -1190,7 +1238,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     setCurrentPage(1);
                   }}
                   className={cn(
-                    'px-2 py-0.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer border inline-flex items-center gap-1.5',
                     systemFilter === 'power_issue'
                       ? isDark
                         ? 'bg-amber-500/25 border-amber-500/50 text-amber-300 font-semibold'
@@ -1201,7 +1249,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   )}
                   title="กรองเฉพาะสถานีที่ระบบไฟฟ้ามีปัญหา"
                 >
-                  <AlertCircle className="h-3 w-3" />
+                  <AlertCircle className="h-3.5 w-3.5" />
                   <span>ไฟฟ้ามีปัญหา</span>
                 </button>
               </div>
@@ -1212,21 +1260,21 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
         {/* Table Container with scrollbar */}
         <div
           className={cn(
-            'overflow-x-auto overflow-y-auto rounded-xl border mt-2 custom-scrollbar transition-colors shadow-2xs',
-            pageSize === 'all' ? 'max-h-[720px]' : 'max-h-[500px]',
+            'overflow-x-auto overflow-y-auto rounded-xl border mt-3 custom-scrollbar transition-colors shadow-2xs',
+            pageSize === 'all' ? 'max-h-[720px]' : 'max-h-[520px]',
             isDark ? 'border-slate-800/80 bg-slate-950/20' : 'border-slate-200 bg-white'
           )}
         >
-          <table className="w-full text-left text-sm relative border-collapse">
+          <table className="w-full min-w-[1220px] text-left text-sm relative border-collapse">
             <thead
               className={cn(
                 'sticky top-0 z-10 backdrop-blur-md shadow-xs',
-                isDark ? 'bg-slate-900/95 text-slate-400' : 'bg-slate-50/95 text-slate-500'
+                isDark ? 'bg-slate-900/95 text-slate-300' : 'bg-slate-50/95 text-slate-600'
               )}
             >
-              <tr className={cn('border-b text-xs font-semibold', isDark ? 'border-slate-800' : 'border-slate-200')}>
+              <tr className={cn('border-b text-xs font-bold uppercase tracking-wider', isDark ? 'border-slate-800' : 'border-slate-200')}>
                 {/* Select All Checkbox */}
-                <th className="py-2.5 pl-3 pr-1 w-9 text-center">
+                <th className="py-3 pl-3.5 pr-1 w-11 text-center whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={isAllSelected}
@@ -1239,12 +1287,12 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                     aria-label="เลือกทั้งหมดในหน้านี้"
                   />
                 </th>
-                <th className="py-2.5 px-2 text-center w-10">#</th>
-                <th className="py-2.5 pr-3 pl-2">รหัสรายการ</th>
+                <th className="py-3 px-2 text-center w-12 whitespace-nowrap">#</th>
+                <th className="py-3 px-3 w-[185px] min-w-[175px] whitespace-nowrap">รหัสรายการ</th>
                 <th
                   onClick={() => handleHeaderSort('station')}
                   className={cn(
-                    'py-2.5 px-3 cursor-pointer select-none transition-colors group',
+                    'py-3 px-4 min-w-[260px] cursor-pointer select-none transition-colors group',
                     isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
                   )}
                   title="คลิกเพื่อจัดเรียงตามชื่อสถานี"
@@ -1252,18 +1300,18 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   <div className="flex items-center gap-1.5">
                     <span>สถานี / ข้อมูลติดต่อ</span>
                     {sortBy === 'station_asc' ? (
-                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : sortBy === 'station_desc' ? (
-                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 shrink-0" />
                     )}
                   </div>
                 </th>
                 <th
                   onClick={() => handleHeaderSort('province')}
                   className={cn(
-                    'py-2.5 px-3 cursor-pointer select-none transition-colors group',
+                    'py-3 px-3 w-[130px] min-w-[120px] whitespace-nowrap cursor-pointer select-none transition-colors group',
                     isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
                   )}
                   title="คลิกเพื่อจัดเรียงตามจังหวัด"
@@ -1271,18 +1319,18 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   <div className="flex items-center gap-1.5">
                     <span>จังหวัด / อำเภอ</span>
                     {sortBy === 'province_asc' ? (
-                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : sortBy === 'province_desc' ? (
-                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 shrink-0" />
                     )}
                   </div>
                 </th>
                 <th
                   onClick={() => handleHeaderSort('permit')}
                   className={cn(
-                    'py-2.5 px-3 text-center cursor-pointer select-none transition-colors group',
+                    'py-3 px-3 w-[125px] min-w-[115px] text-center whitespace-nowrap cursor-pointer select-none transition-colors group',
                     isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
                   )}
                   title="คลิกเพื่อจัดเรียงตามผลขออนุญาต"
@@ -1290,20 +1338,20 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   <div className="flex items-center justify-center gap-1.5">
                     <span>ผลการขออนุญาต</span>
                     {sortBy === 'permit_asc' ? (
-                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : sortBy === 'permit_desc' ? (
-                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 shrink-0" />
                     )}
                   </div>
                 </th>
-                <th className="py-2.5 px-3 text-center">ระบบวิทยุ / ไฟฟ้า</th>
-                <th className="py-2.5 px-3 text-center">รูปภาพ</th>
+                <th className="py-3 px-3 w-[130px] min-w-[120px] text-center whitespace-nowrap">ระบบวิทยุ / ไฟฟ้า</th>
+                <th className="py-3 px-3 w-[95px] min-w-[85px] text-center whitespace-nowrap">รูปภาพ</th>
                 <th
                   onClick={() => handleHeaderSort('date')}
                   className={cn(
-                    'py-2.5 px-3 text-right cursor-pointer select-none transition-colors group',
+                    'py-3 px-3 w-[145px] min-w-[135px] text-right whitespace-nowrap cursor-pointer select-none transition-colors group',
                     isDark ? 'hover:text-cyan-300' : 'hover:text-sky-700'
                   )}
                   title="คลิกเพื่อจัดเรียงตามเวลาบันทึก"
@@ -1311,22 +1359,29 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   <div className="flex items-center justify-end gap-1.5">
                     <span>เวลาบันทึก</span>
                     {sortBy === 'date_desc' ? (
-                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowDown className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : sortBy === 'date_asc' ? (
-                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400" />
+                      <ArrowUp className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
                     ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75" />
+                      <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-75 shrink-0" />
                     )}
                   </div>
                 </th>
-                <th className="py-2.5 pl-3 pr-3 text-center">จัดการ</th>
+                <th className="py-3 pl-3 pr-4 w-[235px] min-w-[220px] text-center whitespace-nowrap">จัดการ</th>
               </tr>
             </thead>
-            <tbody className={cn('divide-y', isDark ? 'divide-slate-800/50' : 'divide-slate-200')}>
+            <tbody className={cn('divide-y', isDark ? 'divide-slate-800/60' : 'divide-slate-200')}>
               {displayedItems.length > 0 ? (
                 displayedItems.map((item, rowIdx) => {
                   const isSelected = selectedIds.has(item.recordId);
                   const f = item.fields || {};
+                  const stationName = item.station?.trim() || f.stationName?.trim() || f.station?.trim() || item.stationName?.trim() || 'สถานีไม่ระบุชื่อ';
+                  const contactPerson = f.contactName?.trim() || f.informantName?.trim() || '-';
+                  const phoneText = formatPhone(f.contactPhone || f.contact_phone);
+                  const operator = f.operatorName?.trim() || f.surveyorName?.trim();
+                  const provinceName = item.province?.trim() || f.province?.trim() || '-';
+                  const districtName = f.district?.trim() || '';
+
                   return (
                     <tr
                       key={item.recordId}
@@ -1337,97 +1392,108 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                             ? 'bg-cyan-500/10 hover:bg-cyan-500/15'
                             : 'bg-sky-50/80 hover:bg-sky-100/60'
                           : isDark
-                          ? 'hover:bg-slate-800/30'
+                          ? 'hover:bg-slate-800/35'
                           : 'hover:bg-sky-50/50'
                       )}
                     >
                       {/* Checkbox column */}
-                      <td className="py-3 pl-3 pr-1 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 pl-3.5 pr-1 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleToggleSelect(item.recordId)}
                           className="h-4 w-4 rounded border-slate-600 bg-slate-900/60 text-cyan-500 focus:ring-cyan-500 cursor-pointer accent-cyan-500"
-                          title={`เลือกสถานี ${item.station}`}
-                          aria-label={`เลือกสถานี ${item.station}`}
+                          title={`เลือกสถานี ${stationName}`}
+                          aria-label={`เลือกสถานี ${stationName}`}
                         />
                       </td>
 
                       {/* Row index # */}
-                      <td className="py-3 px-2 text-center text-xs font-mono opacity-50">
+                      <td className="py-3.5 px-2 text-center text-xs font-mono font-medium opacity-60">
                         {startIndex + rowIdx + 1}
                       </td>
 
                       {/* Clickable Record ID */}
-                      <td className="py-3 pr-3 pl-2 font-mono text-xs">
+                      <td className="py-3.5 px-3 font-mono text-xs whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => setSelectedPreview(item)}
                           className={cn(
-                            'group inline-flex items-center gap-1.5 transition-colors font-mono cursor-pointer text-left',
-                            isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-sky-600 hover:text-sky-700'
+                            'group inline-flex items-center gap-1.5 font-mono text-xs font-semibold tracking-tight transition-colors cursor-pointer text-left',
+                            isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-sky-700 hover:text-sky-800'
                           )}
                           title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
                         >
-                          <span className="group-hover:underline underline-offset-2 font-semibold">
+                          <span className="group-hover:underline underline-offset-2">
                             {item.recordId}
                           </span>
-                          <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                          <ExternalLink className="h-3 w-3 opacity-50 group-hover:opacity-100 transition-opacity shrink-0" />
                         </button>
                       </td>
 
                       {/* Clickable Station Name + Contact & Phone */}
-                      <td className="py-3 px-3">
+                      <td className="py-3.5 px-4">
                         <button
                           type="button"
                           onClick={() => setSelectedPreview(item)}
                           className={cn(
-                            'text-left font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 flex-wrap',
-                            isDark ? 'text-slate-200 hover:text-cyan-300' : 'text-slate-800 hover:text-sky-600'
+                            'text-left transition-colors cursor-pointer inline-flex items-center gap-1.5 flex-wrap group',
+                            isDark ? 'text-slate-100 hover:text-cyan-300' : 'text-slate-900 hover:text-sky-700'
                           )}
                           title="คลิกเพื่อพรีวิวข้อมูลที่กรอกและรูปภาพ"
                         >
-                          <span className="hover:underline underline-offset-2 font-semibold text-sm">
-                            {item.station}
+                          <span className="font-bold text-[15px] leading-snug tracking-tight group-hover:underline underline-offset-2">
+                            {stationName}
                           </span>
                         </button>
-                        <div className={cn('text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap', isDark ? 'text-slate-400' : 'text-slate-500')}>
+                        <div className={cn('text-xs mt-1 flex items-center gap-2 flex-wrap leading-relaxed', isDark ? 'text-slate-400' : 'text-slate-500')}>
                           <span>
                             ผู้ให้ข้อมูล:{' '}
-                            <span className={cn('font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>
-                              {f.contactName || f.informantName || '-'}
+                            <span className={cn('font-medium', isDark ? 'text-slate-200' : 'text-slate-700')}>
+                              {contactPerson}
                             </span>
                           </span>
-                          {(f.contactPhone || f.contact_phone) && (
+                          {phoneText && (
                             <>
-                              <span className="opacity-40">•</span>
-                              <span className="font-mono text-cyan-400/90">{f.contactPhone || f.contact_phone}</span>
+                              <span className="opacity-30">•</span>
+                              <span className="font-mono font-semibold text-xs text-cyan-600 dark:text-cyan-400">
+                                {phoneText}
+                              </span>
                             </>
                           )}
-                          {f.operatorName && (
+                          {operator && (
                             <>
-                              <span className="opacity-40">•</span>
-                              <span>ช่าง: {f.operatorName}</span>
+                              <span className="opacity-30">•</span>
+                              <span>
+                                ช่าง:{' '}
+                                <span className={cn('font-medium', isDark ? 'text-slate-200' : 'text-slate-700')}>
+                                  {operator}
+                                </span>
+                              </span>
                             </>
                           )}
                         </div>
                       </td>
 
                       {/* Province & District */}
-                      <td className={cn('py-3 px-3 text-xs', isDark ? 'text-slate-300' : 'text-slate-700')}>
-                        <div className="font-medium">{item.province}</div>
-                        {f.district && <div className="text-[11px] opacity-75">อ.{f.district}</div>}
+                      <td className={cn('py-3.5 px-3 text-xs whitespace-nowrap', isDark ? 'text-slate-300' : 'text-slate-700')}>
+                        <div className="font-bold text-sm text-slate-800 dark:text-slate-200">{provinceName}</div>
+                        {districtName ? (
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">อ.{districtName}</div>
+                        ) : null}
                       </td>
 
                       {/* Permit Badge */}
-                      <td className="py-3 px-3 text-center">{getBadge(item.permit)}</td>
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        {getBadge(item.permit)}
+                      </td>
 
                       {/* Radio & Power Status */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
                         <div className="inline-flex flex-col gap-1 items-center">
                           <span
                             className={cn(
-                              'px-1.5 py-0.5 rounded text-[10.5px] font-medium border',
+                              'px-2 py-0.5 rounded-md text-xs font-medium border whitespace-nowrap inline-flex items-center gap-1',
                               f.radioStatus === 'ปกติ' || !f.radioStatus
                                 ? isDark
                                   ? 'border-emerald-500/30 text-emerald-300 bg-emerald-950/30'
@@ -1441,7 +1507,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                           </span>
                           <span
                             className={cn(
-                              'px-1.5 py-0.5 rounded text-[10.5px] font-medium border',
+                              'px-2 py-0.5 rounded-md text-xs font-medium border whitespace-nowrap inline-flex items-center gap-1',
                               f.powerStatus === 'ปกติ' || !f.powerStatus
                                 ? isDark
                                   ? 'border-sky-500/30 text-sky-300 bg-blue-950/30'
@@ -1457,68 +1523,61 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                       </td>
 
                       {/* Photos Thumbnail Badge */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
                         {item.photos && item.photos.length > 0 ? (
                           <button
                             type="button"
                             onClick={() => setSelectedPreview(item)}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium border transition-all cursor-pointer hover:scale-105 shadow-2xs',
+                              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold border transition-all cursor-pointer hover:scale-105 shadow-2xs whitespace-nowrap',
                               isDark
                                 ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25'
                                 : 'bg-sky-100 border-sky-300 text-sky-700 hover:bg-sky-200'
                             )}
                             title={`คลิกเพื่อดูรูปถ่าย ${item.photos.length} รูป`}
                           >
-                            <ImageIcon className="h-3.5 w-3.5" />
+                            <ImageIcon className="h-3.5 w-3.5 shrink-0" />
                             <span>{item.photos.length} รูป</span>
                           </button>
                         ) : (
-                          <span className="text-xs opacity-40">-</span>
+                          <span className="text-xs opacity-40 font-medium">-</span>
                         )}
                       </td>
 
                       {/* Saved Time / Visit Date */}
                       <td
                         className={cn(
-                          'py-3 px-3 text-right text-xs',
+                          'py-3.5 px-3 text-right text-xs whitespace-nowrap',
                           isDark ? 'text-slate-400' : 'text-slate-500'
                         )}
                       >
-                        {f.visitDate ? (
-                          <div>
-                            <div className={cn('font-medium', isDark ? 'text-slate-200' : 'text-slate-800')}>
-                              {f.visitDate}
-                            </div>
-                            <div className="text-[10.5px] opacity-75 font-mono">
-                              {new Date(item.savedAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} {new Date(item.savedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
+                        <div className="flex flex-col items-end whitespace-nowrap">
+                          <div className={cn('font-semibold text-xs whitespace-nowrap', isDark ? 'text-slate-200' : 'text-slate-800')}>
+                            {formatVisitDate(f.visitDate || item.savedAt)}
                           </div>
-                        ) : (
-                          new Date(item.savedAt).toLocaleString('th-TH', {
-                            dateStyle: 'short',
-                            timeStyle: 'short',
-                          })
-                        )}
+                          <div className="text-[11px] opacity-75 font-mono whitespace-nowrap mt-0.5">
+                            {formatSavedTime(item.savedAt)}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 pl-3 pr-3 text-center">
-                        <div className="flex items-center justify-center gap-1 flex-nowrap">
+                      <td className="py-3.5 pl-3 pr-4 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center justify-center gap-1.5 flex-nowrap shrink-0">
                           {/* Preview Details Button */}
                           <button
                             type="button"
                             onClick={() => setSelectedPreview(item)}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer shadow-2xs',
                               isDark
                                 ? 'border-sky-500/40 bg-sky-950/40 text-sky-300 hover:bg-sky-600/30 hover:border-sky-400 hover:text-white'
                                 : 'border-sky-300 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:border-sky-400'
                             )}
                             title="ดูรายละเอียดข้อมูลทั้งหมดและภาพถ่าย"
                           >
-                            <FileText className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">ดูข้อมูล</span>
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            <span className="hidden xl:inline whitespace-nowrap">ดูข้อมูล</span>
                           </button>
 
                           {/* Edit Button */}
@@ -1529,15 +1588,15 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                               else if (onNavigate) onNavigate('field', item);
                             }}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer shadow-2xs',
                               isDark
                                 ? 'border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-600/30 hover:border-amber-400 hover:text-white'
                                 : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400'
                             )}
                             title="แก้ไขข้อมูลการตรวจเยี่ยมนี้"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">แก้ไข</span>
+                            <Pencil className="h-3.5 w-3.5 shrink-0" />
+                            <span className="hidden xl:inline whitespace-nowrap">แก้ไข</span>
                           </button>
 
                           {/* Delete Button */}
@@ -1545,15 +1604,15 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                             type="button"
                             onClick={() => setDeleteTarget(item)}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer shadow-2xs',
                               isDark
                                 ? 'border-rose-500/40 bg-rose-950/40 text-rose-300 hover:bg-rose-600/30 hover:border-rose-400 hover:text-white'
                                 : 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 hover:border-rose-400'
                             )}
                             title="ลบรายการนี้"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">ลบ</span>
+                            <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="hidden xl:inline whitespace-nowrap">ลบ</span>
                           </button>
 
                           {/* Export Official A4 Button */}
@@ -1561,15 +1620,15 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                             type="button"
                             onClick={() => setReportSurveys([item])}
                             className={cn(
-                              'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-all cursor-pointer shadow-2xs',
+                              'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 transition-all cursor-pointer shadow-2xs',
                               isDark
                                 ? 'border-cyan-500/30 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-600/30 hover:border-cyan-400 hover:text-white'
                                 : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-400'
                             )}
                             title="ส่งออกรายงาน A4 ทางการ (Export PDF / Print)"
                           >
-                            <Printer className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">A4</span>
+                            <Printer className="h-3.5 w-3.5 shrink-0" />
+                            <span className="hidden xl:inline whitespace-nowrap">A4</span>
                           </button>
                         </div>
                       </td>
