@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey } from '@/lib/api';
+import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText } from '@/lib/api';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { Printer, FileText, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -311,7 +311,7 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
       } else if (result?.githubSynced) {
         successText += ' (ซิงค์ขึ้น GitHub ส่วนกลางสำเร็จ)';
       } else if (result?.githubError) {
-        successText += ` (หมายเหตุ: ยังไม่ซิงค์ขึ้น GitHub: ${result.githubError})`;
+        successText += ` (หมายเหตุ: ยังไม่ซิงค์ขึ้น GitHub — ${githubErrorText(result.githubError)})`;
       } else {
         successText += ' (บันทึกลงฐานข้อมูลแล้ว)';
       }

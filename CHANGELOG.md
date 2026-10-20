@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.9.0] - 2026-10-20
+
+### Security
+- ถอด GitHub token ที่ฝังอยู่ใน bundle ออกจาก `src/lib/api.js` และเลิกนอนาเข้าจาก `/api/sync-config` (เดิมเป็นไฟล์สาธารณะบน R2 ที่ใครก็ดาวน์โหลดได้) — การเขียนขึ้น GitHub ต้องใช้ Fine-grained PAT ที่ผู้ใช้ใส่เองผ่าน `GitHubTokenModal` เท่านั้น (`src/lib/api.js`, `src/components/auth/GitHubTokenModal.jsx`)
+- กัน record ที่ไม่ใช่ข้อมูลภาคสนามหลุดขึ้น repo ข้อมูล: เพิ่ม `isCommittableRecordId()` ยอมรับเฉพาะรูปแบบ `PM-<15ตัวเลข>-<hex4>` (client) และ `PM-<YYYYmmdd>-<HHMMSS>-<hex4>` (server) ใน `syncPendingLocalSurveys` พร้อม `console.warn` เมื่อข้าม (`src/lib/api.js`)
+- หยุดพฤติกรรม fail เงียบเมื่อถูก GitHub จำกัดโควตาคำขอ (unauthenticated = 60 req/hr/IP และแอปไม่มี token สาธารณะแล้ว): ตรวจ 429 หรือ 403 + `x-ratelimit-remaining: 0` แล้ว backoff 5 นาที คืน cache ล่าสุดพร้อมแจ้งผู้ใช้ (`src/lib/api.js`)
+
+### Added
+- `promptGitHubToken(reason, cooldownMs)` throttle ต่อ reason (กัน modal/toast เด้งรัวจากการ poll ทุก 10 วินาที), `githubErrorText(code)` map error code → ภาษาไทย, และ error code `no_token`/`rate_limited` ในผลลัพธ์ `submitSurvey`/`updateSurvey`/`deleteSurveys` (`src/lib/api.js`)
+
+### Changed
+- ลบ `initSystemToken()` (ไม่มี caller ใดนอกไฟล์นี้) — client ไม่เรียก `/api/sync-config` อีก
+- UI แสดงข้อความภาษาไทยแทน raw error code และแยกข้อความตามสาเหตุ no_token / bad_token / rate_limited (`src/components/Navbar.jsx`, `src/components/field/FieldVisitView.jsx`, `src/components/dashboard/RecentSurveys.jsx`)
+- ข้อจำกัดที่ทราบ: ข้อมูลสำรวจและผู้ติดต่อใน `data/surveys/*.json` ยังอยู่ใน GitHub repo สาธารณะ — การปิดช่องนี้ต้องทำ repo เป็น private หรือเพิ่ม server proxy เป็นงานแยก
 
 ## [2.8.9] - 2026-10-20
 

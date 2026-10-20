@@ -34,7 +34,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
-import { deleteSurveys, getDeletedSurveyIds } from '@/lib/api';
+import { deleteSurveys, getDeletedSurveyIds, githubErrorText } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
@@ -400,9 +400,16 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
       const result = await deleteSurveys(idsToDelete);
 
       const failed = Array.isArray(result?.failed) ? result.failed : [];
-      if (failed.length > 0 && failed.some((f) => f.reason !== 'no_token_saved_locally')) {
+      if (failed.length > 0) {
         console.warn('[delete] failed remote records:', failed);
-        toast.success(`ลบข้อมูลในเครื่องสำเร็จ (${idsToDelete.length} รายการ) แต่อาจต้องตรวจสอบการซิงค์ GitHub`);
+        const reasonLines = failed
+          .slice(0, 5)
+          .map((f) => `• ${f.id} (${githubErrorText(f.reason)})`)
+          .join('\n');
+        const more = failed.length > 5 ? `\n...และอีก ${failed.length - 5} รายการ` : '';
+        toast.error(
+          `ลบไม่สำเร็จ ${failed.length}/${idsToDelete.length} รายการ\n${reasonLines}${more}`
+        );
       } else {
         toast.success(`ลบข้อมูลสำเร็จ ${idsToDelete.length} รายการ`);
       }

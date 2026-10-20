@@ -48,11 +48,21 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
     return () => window.removeEventListener('nbtc-surveys-updated', handleUpdated);
   }, [refreshGitHubStatus]);
 
-  // 401/403 จาก GitHub API -> แจ้งเตือนและเปิด GitHubTokenModal ให้ใส่ token ใหม่
+  // แจ้งเตือนตามสาเหตุของ problems ฝั่ง GitHub sync:
+  // no_token = เครื่องยังไม่ได้ใส่ PAT, bad_token = 401/403, rate_limited = โควตาคำขอหมด
   useEffect(() => {
-    const handleTokenRequired = () => {
+    const handleTokenRequired = (event) => {
+      const reason = event?.detail?.reason || 'bad_token';
+      if (reason === 'rate_limited') {
+        toast.error('GitHub จำกัดจำนวนคำขอชั่วคราว — Dashboard จะลองใหม่ใน 5 นาที');
+        return;
+      }
       setIsTokenModalOpen(true);
-      toast.error('GitHub Token ไม่ถูกต้องหรือหมดอายุ — กรุณาใส่ Token ใหม่เพื่อซิงค์ข้อมูล');
+      toast.error(
+        reason === 'no_token'
+          ? 'ยังไม่ได้ตั้งค่า GitHub Token — ข้อมูลถูกบันทึกลงเครื่อง และจะซิงค์ขึ้น GitHub เมื่อใส่ Token'
+          : 'GitHub Token ไม่ถูกต้องหรือหมดอายุ — กรุณาใส่ Token ใหม่เพื่อซิงค์ข้อมูล'
+      );
     };
     window.addEventListener('nbtc-github-token-required', handleTokenRequired);
     return () => window.removeEventListener('nbtc-github-token-required', handleTokenRequired);
