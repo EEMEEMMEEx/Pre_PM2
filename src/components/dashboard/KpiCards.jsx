@@ -5,17 +5,22 @@ import { AnimatedCounter } from '@/components/ui/animated-counter';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
-export function KpiCards({ stats = {} }) {
+export function KpiCards({ stats = {}, isLoading = false }) {
   const { isDark } = useTheme();
-  const total = stats.surveys || 0;
-  const stations = stats.stations || 0;
-  const allowed = stats.allowed || 0;
-  const denied = stats.denied || 0;
+  const total = Number(stats.surveys) || 0;
+  const stations = Number(stats.stations) > 0 ? Number(stats.stations) : 197;
+  const allowed = Number(stats.allowed) || 0;
+  const denied = Number(stats.denied) || 0;
+
+  const totalPct = stations > 0 ? ((total / stations) * 100).toFixed(1) : '0.0';
+  const allowedPct = stations > 0 ? ((allowed / stations) * 100).toFixed(1) : '0.0';
+  const deniedPct = stations > 0 ? ((denied / stations) * 100).toFixed(1) : '0.0';
 
   const cards = [
     {
       label: 'ผลสำรวจทั้งหมด',
       value: total,
+      subtext: `ความคืบหน้า ${totalPct}% ของสถานีทั้งหมด`,
       icon: Activity,
       iconColor: isDark ? 'text-blue-400' : 'text-blue-600',
       iconBoxClass: isDark
@@ -29,6 +34,7 @@ export function KpiCards({ stats = {} }) {
     {
       label: 'สถานีในระบบ',
       value: stations,
+      subtext: 'ฐานข้อมูลสถานี Master Database',
       icon: Radio,
       iconColor: isDark ? 'text-cyan-400' : 'text-sky-600',
       iconBoxClass: isDark
@@ -42,6 +48,7 @@ export function KpiCards({ stats = {} }) {
     {
       label: 'อนุญาตเข้าพื้นที่',
       value: allowed,
+      subtext: `คิดเป็น ${allowedPct}% ของสถานีในระบบ`,
       icon: CheckCircle2,
       iconColor: isDark ? 'text-emerald-400' : 'text-emerald-600',
       iconBoxClass: isDark
@@ -55,6 +62,7 @@ export function KpiCards({ stats = {} }) {
     {
       label: 'ไม่อนุญาตเข้าพื้นที่',
       value: denied,
+      subtext: `คิดเป็น ${deniedPct}% ของสถานีในระบบ`,
       icon: XCircle,
       iconColor: isDark ? 'text-rose-400' : 'text-rose-600',
       iconBoxClass: isDark
@@ -79,26 +87,32 @@ export function KpiCards({ stats = {} }) {
               card.cardClass
             )}
           >
-            <div className="flex items-center justify-between">
-              <span
-                className={cn(
-                  'text-sm font-semibold leading-normal',
-                  isDark ? 'text-slate-300' : 'text-slate-600'
-                )}
-              >
-                {card.label}
-              </span>
-              <div
-                className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-lg border transition-colors',
-                  card.iconBoxClass
-                )}
-              >
-                <Icon className={cn('h-5 w-5', card.iconColor)} />
+            <div>
+              <div className="flex items-center justify-between">
+                <span
+                  className={cn(
+                    'text-sm font-semibold leading-normal',
+                    isDark ? 'text-slate-300' : 'text-slate-600'
+                  )}
+                >
+                  {card.label}
+                </span>
+                <div
+                  className={cn(
+                    'flex h-9 w-9 items-center justify-center rounded-lg border transition-colors',
+                    card.iconBoxClass
+                  )}
+                >
+                  <Icon className={cn('h-5 w-5', card.iconColor)} />
+                </div>
+              </div>
+              <div className={cn('mt-3 text-3xl font-extrabold tracking-normal leading-normal lg:text-4xl', card.valColor)}>
+                <AnimatedCounter value={card.value} />
               </div>
             </div>
-            <div className={cn('mt-4 text-3xl font-extrabold tracking-normal leading-normal lg:text-4xl', card.valColor)}>
-              <AnimatedCounter value={card.value} />
+
+            <div className={cn('mt-2 text-[11px] font-medium border-t pt-2 opacity-80', isDark ? 'border-slate-800/80 text-slate-400' : 'border-slate-100 text-slate-500')}>
+              {card.subtext}
             </div>
           </GlassCard>
         );
