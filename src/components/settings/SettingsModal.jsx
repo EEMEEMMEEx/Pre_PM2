@@ -628,7 +628,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
                         </span>
                         {unsyncedCount > 0 && (
                           <p className="text-[11px] opacity-90 mt-0.5">
-                            มีแบบสำรวจค้างส่ง {unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อใส่ Token ที่มีสิทธิ์
+                            {gitHubStatus?.valid
+                              ? `มีแบบสำรวจค้างส่งในเครื่องนี้ ${unsyncedCount} รายการ — ระบบกำลังซิงค์ขึ้น GitHub ส่วนกลางอัตโนมัติ`
+                              : `มีแบบสำรวจค้างส่ง ${unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อใส่ Token ที่มีสิทธิ์`}
                           </p>
                         )}
                       </div>
