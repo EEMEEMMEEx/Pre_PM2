@@ -161,7 +161,8 @@ def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: 
     print(f"  dist/ files    : {len(files)} ({total / 1024:.1f} KB)")
     print(f"  SPA fallbacks  : dashboard/, field/, login/ + index, home")
     print(f"  will NOT upload: /api/sync-config (GitHub token) — ถอดออกแล้วใน v2.11.0")
-    print(f"  will purge     : {', '.join('/' + k for k in LEGACY_SECRET_KEYS)}")
+    print(f"  will purge     : {', '.join('/' + k for k in LEGACY_SECRET_KEYS)} (รันเสมอ แม้ snapshot ล้มเหลว)")
+    print("  note v2.11.1   : เรียก DatabaseService.initialize() ก่อนสร้าง snapshot (CI checkout ไม่มี survey.db)")
     try:
         from database import DatabaseService
 
@@ -264,8 +265,14 @@ def deploy_frontend_to_r2(
             print(f"  [OK] Uploaded SPA route fallback: /{spa_route} [text/html]")
 
     # Upload lightweight API snapshots for instant CDN dashboard and station dropdowns
+    # v2.11.1: GitHub Actions checkout ไม่มี survey.db → get_stations() เดิมล้มเหลวด้วย
+    # "no such table: stations" ทำให้ block นี้หลุดไป except (ไม่เคยอัปโหลด snapshot และไม่เคย purge token)
+    # initialize() สร้างตาราง + sync สถานีจาก DATABASE.xlsx/AGWBS.xlsx และ seed จาก data/surveys/ ตามปกติของเซิร์ฟเวอร์
+    snapshot_ok = False
     try:
         from database import DatabaseService
+
+        DatabaseService.initialize()
         raw_stations = DatabaseService.get_stations()
         if strip_station_contacts:
             public_stations, dropped_station_fields = sanitize_stations(raw_stations)
@@ -325,16 +332,20 @@ def deploy_frontend_to_r2(
             )
             print(f"  [OK] Uploaded API snapshot: /{k} [application/json] (OneDrive: utai323@gmail.com)")
 
-        # v2.11.0: ไม่อัปโหลด GitHub token ขึ้น bucket สาธารณะอีก (client ใช้ PAT ของตัวเอง ตั้งแต่ v2.9.0)
-        # และล้าง object เก่าที่ยังเผยแพร่ token อยู่ให้ทุกครั้ง
-        purge_legacy_secret_keys(s3, bucket_name)
+        snapshot_ok = True
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
+        print("  [WARN] snapshot เก่ายังคงอยู่บน bucket — แต่การล้าง object ที่แจก token จะรันแน่นอน")
+
+    # v2.11.1: แยก purge ออกจาก try ของ snapshot — object ที่เคยแจก GitHub token ต้องถูกลบ
+    # แม้การสร้าง snapshot จะล้มเหลว (เดิม purge อยู่ท้าย try จึงถูก skip ไปพร้อมกัน)
+    purge_legacy_secret_keys(s3, bucket_name)
 
     print("\n" + "=" * 70)
     print("[SUCCESS] Frontend web application successfully deployed to Cloudflare R2!")
     print(f"  Bucket: {bucket_name}")
     print(f"  Files : {uploaded} web assets ({total_size / 1024:.1f} KB)")
+    print(f"  Snapshots : {'อัปโหลดแล้ว + sanitize PII' if snapshot_ok else 'ไม่สำเร็จ — snapshot เก่ายังอยู่บน bucket'}")
     print(f"  Photos & Database: Stored safely in your OneDrive (saving R2 quota!)")
     print("=" * 70)
 

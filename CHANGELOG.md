@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.1] - 2026-10-21
+
+### Fixed
+- `deploy_r2.py` เรียก `DatabaseService.get_stations()` โดยไม่เคยสร้างตารางก่อน ทำให้ GitHub Actions (which checkout โดยไม่มี `survey.db`) ล้มด้วย `sqlite3.OperationalError: no such table: stations` ทั้งบล็อกรวม → ** snapshot `/api/dashboard` และ `/api/database` ไม่เคยถูกอัปเดตจาก CI เลย** (หลักฐาน: ค่าที่เผยแพร่อยู่บน R2 ยังมี `updatedAt` เดิม 2026-10-16 และยังมี `contactName`/`contactPhone` ค้าง) — เพิ่ม `DatabaseService.initialize()` ก่อนสร้าง snapshot ซึ่งสร้างตาราง sync สถานีจาก `DATABASE.xlsx`/`AGWBS.xlsx` และ seed จาก `data/surveys/` ตามกลไกปกติของเซิร์ฟเวอร์ (`deploy_r2.py`)
+- ย้าย `purge_legacy_secret_keys()` ออกนอก `try` ของบล็อกรวม → object ที่เคยแจก GitHub token (`/api/sync-config`, `/sync-config`) จะถูกลบ **แม้การสร้าง snapshot ล้มเหลว** (เดิมวางไว้ท้าย `try` จึงถูก skip ไปพร้อมข้อผิดพลาดข้างบน ซึ่งเป็นสาเหตุที่ token ยัง live บน bucket สาธารณะ) (`deploy_r2.py`)
+- สรุปผล deploy บอกสถานะรวมชัด (`Snapshots : อัปโหลดแล้ว + sanitize PII` / `ไม่สำเร็จ…`) และ `--dry-run` พิมพ์ข้อเท็จจริงทั้งสองข้อ (`snapshot_ok`, `will purge … (รันเสมอ)`) — ตรวจสอบได้ด้วย `python deploy_r2.py --dry-run` โดยไม่ต้องมี credentials
+
+### Changed
+- ซิงก์ upstream `main` เข้า branch นี้ (merge commit) — รับการลบไฟล์สำรวจ 4 รายการที่ลบไปแล้วบน GitHub และ `.gitignore` ที่ถอดบรรทัด `survey-*.json` ออก
+
 ## [2.11.0] - 2026-10-21
 
 ### Security
