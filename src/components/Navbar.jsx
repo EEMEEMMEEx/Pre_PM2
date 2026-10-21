@@ -3,7 +3,7 @@ import { Calendar, Clock, Menu, X, Sun, Moon, Settings } from 'lucide-react';
 import { APP_VERSION } from '@/version';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
-import { fetchGitHubStatus, getStoredGitHubToken, getUnsyncedSurveysCount } from '@/lib/api';
+import { fetchGitHubStatus, getStoredGitHubToken, fetchServerGitHubToken, getUnsyncedSurveysCount } from '@/lib/api';
 import { SettingsModal } from '@/components/settings/SettingsModal';
 import { toast } from '@/components/ui/toast';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
@@ -34,11 +34,13 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   }, []);
 
   const refreshGitHubStatus = useCallback(() => {
-    const t = getStoredGitHubToken();
-    setStoredToken(t);
-    setUnsyncedCount(getUnsyncedSurveysCount());
-    fetchGitHubStatus().then((st) => {
-      if (st) setGithubStatus(st);
+    fetchServerGitHubToken().then((serverToken) => {
+      const activeToken = serverToken || getStoredGitHubToken();
+      setStoredToken(activeToken);
+      setUnsyncedCount(getUnsyncedSurveysCount());
+      fetchGitHubStatus().then((st) => {
+        if (st) setGithubStatus(st);
+      });
     });
   }, []);
 
@@ -52,9 +54,11 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
       }
     };
     window.addEventListener('nbtc-surveys-updated', handleUpdated);
+    window.addEventListener('nbtc-settings-updated', handleUpdated);
     window.addEventListener('storage', handleUpdated);
     return () => {
       window.removeEventListener('nbtc-surveys-updated', handleUpdated);
+      window.removeEventListener('nbtc-settings-updated', handleUpdated);
       window.removeEventListener('storage', handleUpdated);
     };
   }, [refreshGitHubStatus]);

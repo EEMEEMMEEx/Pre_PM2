@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.12.2] - 2026-10-21
+
+### Fixed
+- **แก้ปัญหาการบันทึก Token ในการตั้งค่าระบบ (Data Persistence & Multi-User Sync)**:
+  - เชื่อมต่อการบันทึก Token เข้ากับศูนย์กลางฐานข้อมูลฝั่งเซิร์ฟเวอร์ (`database.py` ➔ `github-token.txt`) ผ่าน Endpoint `POST /api/settings/token` และ `GET /api/settings/token`
+  - แก้ไขปัญหาเงียบ (Silent failure) โดยปรับปรุงให้ `saveGitHubToken()` เป็น Async mutation พร้อมส่งคำขอไปยัง Persistent Storage Layer และรอการยืนยันผลจากเซิร์ฟเวอร์
+  - แก้ไขปัญหา Isolated Local State โดยเพิ่ม `fetchServerGitHubToken()` ซิงค์การตั้งค่าล่าสุดจากเซิร์ฟเวอร์ลงสู่ทุก Client อัตโนมัติเมื่อเปิดหน้าหรือโหลดใหม่
+  - เพิ่มการซิงค์ข้ามแท็บและข้ามหน้าต่างแบบเรียลไทม์ผ่าน `BroadcastChannel` และ Custom Event `nbtc-settings-updated`
+
+### Added
+- เพิ่ม Loading Indicator บนปุ่ม "บันทึก Token" (`isSavingGitHub` พร้อม Spinner และข้อความ "กำลังบันทึก...")
+- เพิ่มการแจ้งเตือนผู้ใช้ (Feedback) ผ่านระบบ Toast Notification ทั้งกรณีบันทึกสำเร็จ (`toast.success`) และกรณีเกิดข้อผิดพลาด (`toast.error`)
+- เมื่อบันทึก Token สำเร็จ ระบบจะกระตุ้นการซิงค์แบบสำรวจที่ค้างส่ง (`syncPendingLocalSurveys`) ขึ้น GitHub ทันทีอัตโนมัติ
+
 ## [2.12.1] - 2026-10-21
 
 ### Added
