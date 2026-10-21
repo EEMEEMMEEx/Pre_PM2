@@ -1,16 +1,17 @@
 {
   "name": "survey-control-room",
-  "version": "2.11.6",
+  "version": "2.12.0",
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/build_static_snapshots.mjs",
     "preview": "vite preview",
     "test:py": "python -m unittest discover -s tests",
     "start": "python database.py",
     "deploy": "python deploy_r2.py",
     "deploy:r2": "python deploy_r2.py",
-    "export:photos": "python export_photos.py",
+    "export:photos": "node scripts/export_photos.mjs",
+    "export:photos:py": "python export_photos.py",
     "export:pdf": "python export_pdf.py",
     "export:archive": "python export_pdf.py --archive"
   },

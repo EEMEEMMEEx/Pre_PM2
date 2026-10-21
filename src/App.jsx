@@ -8,32 +8,14 @@ import { FieldVisitView } from '@/components/field/FieldVisitView';
 import { LoginView } from '@/components/auth/LoginView';
 import { useTheme } from '@/context/ThemeContext';
 import { isStaticHost, saveLocalApiToken } from '@/lib/api';
-import { cn } from '@/lib/utils';
-
-// GitHub Pages เสิร์ฟใต้ subpath (BASE_URL = '/<repo>/') ส่วน R2/local = '/'
-// ตัด base ออกก่อนเทียบ route เพื่อให้ pathname matching ทำงานได้ทั้งสองแบบ
-const BASE = import.meta.env.BASE_URL || '/';
-
-function stripBase(pathname) {
-  if (BASE !== '/' && pathname.startsWith(BASE)) {
-    const rest = pathname.slice(BASE.length);
-    return '/' + rest.replace(/^\/+/, '');
-  }
-  return pathname;
-}
-
-function routeUrl(route) {
-  if (route === '/') return BASE;
-  return BASE.replace(/\/$/, '') + route;
-}
+import { cn, getAppRoute, getAppUrl } from '@/lib/utils';
 
 export function App() {
   const { isDark } = useTheme();
   const [currentPage, setCurrentPage] = useState(() => {
-    const path = stripBase(window.location.pathname);
-    if (path === '/dashboard') return 'dashboard';
-    if (path === '/login' && !isStaticHost()) return 'login';
-    return 'field';
+    const route = getAppRoute();
+    if (route === 'login' && isStaticHost()) return 'field';
+    return route;
   });
 
   const [editingSurvey, setEditingSurvey] = useState(null);
@@ -48,7 +30,7 @@ export function App() {
       setEditingSurvey(null);
     }
     setCurrentPage(page);
-    const targetUrl = page === 'dashboard' ? routeUrl('/dashboard') : page === 'login' ? routeUrl('/login') : routeUrl('/');
+    const targetUrl = getAppUrl(page);
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({}, '', targetUrl);
     }
@@ -59,19 +41,21 @@ export function App() {
     const handlePopState = () => {
       setMobileMenuOpen(false);
       setEditingSurvey(null);
-      const path = stripBase(window.location.pathname);
-      if (path === '/dashboard') setCurrentPage('dashboard');
-      else if (path === '/login' && !isStaticHost()) setCurrentPage('login');
-      else setCurrentPage('field');
+      const route = getAppRoute();
+      if (route === 'login' && isStaticHost()) {
+        setCurrentPage('field');
+      } else {
+        setCurrentPage(route);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect to home if browsing to /login on static host (no local server backend)
+  // Redirect to home if browsing to login route on static host (no local server backend)
   useEffect(() => {
-    if (stripBase(window.location.pathname) === '/login' && isStaticHost()) {
-      window.history.replaceState({}, '', routeUrl('/'));
+    if (getAppRoute() === 'login' && isStaticHost()) {
+      window.history.replaceState({}, '', getAppUrl('field'));
       setEditingSurvey(null);
       setCurrentPage('field');
     }

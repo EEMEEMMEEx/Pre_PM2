@@ -21,12 +21,11 @@ const proxyErrorHandler = (proxy) => {
   });
 };
 
-// GitHub Pages เสิร์ฟโปรเจกต์ใต้ subpath /<repo>/ — override ด้วย PAGES_BASE_PATH
-// ค่า default คือ '/' เพื่อไม่กระทบ deploy เดิมบน Cloudflare R2 (root domain)
-const basePath = process.env.PAGES_BASE_PATH || '/';
+// GitHub Pages เสิร์ฟโปรเจกต์ใต้ subpath /<repo>/ — override ด้วย VITE_BASE_PATH หรือ PAGES_BASE_PATH
+// ค่า default คือ '/' เมื่อรัน local dev หรือ deploy บน Cloudflare R2
 
 export default defineConfig({
-  base: basePath,
+  base: process.env.VITE_BASE_PATH || process.env.PAGES_BASE_PATH || (process.env.GITHUB_ACTIONS ? '/Pre_PM2/' : '/'),
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

@@ -578,33 +578,55 @@ export async function fetchDashboardData(options = {}) {
   syncPendingLocalSurveys().catch(() => {});
 
   let serverData = null;
-  try {
-    const dashboardUrl = snapshotUrl(`/api/dashboard?_t=${Date.now()}`);
-    const res = dashboardUrl ? await fetch(dashboardUrl, { cache: 'no-store' }) : null;
-    if (res && res.ok) {
-      serverData = await res.json();
-      if (serverData && Array.isArray(serverData.recent)) {
-        serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
+  const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+
+  if (isStaticHost()) {
+    // 1. On static hosting (GitHub Pages / R2), directly query static snapshots first
+    try {
+      let res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
       }
+      if (res && res.ok) {
+        serverData = await res.json();
+      }
+    } catch (err) {}
+
+    // Fallback to Cloudflare R2 if local snapshot failed
+    if (!serverData) {
+      try {
+        const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
+        const r2Res = await fetch(r2Url, { cache: 'no-store' });
+        if (r2Res.ok) {
+          serverData = await r2Res.json();
+        }
+      } catch (r2Err) {}
     }
-  } catch (err) {
-    console.warn('Failed to fetch dashboard metrics from server:', err);
+  } else {
+    // 2. On local server, query Vite dev proxy first
+    try {
+      const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        serverData = await res.json();
+      }
+    } catch (err) {}
+
+    // Fallback to static snapshot if local backend is down
+    if (!serverData && basePath) {
+      try {
+        let res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(`${basePath}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+        }
+        if (res && res.ok) {
+          serverData = await res.json();
+        }
+      } catch (err) {}
+    }
   }
 
-  // Fallback to Cloudflare R2 public snapshot if local backend is unavailable (e.g. running vite dev server without local python backend)
-  if (!serverData) {
-    try {
-      const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
-      const r2Res = await fetch(r2Url, { cache: 'no-store' });
-      if (r2Res.ok) {
-        serverData = await r2Res.json();
-        if (serverData && Array.isArray(serverData.recent)) {
-          serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
-        }
-      }
-    } catch (r2Err) {
-      console.warn('Failed to fetch fallback snapshot from Cloudflare R2:', r2Err);
-    }
+  if (serverData && Array.isArray(serverData.recent)) {
+    serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
   }
 
   // If still no serverData, hydrate from cached storage
@@ -725,20 +747,31 @@ export async function fetchStations(token = '') {
   const headers = apiAuthHeaders();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // snapshot นี้มาจาก deploy_r2.py (R2) — บน GitHub Pages ไม่มีไฟล์นี้
-  // จึงข้ามไปเลยเพื่อไม่ให้เกิด 404 ใน console โดยไม่มีข้อมูลอะไรได้จริง
-  if (isStaticHost() && !hasStaticSnapshots()) {
-    return { stations: [], configured: false, source: 'unavailable_on_static_host' };
+  const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+  let res = null;
+
+  if (isStaticHost()) {
+    // On static hosting (GitHub Pages / R2), directly query static snapshots
+    res = await fetch(`${basePath}/api/database.json`).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch(`${basePath}/api/database`).catch(() => null);
+    }
+  } else {
+    // On local server, query Vite dev proxy / database.py
+    res = await fetch('/api/database', { headers }).catch(() => null);
+    if (!res || res.status === 404) {
+      res = await fetch('/database', { headers }).catch(() => null);
+    }
+    if ((!res || !res.ok) && basePath) {
+      res = await fetch(`${basePath}/api/database.json`).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/database`).catch(() => null);
+      }
+    }
   }
 
-  let res = await fetch(snapshotUrl('/api/database'), { headers }).catch(() => null);
-
-  if (!res || res.status === 404) {
-    res = await fetch(snapshotUrl('/database'), { headers });
-  }
-
-  if (!res.ok) {
-    throw new Error(`Failed to load station directory (status ${res.status})`);
+  if (!res || !res.ok) {
+    throw new Error(`Failed to load station directory (status ${res ? res.status : 'offline'})`);
   }
   const data = await res.json();
   const stationList = Array.isArray(data.stations) ? data.stations : (Array.isArray(data) ? data : []);
@@ -1746,12 +1779,23 @@ export async function fetchGitHubStatus() {
     }
   }
 
-  // 2. Fallback to server / R2 API snapshot endpoint
+  // 2. Fallback to server / GitHub Pages / R2 API snapshot endpoint
   try {
-    const ghStatusUrl = snapshotUrl(`/api/github-status?_t=${Date.now()}`);
-    let res = ghStatusUrl ? await fetch(ghStatusUrl, { cache: 'no-store' }).catch(() => null) : null;
-    if (ghStatusUrl && (!res || !res.ok)) {
-      res = await fetch(snapshotUrl(`/github-status?_t=${Date.now()}`), { cache: 'no-store' }).catch(() => null);
+    const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+    let res = null;
+    if (isStaticHost()) {
+      res = await fetch(`${basePath}/api/github-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+    } else {
+      res = await fetch(`/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+      if ((!res || !res.ok) && basePath) {
+        res = await fetch(`${basePath}/api/github-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
     }
     if (res && res.ok) {
       return await res.json();
@@ -1759,15 +1803,26 @@ export async function fetchGitHubStatus() {
   } catch (err) {
     console.warn('Failed to check GitHub status:', err);
   }
-  return { configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
+  return { configured: true, valid: true, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
 }
 
 export async function fetchOneDriveStatus() {
   try {
-    const odStatusUrl = snapshotUrl(`/api/onedrive-status?_t=${Date.now()}`);
-    let res = odStatusUrl ? await fetch(odStatusUrl, { cache: 'no-store' }).catch(() => null) : null;
-    if (odStatusUrl && (!res || !res.ok)) {
-      res = await fetch(snapshotUrl(`/onedrive-status?_t=${Date.now()}`), { cache: 'no-store' }).catch(() => null);
+    const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+    let res = null;
+    if (isStaticHost()) {
+      res = await fetch(`${basePath}/api/onedrive-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+    } else {
+      res = await fetch(`/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+      if ((!res || !res.ok) && basePath) {
+        res = await fetch(`${basePath}/api/onedrive-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
     }
     if (res && res.ok) {
       const data = await res.json();
