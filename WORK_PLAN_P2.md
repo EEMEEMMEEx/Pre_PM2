@@ -105,4 +105,9 @@
 | C5 ↔ B3 | ตรวจว่า UI/รายงานยังถูกต้องหลัง scrub | P1 ทำ scrub + deploy | งาน P1 ต้อง merge + deploy ก่อน แล้วฉันจึงตรวจ |
 | C6/C7 ↔ D7 | งานคุณภาพ + หลักฐาน | P3 ตรวจเป็น QA gate | ส่งหลักฐานให้ P3 ก่อน merge |
 
+### หมายเหตุเมื่อรันขนานกับอีก 2 track
+- เริ่มงาน C2–C7 ได้ทันที (ไม่มีไฟล์ของ P1/P3 ที่ฉันต้องแก้ทับ) — เฉพาะ C1 จุดที่ต้องรอ: เรื่อง `429` (รอยาน B1) ส่วน `401 invalid_password`/`401 unauthorized` มีอยู่แล้วในโค้ด จึงเริ่มต่อ header ได้เลย
+- merge ของ track ฉันจะ trigger production deploy → ต้องให้ P1 merge B9 (ลำดับอัปโหลดให้อดทนต่อการ cancel) ก่อน และรอ deploy run ก่อนหน้าจบ (`gh run watch`) ไม่งั้น r2.dev อาจพังชั่วคราว
+- ห้ามแก้ `src/version.js` / `package.json` / `CHANGELOG.md` — ส่งข้อมูลให้ P1 รวม และอย่าแก้มือใน `README.md` (เป็นของ P3 + บรรทัด 9 ของ P1)
+
 ไฟล์ของเพื่อนร่วมทีม: [WORK_PLAN_P1.md](WORK_PLAN_P1.md) · [WORK_PLAN_P3.md](WORK_PLAN_P3.md) · ไฟล์รวม: [WORK_PLAN.md](WORK_PLAN.md) (P3 เป็นคน sync ตาราง §3)

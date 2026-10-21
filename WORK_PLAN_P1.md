@@ -24,6 +24,7 @@
 | B5 | ชุดเทสต์ Python (`tests/`) | P1 | READY | `npm run test:py` ผ่าน + เป็น gate ของทุก track | ทุกคนพึ่ง |
 | B6 | กัน backup `survey-*.json` เข้า git | P1 | READY | `git status` สะอาดหลังบันทึกผ่านเซิร์ฟเวอร์ | P3 ตรวจใน D5 |
 | B7 | prune audit 4 แถว + วิธี restore | P2 | READY | รายงานก่อน/หลังสตาร์ตเซิร์ฟเวอร์ + ขั้นตอนกู้ข้อมูล | P3 ประสาน |
+| B9 | สลับลำดับอัปโหลด: `index.html` + SPA fallback เป็นรายการสุดท้าย | P0 | READY | deploy ที่ถูก cancel กลางทางไม่ทำให้ r2.dev พัง | ต้องรู้ก่อน merge แบบขนาน (ดูหัวข้อ ลำดับ merge ปลอดภัย) |
 | B8 | Cloudflare Worker proxy (read/write) | P2 | BLOCKED | ไม่เหลือ GitHub API ตรงใน browser + PII ออกจาก repo สาธารณะ | ต้องข้อสรุปจาก D4 (P3) + P2 ทำ client adapter |
 | RL | release metadata (version/CHANGELOG/badge) | P0 (ต่อเนื่อง) | DOING | ทุก PR มีเลขเวอร์ชันเดียว ไม่มีเลขค้างใน docs | ทุก track ส่งข้อมูลให้ฉัน |
 
@@ -70,6 +71,19 @@
 - สถานะ: BLOCKED — ต้องได้ข้อสรุปจาก D4 (PII inventory, P3) + สิทธิ์ Cloudflare + ตัดสินใจ owner
 - ส่วนของฉัน: spec endpoint (`/sync/commit`, `/sync/delete`, `/records`), scoped secret ใน Worker, rate limit + allow-list origin, contract ให้ P2 ทำ client adapter
 - ผลลัพธ์ที่คาดหวัง: browser ไม่มีทางเห็น credential, read path ไม่ติด GitHub rate limit, PII ออกจาก repo สาธารณะได้จริง
+
+### B9 (P0) ทำ deploy ให้ atomic ต่อการ cancel (จำเป็นถ้าจะ merge ขนานกันจริง)
+- หลักฐาน: deploy run `39533128570` อัปโหลด `/index.html` เป็นไฟล์ที่ **2 จาก 28** ส่วน `assets/index-CiDv2Xla.js` อยู่ที่ 9 และ `index-BfOHmdUs.css` อยู่ที่ 13 · workflow ตั้ง `concurrency: group r2-deploy, cancel-in-progress: true` (deploy-r2.yml:19-21)
+- ปัญหา: ถ้ามี push ซ้ำขณะกำลังอัปโหลด → run เก่าถูก cancel → R2 เหลือ `index.html` ใหม่ที่ชี้ hashed asset ที่ **ยังไม่ถูกอัปโหลด** = r2.dev พังจนกว่า deploy ครั้งถัดไปจะจบ · หน้าต่างเสี่ยงประมาณครึ่งแรกของขั้นตอน deploy (รอบจริง ~40 วินาที)
+- ทำ: ใน `deploy_frontend_to_r2()` แยก `files_to_upload` เป็น 2 ชุด — (ชุด 1) `assets/**` + `fonts/**` + image/อื่น อัปโหลดก่อน · (ชุด 2) `index.html` และ SPA route fallbacks อัปโหลดท้ายสุด · `--dry-run` พิมพ์ลำดับใหม่ให้ดู · ไม่เปลี่ยนพฤติกรรมอื่น
+- Definition of Done: test ที่ mock s3 client ตรวจว่า `index.html` เป็นคีย์ลำดับท้าย ๆ เสมอ · log ของ deploy รอบถัดไปแสดง `Uploaded (…/28): /index.html` เป็นตัวเลขสูงสุด · รัน `npm run build` แล้ว `--dry-run` exit 0
+- gate: การรัน deploy จริงต้องได้รับอนุญาตเหมือนเดิม แต่งานนี้ลดความเสี่ยงของ release ที่ merge ใกล้กันหลาย PR
+
+### ลำดับ merge ที่ปลอดภัยเมื่อ 3 track ทำงานพร้อมกัน
+1. P1 merge `B9` + `B2` เป็นตัวแรก (เครื่องมือ deploy ให้อดทนต่อการ cancel) แล้วค่อยให้ track อื่นตาม
+2. ทุก merge ที่แตะ path ใน workflow ให้ **รอ run ก่อนหน้าจบ** (`gh run watch` หรือ `gh run list --limit 1`) เพื่อไม่ให้ cancel ซ้ำซ้อน
+3. ถ้าเร่งงาน: รวม PR ของ 2–3 งานเป็น release เดียวต่อรอบ (deploy ครั้งเดียว) ดีกว่า merge ทีละ PR ติดกัน
+4. P3 เป็นคนตรวจ `V1` หลัง deploy ทุกครั้ง (endpoint สาธารณะ + shell ใหม่) — ห้ามถือว่า merge แล้วคือเสร็จ
 
 ### RL (P0 ต่อเนื่อง) บทบาท release owner
 - รวม `src/version.js` + `package.json` + `CHANGELOG.md` + badge `README.md:9` ต่อ release ตาม SemVer (fix = PATCH, feature = MINOR)

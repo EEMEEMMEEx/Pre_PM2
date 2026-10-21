@@ -84,6 +84,7 @@
 | C6 | คุม quota localStorage (base64 photos) | P2 | P2 | READY | ตาม AGENTS DoD |
 | C7 | Accessibility/DoD audit ฟอร์ม 7 ขั้น + dark/light contrast | P2 | P2 | READY | |
 | D8 | ตรวจ PAT หมดอายุแล้วแอปแจ้งเตือน ไม่ fail เงียบ | P3 | P2 | READY | สรุปร่วมกับ C3 |
+| B9 | สลับลำดับอัปโหลดให้ `index.html`/SPA fallback เป็นรายการสุดท้าย (กัน deploy ถูก cancel แล้ว r2.dev พัง) | P1 | P0 | READY | หลักฐาน: run `39533128570` อัปโหลด index.html เป็นไฟล์ที่ 2/28 · workflow ตั้ง `cancel-in-progress: true` |
 | B8 | Cloudflare Worker proxy สำหรับ read/write (แทน GitHub API ตรง) | P1+P2 | P2 | BLOCKED (ต้องตัดสินใจสถาปัตยกรรม + สิทธิ์ Cloudflare) | ทางออกถาวรของ PII |
 
 ---
@@ -235,6 +236,19 @@
 
 ข้อควรระวัง: อย่า revoke ก่อน bundle ใหม่ขึ้น R2 (ผ่านแล้ว) และอย่าลืมว่า bundle/hash เก่ายังเก็บค่าไว้ → B2 + D3 ควรจบในสัปดาห์เดียวกัน
 
+### 5.1 กติกาเมื่อ 3 track ทำงานพร้อมกัน (สำคัญ)
+
+| เรื่อง | กติกา | เหตุผล (หลักฐาน) |
+|---|---|---|
+| ขอบเขตไฟล์ | เริ่มขนานได้ทันที — P1/P2/P3 ไม่มีไฟล์ exclusive ซ้ำกัน | ตรวจตาราง ownership แล้ว: P1 ∩ P2 = ∅, P1 ∩ P3 = ∅, P2 ∩ P3 = ∅ |
+| ไฟล์เดียวกันสองมือ | `README.md`: P1 แตะเฉพาะบรรทัด 9 (badge), P3 แตะเนื้อหา · ถ้าเลี่ยงได้ให้ P3 เปิด PR แยกและไม่แก้บรรทัด 9 | ป้องกัน git conflict + แก้ชนกัน |
+| `WORK_PLAN.md` | เจ้าของงานแก้เฉพาะไฟล์ตัวเอง · P3 sync ตาราง §3 คนเดียว | มีมือเดียวต่อไฟล์รวม |
+| ลำดับ merge | merge `B9` (deploy atomic) ก่อน · จากนั้นรอให้ deploy run จบก่อน merge ถัดไป (`gh run watch`) หรือรวมหลาย PR เป็น release เดียว | workflow ตั้ง `cancel-in-progress: true` (deploy-r2.yml:19-21) และ `index.html` เคยถูกอัปโหลดเป็นไฟล์ที่ 2/28 ก่อน asset ที่ 9/28 → cancel กลางทาง = r2.dev พังชั่วคราว |
+| contract | งานที่แตะ API เดียวกัน (B1 ↔ C1) ต้องล็อก shape ก่อนโค้ด · `401 invalid_password`/`401 unauthorized` มีอยู่แล้วจึงเริ่ม C1 ได้ ส่วน `429` รอ B1 | ลดงานแก้ซ้ำสองรอบ |
+| ข้อมูลจริง | P3 ห้ามรัน purge/deploy ก่อน B2 merge · ห้ามแตะ `data/**` โดยไม่มี `YES, DELETE/CHANGE <path>` | gate ของ repo |
+| เลขเวอร์ชัน | ทุก PR ส่งเลข + ข้อความ CHANGELOG ให้ P1 รวมก่อน merge · ห้าม `src/version.js` จากสองมือ | AGENTS.md §Changelog & Version Management |
+| ตรวจรับ | ทุก deploy ต้องมี `V1` (P3) ตรวจ endpoint + shell ใหม่ก่อนถือว่าเสร็จ | merge ≠ เสร็จ |
+
 ## 6. ประตูอนุญาตและข้อห้าม (สรุปซ้ำสำหรับทีมใหม่)
 
 | การกระทำ | ใครสั่งได้ | เงื่อนไข |
@@ -268,6 +282,8 @@
 | `/api/login` ยังไม่กัน brute force; API token เก็บใน memory (หายเมื่อ restart) | กลาง | B1 + D6 |
 | repo ไม่มี automated test/lint | กลาง | B5 + D7 |
 | SW pre-cache fail เพราะ `/` บน r2.dev ตอบ 404 | ต่ำ | C4 |
+| deploy ถูก cancel กลางทาง (merge ถี่ ๆ) ทิ้ง `index.html` ใหม่ที่ชี้ asset ที่ยังไม่มี → r2.dev พังชั่วคราว | กลาง (เพิ่มเมื่อวางแผน merge ขนาน) | B9 + กติกา 5.1 |
+| `README.md` มีสองมือแก้ (P1 badge / P3 เนื้อหา) | ต่ำ | กติกา 5.1 (PR แยก) |
 
 ---
 
