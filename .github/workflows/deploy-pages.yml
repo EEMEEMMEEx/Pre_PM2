@@ -2,12 +2,16 @@ name: Deploy to GitHub Pages
 
 # Deploy แยกจาก R2 โดยสิ้นเชิง:
 # - ไม่แตะ deploy-r2.yml / deploy_r2.py / bucket R2
-# - ทำงานเฉพาะ push ไปยัง branch นี้ หรือสั่งมือ (workflow_dispatch)
 # - ใช้ GitHub Pages project site ใต้ subpath /<repo>/ (vite base = PAGES_BASE_PATH)
-
+#
+# on.push.branches: ต้องมี main ด้วย เพราะ GitHub Pages environment อนุญาตให้
+# deploy จาก main เป็นค่า default และ work ที่ merge เข้า main แล้วจะไม่ trigger
+# ถ้ากรองเฉพาะ branch งาน (เคสจริง: merge PR #1 เข้า main แล้ว Pages ไม่ rebuild
+# ทำให้หน้าเว็บยังเสิร์ฟ artifact เก่า -> manifest/font 404)
 on:
   push:
     branches:
+      - main
       - track-pages/deploy-github-pages
     paths:
       - 'src/**'
