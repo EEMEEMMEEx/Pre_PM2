@@ -57,6 +57,20 @@ mimetypes.add_type("application/json", ".json")
 mimetypes.add_type("text/html", ".html")
 
 
+def prepare_upload_files(dist_dir: Path):
+    """แยกและเรียงลำดับไฟล์ใน dist/ เพื่อให้อัปโหลดแบบ atomic ปลอดภัยต่อ cancel-in-progress:
+    - ชุดที่ 1: assets/**, fonts/**, images, sw.js, manifest.json และไฟล์ static ทั้งหมด (rel_key != 'index.html')
+    - ชุดที่ 2: index.html เป็นไฟล์สุดท้ายเสมอ เพื่อเป็นจุด cutover หลังจาก asset ครบ
+    """
+    all_files = [p for p in dist_dir.rglob("*") if p.is_file()]
+    non_html = sorted(
+        [p for p in all_files if p.relative_to(dist_dir).as_posix() != "index.html"],
+        key=lambda p: p.relative_to(dist_dir).as_posix(),
+    )
+    html_files = [p for p in all_files if p.relative_to(dist_dir).as_posix() == "index.html"]
+    return non_html + html_files
+
+
 def sanitize_dashboard_payload(payload: dict):
     """คืน (payload สำเนา, จำนวนค่าที่ตัดออก) โดยลบข้อมูลติดต่อออกจาก recent[] ทั้งหมด
 
@@ -156,9 +170,11 @@ def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: 
     if not DIST_DIR.exists() or not any(DIST_DIR.iterdir()):
         print("  [ERROR] 'dist/' is missing or empty. Run 'npm run build' first.")
         return 1
-    files = [p for p in DIST_DIR.rglob("*") if p.is_file()]
+    files = prepare_upload_files(DIST_DIR)
     total = sum(p.stat().st_size for p in files)
+    asset_count = len([p for p in files if p.relative_to(DIST_DIR).as_posix() != "index.html"])
     print(f"  dist/ files    : {len(files)} ({total / 1024:.1f} KB)")
+    print(f"  upload order   : 1) assets & static ({asset_count}) -> 2) /index.html (cutover) -> 3) SPA fallbacks (11) -> 4) API snapshots")
     print(f"  SPA fallbacks  : dashboard/, field/, login/ + index, home")
     print(f"  will NOT upload: /api/sync-config (GitHub token) — ถอดออกแล้วใน v2.11.0")
     print(f"  will purge     : {', '.join('/' + k for k in LEGACY_SECRET_KEYS)} (รันเสมอ แม้ snapshot ล้มเหลว)")
@@ -217,9 +233,11 @@ def deploy_frontend_to_r2(
     print(f" Snapshot PII    : {'dashboard + stations' if strip_station_contacts else 'dashboard only'}")
     print("=" * 70)
 
-    files_to_upload = [p for p in DIST_DIR.rglob("*") if p.is_file()]
+    files_to_upload = prepare_upload_files(DIST_DIR)
     total_size = sum(p.stat().st_size for p in files_to_upload)
+    asset_count = len([p for p in files_to_upload if p.relative_to(DIST_DIR).as_posix() != "index.html"])
     print(f"\n[INFO] Found {len(files_to_upload)} file(s) ({total_size / 1024:.1f} KB total). Starting upload...\n")
+    print(f"  [INFO] Upload sequence: {asset_count} asset/static files first, followed by /index.html and SPA route fallbacks (atomic cutover).\n")
 
     uploaded = 0
     for file_path in files_to_upload:

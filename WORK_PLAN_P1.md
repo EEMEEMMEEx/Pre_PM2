@@ -24,7 +24,7 @@
 | B5 | ชุดเทสต์ Python (`tests/`) | P1 | READY | `npm run test:py` ผ่าน + เป็น gate ของทุก track | ทุกคนพึ่ง |
 | B6 | กัน backup `survey-*.json` เข้า git | P1 | READY | `git status` สะอาดหลังบันทึกผ่านเซิร์ฟเวอร์ | P3 ตรวจใน D5 |
 | B7 | prune audit 4 แถว + วิธี restore | P2 | READY | รายงานก่อน/หลังสตาร์ตเซิร์ฟเวอร์ + ขั้นตอนกู้ข้อมูล | P3 ประสาน |
-| B9 | สลับลำดับอัปโหลด: `index.html` + SPA fallback เป็นรายการสุดท้าย | P0 | READY | deploy ที่ถูก cancel กลางทางไม่ทำให้ r2.dev พัง | ต้องรู้ก่อน merge แบบขนาน (ดูหัวข้อ ลำดับ merge ปลอดภัย) |
+| B9 | สลับลำดับอัปโหลด: `index.html` + SPA fallback เป็นรายการสุดท้าย | P0 | DONE | deploy ที่ถูก cancel กลางทางไม่ทำให้ r2.dev พัง | v2.11.2 (`track-b/b9`) |
 | B8 | Cloudflare Worker proxy (read/write) | P2 | BLOCKED | ไม่เหลือ GitHub API ตรงใน browser + PII ออกจาก repo สาธารณะ | ต้องข้อสรุปจาก D4 (P3) + P2 ทำ client adapter |
 | RL | release metadata (version/CHANGELOG/badge) | P0 (ต่อเนื่อง) | DOING | ทุก PR มีเลขเวอร์ชันเดียว ไม่มีเลขค้างใน docs | ทุก track ส่งข้อมูลให้ฉัน |
 
@@ -110,6 +110,7 @@
 | วันที่ | id | สถานะใหม่ | หลักฐาน (sha / run id / คำสั่ง) | หมายเหตุ |
 |---|---|---|---|---|
 | 2026-10-21 | RL | DOING | `75ed619` → merge `7526ecf` · run `39533128570` | production = 2.11.1 |
+| 2026-10-21 | B9 | DONE | `tests/test_deploy_order.py` PASS (mock S3), dry-run order verified | v2.11.2 |
 |  | B2 | READY |  |  |
 |  | B3 | READY |  |  |
 |  | B4 | GATED |  | รอนับหนึ่ง `FORM_PASSWORD` จาก P3 |
