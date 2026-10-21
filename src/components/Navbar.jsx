@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, Menu, X, Sun, Moon, Cloud, GitBranch, AlertCircle, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, Menu, X, Sun, Moon, Settings } from 'lucide-react';
 import { APP_VERSION } from '@/version';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
-import { fetchGitHubStatus, fetchOneDriveStatus, getStoredGitHubToken, getUnsyncedSurveysCount } from '@/lib/api';
-import { GitHubTokenModal } from '@/components/auth/GitHubTokenModal';
-import { OneDriveSyncModal } from '@/components/auth/OneDriveSyncModal';
+import { fetchGitHubStatus, getStoredGitHubToken, getUnsyncedSurveysCount } from '@/lib/api';
+import { SettingsModal } from '@/components/settings/SettingsModal';
 import { toast } from '@/components/ui/toast';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 
 export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   const { isDark, toggleTheme } = useTheme();
-  const [onedriveStatus, setOnedriveStatus] = useState(null);
   const [githubStatus, setGithubStatus] = useState({ configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2' });
   const [storedToken, setStoredToken] = useState(() => getStoredGitHubToken());
   const [unsyncedCount, setUnsyncedCount] = useState(() => getUnsyncedSurveysCount());
-  const [isOneDriveModalOpen, setIsOneDriveModalOpen] = useState(false);
-  const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('github');
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [timeStr, setTimeStr] = useState(() =>
     new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -62,7 +60,6 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   }, [refreshGitHubStatus]);
 
   // แจ้งเตือนตามสาเหตุของ problems ฝั่ง GitHub sync:
-  // no_token = เครื่องยังไม่ได้ใส่ PAT, scope_insufficient = 403 สิทธิ์ไม่พอ, bad_token = 401/403, rate_limited = โควตาคำขอหมด
   useEffect(() => {
     const handleTokenRequired = (event) => {
       const reason = event?.detail?.reason || 'bad_token';
@@ -71,13 +68,15 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
         return;
       }
       if (reason === 'scope_insufficient') {
-        setIsTokenModalOpen(true);
+        setSettingsInitialTab('github');
+        setIsSettingsModalOpen(true);
         toast.error(
           'สิทธิ์ GitHub Token ไม่เพียงพอ — กรุณาตั้งค่าสิทธิ์ "Contents: Read and write" สำหรับ Repository "Thaidimaru/Pre_PM2"'
         );
         return;
       }
-      setIsTokenModalOpen(true);
+      setSettingsInitialTab('github');
+      setIsSettingsModalOpen(true);
       toast.error(
         reason === 'no_token'
           ? 'ยังไม่ได้ตั้งค่า GitHub Token — ข้อมูลถูกบันทึกลงเครื่อง และจะซิงค์ขึ้น GitHub เมื่อใส่ Token'
@@ -172,28 +171,27 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
           </div>
         </div>
 
-        {/* Right Section: Mobile Theme Toggle & Desktop System Strip */}
+        {/* Right Section: Mobile Controls & Desktop System Strip */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Mobile GitHub Token / Mode status button */}
+          {/* Mobile Settings Gear Button */}
           <button
             type="button"
-            onClick={() => setIsTokenModalOpen(true)}
+            onClick={() => {
+              setSettingsInitialTab('github');
+              setIsSettingsModalOpen(true);
+            }}
             className={cn(
-              'flex md:hidden items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer',
-              hasToken
-                ? isDark
-                  ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                : isDark
-                ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
-                : 'border-amber-300 bg-amber-50 text-amber-800'
+              'relative flex md:hidden h-10 w-10 items-center justify-center rounded-xl border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500',
+              isDark
+                ? 'border-blue-500/30 bg-blue-950/40 text-cyan-400 hover:bg-blue-900/40 hover:text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 shadow-xs'
             )}
-            title={hasToken ? 'เชื่อมต่อ GitHub — คลิกเพื่อจัดการ Token' : 'โหมดอ่านอย่างเดียว — คลิกเพื่อใส่ Token'}
-            aria-label={hasToken ? 'เชื่อมต่อ GitHub' : 'โหมดอ่านอย่างเดียว'}
+            title="ตั้งค่าระบบ (GitHub & OneDrive)"
+            aria-label="ตั้งค่าระบบ"
           >
-            {hasToken ? <GitBranch className="h-4 w-4 text-emerald-400" /> : <KeyRound className="h-4 w-4 text-amber-400" />}
+            <Settings className="h-5 w-5" />
             {unsyncedCount > 0 && (
-              <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-slate-950 font-mono">
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-slate-950 font-mono shadow-xs">
                 {unsyncedCount}
               </span>
             )}
@@ -222,47 +220,6 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
               isDark ? 'text-slate-300' : 'text-slate-600'
             )}
           >
-            {/* GitHub Connection Status & Queue Indicator (Task C3) */}
-            <button
-              type="button"
-              onClick={() => setIsTokenModalOpen(true)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
-                hasToken
-                  ? isDark
-                    ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-400'
-                    : 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs hover:bg-emerald-100'
-                  : isDark
-                  ? 'border-amber-500/40 bg-amber-950/50 text-amber-300 hover:bg-amber-900/50 hover:border-amber-400'
-                  : 'border-amber-300 bg-amber-50 text-amber-800 shadow-xs hover:bg-amber-100'
-              )}
-              title={
-                hasToken
-                  ? `เชื่อมต่อ GitHub สำเร็จ (${githubStatus?.user || 'Personal Access Token'}) — คลิกเพื่อจัดการ Token`
-                  : 'โหมดอ่านอย่างเดียว: ยังไม่ได้ใส่ GitHub Token (ข้อมูลจะเก็บในเครื่องชั่วคราว) — คลิกเพื่อใส่ Token'
-              }
-            >
-              {hasToken ? (
-                <GitBranch className={cn('h-3.5 w-3.5', isDark ? 'text-emerald-400' : 'text-emerald-600')} />
-              ) : (
-                <KeyRound className={cn('h-3.5 w-3.5', isDark ? 'text-amber-400' : 'text-amber-600')} />
-              )}
-              <span>{hasToken ? 'เชื่อมต่อ GitHub' : 'โหมดอ่านอย่างเดียว'}</span>
-              {unsyncedCount > 0 && (
-                <span
-                  className={cn(
-                    'ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold font-mono',
-                    hasToken
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-amber-500 text-slate-950'
-                  )}
-                  title={`${unsyncedCount} รายการรอซิงค์ขึ้น GitHub`}
-                >
-                  {hasToken ? `รอซิงค์ ${unsyncedCount}` : `ค้างส่ง ${unsyncedCount}`}
-                </span>
-              )}
-            </button>
-
             {/* Online / Offline status indicator */}
             <div
               className={cn(
@@ -292,22 +249,6 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
                 {isOnline ? 'ระบบทำงานปกติ' : 'ออฟไลน์ (โหมดในพื้นที่)'}
               </span>
             </div>
-
-            {/* OneDrive Central Storage & Sync indicator */}
-            <button
-              type="button"
-              onClick={() => setIsOneDriveModalOpen(true)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
-                isDark
-                  ? 'border-sky-500/40 bg-sky-950/50 text-sky-300 hover:bg-sky-900/50 hover:border-sky-400'
-                  : 'border-sky-300 bg-sky-50 text-sky-700 shadow-xs hover:bg-sky-100'
-              )}
-              title="ศูนย์กลางจัดเก็บและซิงค์ข้อมูล: Microsoft OneDrive (utai323@gmail.com) — คลิกเพื่อดูรายละเอียดหรือซิงค์ข้อมูล"
-            >
-              <Cloud className={cn('h-3.5 w-3.5', isDark ? 'text-sky-400' : 'text-sky-600')} />
-              <span>OneDrive ซิงค์ (utai323)</span>
-            </button>
 
             <div className={cn('h-6 w-px', isDark ? 'bg-slate-700/60' : 'bg-slate-300')} />
 
@@ -354,22 +295,47 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
                 </>
               )}
             </button>
+
+            {/* Consolidated Settings Gear Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsInitialTab('github');
+                setIsSettingsModalOpen(true);
+              }}
+              className={cn(
+                'relative flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 hover:scale-[1.02] active:scale-[0.98]',
+                isDark
+                  ? 'border-blue-500/30 bg-blue-950/40 text-slate-200 hover:bg-blue-900/50 hover:text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-xs'
+              )}
+              title="ตั้งค่าระบบ (GitHub Sync & Microsoft OneDrive) — ต้องยืนยันรหัสผ่านความปลอดภัย"
+              aria-label="การตั้งค่าระบบ"
+            >
+              <Settings className="h-4 w-4 text-cyan-400" />
+              <span>ตั้งค่าระบบ</span>
+              {unsyncedCount > 0 && (
+                <span
+                  className="rounded-full bg-amber-500 text-slate-950 px-1.5 py-0.2 text-[10px] font-bold font-mono"
+                  title={`${unsyncedCount} รายการรอซิงค์ขึ้น GitHub`}
+                >
+                  {unsyncedCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* OneDrive Storage & Sync Center Modal */}
-      <OneDriveSyncModal
-        isOpen={isOneDriveModalOpen}
-        onClose={() => setIsOneDriveModalOpen(false)}
-        onOpenGitHubModal={() => setIsTokenModalOpen(true)}
-      />
-
-      {/* Advanced Fallback: GitHub Token Configuration Modal */}
-      <GitHubTokenModal
-        isOpen={isTokenModalOpen}
-        onClose={() => setIsTokenModalOpen(false)}
-        onUpdated={(st) => setGithubStatus(st)}
+      {/* Consolidated Settings Modal (Password Protected) */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        initialTab={settingsInitialTab}
+        onGitHubUpdated={(st) => {
+          setGithubStatus(st);
+          refreshGitHubStatus();
+        }}
       />
     </header>
   );
