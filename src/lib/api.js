@@ -171,6 +171,21 @@ export function isStaticHost() {
   );
 }
 
+/**
+ * สร้าง URL สำหรับ snapshot endpoint ที่เสิร์ฟเป็น static file
+ * บน GitHub Pages ไฟล์จะอยู่ใต้ subpath (/<repo>/) จึงต้องเติม BASE_URL
+ * บน R2/local BASE_URL = '/' -> path เดิมไม่เปลี่ยน
+ *
+ * สำคัญ: บน GitHub Pages ไม่มี snapshot เหล่านี้เลย (เพราะไม่มี backend
+ * และ workflow ไม่ได้รัน deploy_r2.py) การยิงไปจะได้ 404 และทำให้ console
+ * เต็มไปด้วย error โดยไม่ได้ข้อมูลอะไร -> ข้ามไปเลยเมื่ออยู่บน static host
+ */
+function snapshotUrl(path) {
+  if (isStaticHost()) return null;
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  return `${base}${path}`;
+}
+
 /** แจ้ง UI (Navbar) ให้เปิด GitHubTokenModal เมื่อ token หมดอายุ/ไม่มีสิทธิ์ */
 export function notifyGitHubTokenRequired(reason = 'bad_token') {
   if (typeof window !== 'undefined') {
@@ -521,8 +536,9 @@ export async function fetchDashboardData(options = {}) {
 
   let serverData = null;
   try {
-    const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
+    const dashboardUrl = snapshotUrl(`/api/dashboard?_t=${Date.now()}`);
+    const res = dashboardUrl ? await fetch(dashboardUrl, { cache: 'no-store' }) : null;
+    if (res && res.ok) {
       serverData = await res.json();
       if (serverData && Array.isArray(serverData.recent)) {
         serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
@@ -1659,9 +1675,10 @@ export async function fetchGitHubStatus() {
 
   // 2. Fallback to server / R2 API snapshot endpoint
   try {
-    let res = await fetch(`/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
-    if (!res || !res.ok) {
-      res = await fetch(`/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    const ghStatusUrl = snapshotUrl(`/api/github-status?_t=${Date.now()}`);
+    let res = ghStatusUrl ? await fetch(ghStatusUrl, { cache: 'no-store' }).catch(() => null) : null;
+    if (ghStatusUrl && (!res || !res.ok)) {
+      res = await fetch(snapshotUrl(`/github-status?_t=${Date.now()}`), { cache: 'no-store' }).catch(() => null);
     }
     if (res && res.ok) {
       return await res.json();
@@ -1674,9 +1691,10 @@ export async function fetchGitHubStatus() {
 
 export async function fetchOneDriveStatus() {
   try {
-    let res = await fetch(`/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
-    if (!res || !res.ok) {
-      res = await fetch(`/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    const odStatusUrl = snapshotUrl(`/api/onedrive-status?_t=${Date.now()}`);
+    let res = odStatusUrl ? await fetch(odStatusUrl, { cache: 'no-store' }).catch(() => null) : null;
+    if (odStatusUrl && (!res || !res.ok)) {
+      res = await fetch(snapshotUrl(`/onedrive-status?_t=${Date.now()}`), { cache: 'no-store' }).catch(() => null);
     }
     if (res && res.ok) {
       const data = await res.json();
