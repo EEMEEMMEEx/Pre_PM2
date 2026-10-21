@@ -5,7 +5,9 @@ import { Navbar } from '@/components/Navbar';
 import { Sidebar } from '@/components/Sidebar';
 import { DashboardView } from '@/components/dashboard/DashboardView';
 import { FieldVisitView } from '@/components/field/FieldVisitView';
+import { LoginView } from '@/components/auth/LoginView';
 import { useTheme } from '@/context/ThemeContext';
+import { isStaticHost, saveLocalApiToken } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export function App() {
@@ -13,11 +15,13 @@ export function App() {
   const [currentPage, setCurrentPage] = useState(() => {
     const path = window.location.pathname;
     if (path === '/dashboard') return 'dashboard';
+    if (path === '/login' && !isStaticHost()) return 'login';
     return 'field';
   });
 
   const [editingSurvey, setEditingSurvey] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAuthGateActive, setIsAuthGateActive] = useState(false);
 
   const navigateTo = (page, extra = null) => {
     setMobileMenuOpen(false);
@@ -27,7 +31,7 @@ export function App() {
       setEditingSurvey(null);
     }
     setCurrentPage(page);
-    const targetUrl = page === 'dashboard' ? '/dashboard' : '/';
+    const targetUrl = page === 'dashboard' ? '/dashboard' : page === 'login' ? '/login' : '/';
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({}, '', targetUrl);
     }
@@ -40,19 +44,31 @@ export function App() {
       setEditingSurvey(null);
       const path = window.location.pathname;
       if (path === '/dashboard') setCurrentPage('dashboard');
+      else if (path === '/login' && !isStaticHost()) setCurrentPage('login');
       else setCurrentPage('field');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Redirect to home if browsing to legacy /login URL
+  // Redirect to home if browsing to /login on static host (no local server backend)
   useEffect(() => {
-    if (window.location.pathname === '/login') {
+    if (window.location.pathname === '/login' && isStaticHost()) {
       window.history.replaceState({}, '', '/');
       setEditingSurvey(null);
       setCurrentPage('field');
     }
+  }, []);
+
+  // Listen to local server auth gate triggers (Task C1 & C2)
+  useEffect(() => {
+    const handleLocalAuthRequired = () => {
+      if (!isStaticHost()) {
+        setIsAuthGateActive(true);
+      }
+    };
+    window.addEventListener('nbtc-local-auth-required', handleLocalAuthRequired);
+    return () => window.removeEventListener('nbtc-local-auth-required', handleLocalAuthRequired);
   }, []);
 
   return (
@@ -84,7 +100,19 @@ export function App() {
         {/* Dynamic Page Content */}
         <div className="flex-1 min-w-0 pl-0 lg:pl-64 transition-all duration-300">
           <div className="min-h-[calc(100vh-88px)] py-4 sm:py-6">
-            {currentPage === 'dashboard' ? (
+            {currentPage === 'login' && !isStaticHost() ? (
+              <LoginView
+                onLoginSuccess={(token) => {
+                  saveLocalApiToken(token);
+                  setIsAuthGateActive(false);
+                  navigateTo('dashboard');
+                }}
+                onCancel={() => {
+                  setIsAuthGateActive(false);
+                  navigateTo('field');
+                }}
+              />
+            ) : currentPage === 'dashboard' ? (
               <DashboardView
                 onNavigate={navigateTo}
                 onEditSurvey={(survey) => navigateTo('field', survey)}
@@ -99,6 +127,21 @@ export function App() {
           </div>
         </div>
       </div>
+
+      {/* Local server authentication gate modal (rendered when 401 unauthorized on local server) */}
+      {isAuthGateActive && !isStaticHost() && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md">
+            <LoginView
+              onLoginSuccess={(token) => {
+                saveLocalApiToken(token);
+                setIsAuthGateActive(false);
+              }}
+              onCancel={() => setIsAuthGateActive(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Global toast notifications (PDF/delete/sync errors) */}
       <ToastHost />

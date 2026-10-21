@@ -74,6 +74,68 @@ export function clearGitHubToken() {
   saveGitHubToken('');
 }
 
+// ---------------------------------------------------------------------------
+// Local Server Auth Token Handling (Task C1)
+// เก็บ token ใน sessionStorage ('surveyApiToken') แทน localStorage
+// ---------------------------------------------------------------------------
+const LOCAL_API_TOKEN_KEY = 'surveyApiToken';
+
+export function getLocalApiToken() {
+  try {
+    if (typeof window === 'undefined') return '';
+    return (sessionStorage.getItem(LOCAL_API_TOKEN_KEY) || '').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+export function saveLocalApiToken(token) {
+  try {
+    if (typeof window !== 'undefined') {
+      const clean = (token || '').trim();
+      if (clean) {
+        sessionStorage.setItem(LOCAL_API_TOKEN_KEY, clean);
+      } else {
+        sessionStorage.removeItem(LOCAL_API_TOKEN_KEY);
+      }
+      window.dispatchEvent(new CustomEvent('nbtc-local-auth-changed', { detail: { token: clean } }));
+    }
+  } catch (e) {
+    console.warn('Failed to save local API token to sessionStorage:', e);
+  }
+}
+
+export function clearLocalApiToken() {
+  saveLocalApiToken('');
+}
+
+export function apiAuthHeaders(existingHeaders = {}) {
+  const headers = { ...existingHeaders };
+  const token = getLocalApiToken();
+  if (token && !headers['Authorization'] && !headers['authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export function notifyLocalAuthRequired(reason = 'api_token') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nbtc-local-auth-required', { detail: { reason } }));
+  }
+}
+
+let localApiRateLimitedUntil = 0;
+export function isLocalApiRateLimited() {
+  return Date.now() < localApiRateLimitedUntil;
+}
+
+export function noteLocalApiRateLimited(retryAfterSec = 15) {
+  localApiRateLimitedUntil = Date.now() + retryAfterSec * 1000;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nbtc-rate-limited', { detail: { retryAfterSec } }));
+  }
+}
+
 let syncBroadcastChannel = null;
 if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   try {
@@ -117,16 +179,29 @@ export function notifyGitHubTokenRequired(reason = 'bad_token') {
 }
 
 /**
- * v2.9.0: แจ้งให้ตั้งค่า token แบบมี cooldown ต่อ reason
- * (Dashboard poll ทุก 10 วิ — ไม่งั้น modal/toast เด้งรัวเมื่อเครื่องยังไม่มี PAT)
+ * v2.9.0: แจ้งให้ตั้งค่า token แบบมี cooldown ต่อ reason (15 วินาที)
+ * (Dashboard poll ทุก 10 วิ — ไม่งั้น modal/toast เด้งรัวเมื่อเครื่องยังไม่มี PAT หรือสิทธิ์ไม่พอ)
  */
 const lastTokenPromptAt = new Map();
-function promptGitHubToken(reason = 'no_token', cooldownMs = 15000) {
+export function promptGitHubToken(reason = 'no_token', cooldownMs = 15000) {
   const now = Date.now();
   if (now - (lastTokenPromptAt.get(reason) || 0) < cooldownMs) return false;
   lastTokenPromptAt.set(reason, now);
   notifyGitHubTokenRequired(reason);
   return true;
+}
+
+/**
+ * จำนวนรายการสำรวจใน localStorage ที่ยังไม่ได้ซิงค์ขึ้น GitHub
+ */
+export function getUnsyncedSurveysCount() {
+  try {
+    const list = getLocalSurveys();
+    const deleted = getDeletedSurveyIds();
+    return list.filter((s) => s && s.recordId && !deleted.has(s.recordId) && !s.githubSynced).length;
+  } catch (e) {
+    return 0;
+  }
 }
 
 /**
@@ -144,6 +219,7 @@ export function githubErrorText(code) {
   const raw = String(code || '');
   if (raw === 'no_token') return 'ยังไม่ได้ตั้งค่า GitHub Token บนเครื่องนี้';
   if (raw === 'bad_token') return 'GitHub Token ไม่ถูกต้องหรือหมดอายุ';
+  if (raw === 'scope_insufficient') return 'สิทธิ์ GitHub Token ไม่เพียงพอ (ต้องใช้สิทธิ์ Contents: Read and write)';
   if (raw === 'rate_limited') return 'GitHub จำกัดจำนวนคำขอชั่วคราว (rate limit)';
   if (raw === 'file_not_found_on_github') return 'ไม่พบไฟล์บน GitHub';
   if (raw === 'github_write_failed') return 'เขียนขึ้น GitHub ไม่สำเร็จ';
@@ -563,7 +639,7 @@ export function enrichSurveyFields(rawSurvey = {}) {
 }
 
 export async function fetchStations(token = '') {
-  const headers = {};
+  const headers = apiAuthHeaders();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   let res = await fetch('/api/database', { headers }).catch(() => null);
@@ -613,6 +689,9 @@ export async function loginUser(password = '') {
     }).catch(() => null);
     if (!res) return { token: null, ok: false, error: 'network_error' };
     const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && data.token) {
+      saveLocalApiToken(data.token);
+    }
     return {
       token: data.token || null,
       ok: Boolean(res.ok && data.ok && data.token),
@@ -621,6 +700,84 @@ export async function loginUser(password = '') {
   } catch (e) {
     return { token: null, ok: false, error: e.message };
   }
+}
+
+/**
+ * Helper กลางสำหรับเรียก Local Server Mutating Endpoints (/api/save, /api/update, /api/delete)
+ * - แนบ Authorization: Bearer <surveyApiToken> จาก sessionStorage อัตโนมัติ (Task C1)
+ * - ตรวจสอบ Rate Limiting (429) พร้อม throttle และส่ง notification
+ * - ตรวจสอบ Unauthorized (401): ลอง token renewal 1 ครั้ง หากล้มเหลว ล้าง token และ trigger auth modal
+ */
+async function callLocalMutatingApi(endpoint, fallbackEndpoint, payload, customHeaders = {}) {
+  if (isStaticHost()) {
+    return { ok: false, error: 'no_backend', status: 404, data: null };
+  }
+
+  if (isLocalApiRateLimited()) {
+    const errorMsg = 'เซิร์ฟเวอร์จำกัดอัตราคำขอ กรุณารอสักครู่ (15 วินาที) แล้วลองใหม่อีกครั้ง';
+    return { ok: false, error: errorMsg, status: 429, data: null };
+  }
+
+  let headers = apiAuthHeaders({ 'Content-Type': 'application/json', ...customHeaders });
+  const body = JSON.stringify(payload);
+
+  let res = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body,
+  }).catch(() => null);
+
+  if ((!res || res.status === 404) && fallbackEndpoint) {
+    res = await fetch(fallbackEndpoint, {
+      method: 'POST',
+      headers,
+      body,
+    }).catch(() => null);
+  }
+
+  if (res && res.status === 429) {
+    noteLocalApiRateLimited(15);
+    const errorMsg = 'เซิร์ฟเวอร์จำกัดอัตราคำขอ (HTTP 429) กรุณารอ 15 วินาทีก่อนลองใหม่';
+    return { ok: false, error: errorMsg, status: 429, data: null };
+  }
+
+  if (res && res.status === 401) {
+    // Attempt single token renewal if registered in window.__nbtcTokenRenewer
+    let renewedToken = null;
+    if (typeof window !== 'undefined' && typeof window.__nbtcTokenRenewer === 'function') {
+      try {
+        renewedToken = await window.__nbtcTokenRenewer();
+        if (renewedToken) {
+          saveLocalApiToken(renewedToken);
+          headers = apiAuthHeaders({ 'Content-Type': 'application/json', ...customHeaders, Authorization: `Bearer ${renewedToken}` });
+          res = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body,
+          }).catch(() => null);
+        }
+      } catch (e) {}
+    }
+
+    if (!renewedToken || !res || res.status === 401) {
+      clearLocalApiToken();
+      notifyLocalAuthRequired('api_token');
+      const errorMsg = 'เซสชันการเข้าสู่ระบบของเซิร์ฟเวอร์หมดอายุหรือไม่ถูกต้อง (HTTP 401) กรุณาเข้าสู่ระบบใหม่';
+      return { ok: false, error: errorMsg, status: 401, data: null };
+    }
+  }
+
+  if (res && res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, status: res.status, data, error: null };
+  }
+
+  if (res) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false, status: res.status, data, error: data.message || data.error || `HTTP ${res.status}` };
+  }
+
+  return { ok: false, status: 0, data: null, error: 'network_error' };
 }
 
 export async function submitSurvey(arg1, arg2, arg3) {
@@ -638,37 +795,17 @@ export async function submitSurvey(arg1, arg2, arg3) {
     photos = arg2 || [];
   }
 
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
   let serverResult = null;
   let serverError = null;
 
   // static host ไม่มี backend: POST /api/save จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
   if (!isStaticHost()) {
-    try {
-      let res = await fetch('/api/save', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ fields, photos }),
-      }).catch(() => null);
-
-      if (!res || res.status === 404) {
-        res = await fetch('/save', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ fields, photos }),
-        }).catch(() => null);
-      }
-
-      if (res && res.ok) {
-        serverResult = await res.json();
-      } else if (res) {
-        const data = await res.json().catch(() => ({}));
-        serverError = data.message || data.error || 'บันทึกข้อมูลไม่สำเร็จ';
-      }
-    } catch (err) {
-      serverError = err.message;
+    const extraHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await callLocalMutatingApi('/api/save', '/save', { fields, photos }, extraHeaders);
+    if (res.ok) {
+      serverResult = res.data;
+    } else {
+      serverError = res.error;
     }
   }
 
@@ -780,29 +917,11 @@ export async function updateSurvey(arg1, arg2, arg3) {
 
   // static host ไม่มี backend: POST /api/update จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
   if (!isStaticHost()) {
-    try {
-      let res = await fetch('/api/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordId, fields, photos }),
-      }).catch(() => null);
-
-      if (!res || res.status === 404) {
-        res = await fetch('/api/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recordId, fields, photos, isUpdate: true }),
-        }).catch(() => null);
-      }
-
-      if (res && res.ok) {
-        serverResult = await res.json();
-      } else if (res) {
-        const data = await res.json().catch(() => ({}));
-        serverError = data.message || data.error || 'แก้ไขข้อมูลไม่สำเร็จ';
-      }
-    } catch (err) {
-      serverError = err.message;
+    const res = await callLocalMutatingApi('/api/update', '/api/save', { recordId, fields, photos, isUpdate: true });
+    if (res.ok) {
+      serverResult = res.data;
+    } else {
+      serverError = res.error;
     }
   }
 
@@ -911,26 +1030,11 @@ export async function deleteSurveys(recordIds) {
 
   // 4. Server delete when backend is available
   if (!isStaticHost()) {
-    try {
-      let res = await fetch('/api/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordIds: ids }),
-      }).catch(() => null);
-
-      if (!res || res.status === 404) {
-        res = await fetch('/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recordIds: ids }),
-        }).catch(() => null);
-      }
-
-      if (res && res.ok) {
-        serverResult = await res.json();
-      }
-    } catch (err) {
-      console.warn('Server delete failed, falling back to GitHub:', err);
+    const res = await callLocalMutatingApi('/api/delete', '/delete', { recordIds: ids });
+    if (res.ok) {
+      serverResult = res.data;
+    } else {
+      console.warn('Server delete failed, falling back to GitHub:', res.error);
     }
   }
 
@@ -1299,7 +1403,16 @@ async function fetchRemoteSurveyFile(token, recordId) {
   ).catch(() => null);
 
   if (!res) return { error: 'network_error' };
-  if (res.status === 401 || res.status === 403) return { authError: true, status: res.status };
+  if (res.status === 401 || res.status === 403) {
+    const errData = await res.json().catch(() => ({}));
+    const isScope = res.status === 403 && (
+      String(errData?.message || '').toLowerCase().includes('resource not accessible') ||
+      String(errData?.message || '').toLowerCase().includes('scope') ||
+      String(errData?.message || '').toLowerCase().includes('permission') ||
+      res.headers.get('x-ratelimit-remaining') !== '0'
+    );
+    return { authError: true, status: res.status, reason: isScope ? 'scope_insufficient' : 'bad_token' };
+  }
   if (res.status === 404) return { found: false, sha: null };
   if (!res.ok) return { error: `HTTP ${res.status}` };
 
@@ -1345,8 +1458,9 @@ async function performSurveyCommit(recordId, survey, token) {
     if (needDiscovery) {
       const remote = await fetchRemoteSurveyFile(token, recordId);
       if (remote.authError) {
-        notifyGitHubTokenRequired('bad_token');
-        return { success: false, error: 'bad_token', reason: 'bad_token', status: remote.status };
+        const reason = remote.reason || 'bad_token';
+        promptGitHubToken(reason, 15000);
+        return { success: false, error: reason, reason, status: remote.status };
       }
       if (remote.error) {
         return { success: false, error: remote.error };
@@ -1397,8 +1511,16 @@ async function performSurveyCommit(recordId, survey, token) {
     }
 
     if (putRes && (putRes.status === 401 || putRes.status === 403)) {
-      notifyGitHubTokenRequired('bad_token');
-      return { success: false, error: 'bad_token', reason: 'bad_token', status: putRes.status };
+      const errObj = await putRes.json().catch(() => ({}));
+      const isScope = putRes.status === 403 && (
+        String(errObj.message || '').toLowerCase().includes('resource not accessible') ||
+        String(errObj.message || '').toLowerCase().includes('scope') ||
+        String(errObj.message || '').toLowerCase().includes('permission') ||
+        putRes.headers.get('x-ratelimit-remaining') !== '0'
+      );
+      const reason = isScope ? 'scope_insufficient' : 'bad_token';
+      promptGitHubToken(reason, 15000);
+      return { success: false, error: reason, reason, status: putRes.status };
     }
 
     const errObj = putRes ? await putRes.json().catch(() => ({})) : {};
@@ -1435,8 +1557,9 @@ async function performSurveyDelete(recordId, token) {
     const remote = await fetchRemoteSurveyFile(token, recordId);
 
     if (remote.authError) {
-      notifyGitHubTokenRequired('bad_token');
-      return { success: false, error: 'bad_token', reason: 'bad_token', status: remote.status };
+      const reason = remote.reason || 'bad_token';
+      promptGitHubToken(reason, 15000);
+      return { success: false, error: reason, reason, status: remote.status };
     }
     if (remote.error) {
       return { success: false, error: remote.error };
@@ -1469,8 +1592,16 @@ async function performSurveyDelete(recordId, token) {
     }
 
     if (delRes && (delRes.status === 401 || delRes.status === 403)) {
-      notifyGitHubTokenRequired('bad_token');
-      return { success: false, error: 'bad_token', reason: 'bad_token', status: delRes.status };
+      const errObj = await delRes.json().catch(() => ({}));
+      const isScope = delRes.status === 403 && (
+        String(errObj.message || '').toLowerCase().includes('resource not accessible') ||
+        String(errObj.message || '').toLowerCase().includes('scope') ||
+        String(errObj.message || '').toLowerCase().includes('permission') ||
+        delRes.headers.get('x-ratelimit-remaining') !== '0'
+      );
+      const reason = isScope ? 'scope_insufficient' : 'bad_token';
+      promptGitHubToken(reason, 15000);
+      return { success: false, error: reason, reason, status: delRes.status };
     }
 
     const errObj = delRes ? await delRes.json().catch(() => ({})) : {};

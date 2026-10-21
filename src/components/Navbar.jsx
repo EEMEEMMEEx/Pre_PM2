@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, Menu, X, Sun, Moon, Cloud, GitBranch, AlertCircle, KeyRound } from 'lucide-react';
+import { Calendar, Clock, Menu, X, Sun, Moon, Cloud, GitBranch, AlertCircle, KeyRound, CheckCircle2 } from 'lucide-react';
 import { APP_VERSION } from '@/version';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
-import { fetchGitHubStatus, fetchOneDriveStatus } from '@/lib/api';
+import { fetchGitHubStatus, fetchOneDriveStatus, getStoredGitHubToken, getUnsyncedSurveysCount } from '@/lib/api';
 import { GitHubTokenModal } from '@/components/auth/GitHubTokenModal';
 import { OneDriveSyncModal } from '@/components/auth/OneDriveSyncModal';
 import { toast } from '@/components/ui/toast';
@@ -13,12 +13,16 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   const { isDark, toggleTheme } = useTheme();
   const [onedriveStatus, setOnedriveStatus] = useState(null);
   const [githubStatus, setGithubStatus] = useState({ configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2' });
+  const [storedToken, setStoredToken] = useState(() => getStoredGitHubToken());
+  const [unsyncedCount, setUnsyncedCount] = useState(() => getUnsyncedSurveysCount());
   const [isOneDriveModalOpen, setIsOneDriveModalOpen] = useState(false);
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [timeStr, setTimeStr] = useState(() =>
     new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   );
+
+  const hasToken = Boolean(storedToken);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -32,6 +36,9 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   }, []);
 
   const refreshGitHubStatus = useCallback(() => {
+    const t = getStoredGitHubToken();
+    setStoredToken(t);
+    setUnsyncedCount(getUnsyncedSurveysCount());
     fetchGitHubStatus().then((st) => {
       if (st) setGithubStatus(st);
     });
@@ -40,21 +47,34 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
   useEffect(() => {
     refreshGitHubStatus();
     const handleUpdated = (e) => {
+      setStoredToken(getStoredGitHubToken());
+      setUnsyncedCount(getUnsyncedSurveysCount());
       if (e?.detail?.type === 'GITHUB_TOKEN_CHANGED') {
         refreshGitHubStatus();
       }
     };
     window.addEventListener('nbtc-surveys-updated', handleUpdated);
-    return () => window.removeEventListener('nbtc-surveys-updated', handleUpdated);
+    window.addEventListener('storage', handleUpdated);
+    return () => {
+      window.removeEventListener('nbtc-surveys-updated', handleUpdated);
+      window.removeEventListener('storage', handleUpdated);
+    };
   }, [refreshGitHubStatus]);
 
   // แจ้งเตือนตามสาเหตุของ problems ฝั่ง GitHub sync:
-  // no_token = เครื่องยังไม่ได้ใส่ PAT, bad_token = 401/403, rate_limited = โควตาคำขอหมด
+  // no_token = เครื่องยังไม่ได้ใส่ PAT, scope_insufficient = 403 สิทธิ์ไม่พอ, bad_token = 401/403, rate_limited = โควตาคำขอหมด
   useEffect(() => {
     const handleTokenRequired = (event) => {
       const reason = event?.detail?.reason || 'bad_token';
       if (reason === 'rate_limited') {
         toast.error('GitHub จำกัดจำนวนคำขอชั่วคราว — Dashboard จะลองใหม่ใน 5 นาที');
+        return;
+      }
+      if (reason === 'scope_insufficient') {
+        setIsTokenModalOpen(true);
+        toast.error(
+          'สิทธิ์ GitHub Token ไม่เพียงพอ — กรุณาตั้งค่าสิทธิ์ "Contents: Read and write" สำหรับ Repository "Thaidimaru/Pre_PM2"'
+        );
         return;
       }
       setIsTokenModalOpen(true);
@@ -153,7 +173,32 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
         </div>
 
         {/* Right Section: Mobile Theme Toggle & Desktop System Strip */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile GitHub Token / Mode status button */}
+          <button
+            type="button"
+            onClick={() => setIsTokenModalOpen(true)}
+            className={cn(
+              'flex md:hidden items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer',
+              hasToken
+                ? isDark
+                  ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                : isDark
+                ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
+                : 'border-amber-300 bg-amber-50 text-amber-800'
+            )}
+            title={hasToken ? 'เชื่อมต่อ GitHub — คลิกเพื่อจัดการ Token' : 'โหมดอ่านอย่างเดียว — คลิกเพื่อใส่ Token'}
+            aria-label={hasToken ? 'เชื่อมต่อ GitHub' : 'โหมดอ่านอย่างเดียว'}
+          >
+            {hasToken ? <GitBranch className="h-4 w-4 text-emerald-400" /> : <KeyRound className="h-4 w-4 text-amber-400" />}
+            {unsyncedCount > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-slate-950 font-mono">
+                {unsyncedCount}
+              </span>
+            )}
+          </button>
+
           {/* Mobile Theme Toggle Button */}
           <button
             type="button"
@@ -173,10 +218,51 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
           {/* Live System Strip (Tablet & Desktop) */}
           <div
             className={cn(
-              'hidden md:flex items-center gap-4 text-sm',
+              'hidden md:flex items-center gap-3 lg:gap-4 text-sm',
               isDark ? 'text-slate-300' : 'text-slate-600'
             )}
           >
+            {/* GitHub Connection Status & Queue Indicator (Task C3) */}
+            <button
+              type="button"
+              onClick={() => setIsTokenModalOpen(true)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
+                hasToken
+                  ? isDark
+                    ? 'border-emerald-500/40 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/50 hover:border-emerald-400'
+                    : 'border-emerald-300 bg-emerald-50 text-emerald-700 shadow-xs hover:bg-emerald-100'
+                  : isDark
+                  ? 'border-amber-500/40 bg-amber-950/50 text-amber-300 hover:bg-amber-900/50 hover:border-amber-400'
+                  : 'border-amber-300 bg-amber-50 text-amber-800 shadow-xs hover:bg-amber-100'
+              )}
+              title={
+                hasToken
+                  ? `เชื่อมต่อ GitHub สำเร็จ (${githubStatus?.user || 'Personal Access Token'}) — คลิกเพื่อจัดการ Token`
+                  : 'โหมดอ่านอย่างเดียว: ยังไม่ได้ใส่ GitHub Token (ข้อมูลจะเก็บในเครื่องชั่วคราว) — คลิกเพื่อใส่ Token'
+              }
+            >
+              {hasToken ? (
+                <GitBranch className={cn('h-3.5 w-3.5', isDark ? 'text-emerald-400' : 'text-emerald-600')} />
+              ) : (
+                <KeyRound className={cn('h-3.5 w-3.5', isDark ? 'text-amber-400' : 'text-amber-600')} />
+              )}
+              <span>{hasToken ? 'เชื่อมต่อ GitHub' : 'โหมดอ่านอย่างเดียว'}</span>
+              {unsyncedCount > 0 && (
+                <span
+                  className={cn(
+                    'ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold font-mono',
+                    hasToken
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-amber-500 text-slate-950'
+                  )}
+                  title={`${unsyncedCount} รายการรอซิงค์ขึ้น GitHub`}
+                >
+                  {hasToken ? `รอซิงค์ ${unsyncedCount}` : `ค้างส่ง ${unsyncedCount}`}
+                </span>
+              )}
+            </button>
+
             {/* Online / Offline status indicator */}
             <div
               className={cn(
