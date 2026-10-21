@@ -106,29 +106,56 @@ export async function clearGitHubToken() {
   return await saveGitHubToken('');
 }
 
+let isFetchingServerToken = false;
+let serverTokenPromise = null;
+
 export async function fetchServerGitHubToken() {
   if (isStaticHost()) return getStoredGitHubToken();
-  try {
-    const res = await fetch('/api/settings/token', {
-      headers: apiAuthHeaders(),
-      cache: 'no-store',
-    }).catch(() => null);
-    if (res && res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data && typeof data.token === 'string') {
-        const serverToken = data.token.trim();
-        const local = getStoredGitHubToken();
-        if (serverToken && serverToken !== local) {
-          localStorage.setItem(GITHUB_TOKEN_KEY, serverToken);
-          notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED', token: serverToken });
-        }
-        return serverToken;
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to fetch token from centralized server:', e);
+  if (isFetchingServerToken && serverTokenPromise) {
+    return serverTokenPromise;
   }
-  return getStoredGitHubToken();
+
+  isFetchingServerToken = true;
+  serverTokenPromise = (async () => {
+    try {
+      const res = await fetch('/api/settings/token', {
+        headers: apiAuthHeaders(),
+        cache: 'no-store',
+      }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data && typeof data.token === 'string') {
+          const serverToken = data.token.trim();
+          const local = getStoredGitHubToken();
+          if (serverToken && serverToken !== local) {
+            localStorage.setItem(GITHUB_TOKEN_KEY, serverToken);
+            notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED', token: serverToken });
+          }
+          return serverToken;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch token from centralized server:', e);
+    } finally {
+      isFetchingServerToken = false;
+      serverTokenPromise = null;
+    }
+    return getStoredGitHubToken();
+  })();
+
+  return serverTokenPromise;
+}
+
+export async function getOrFetchGitHubToken() {
+  const local = getStoredGitHubToken();
+  if (local) return local;
+  const serverToken = await fetchServerGitHubToken();
+  return serverToken || '';
+}
+
+// Eagerly hydrate centralized token on client startup
+if (typeof window !== 'undefined') {
+  fetchServerGitHubToken().catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -236,11 +263,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function isStaticHost() {
   if (typeof window === 'undefined') return false;
   const hostname = window.location.hostname;
+  const port = window.location.port;
+  // หากเข้าถึงพอร์ตเซิร์ฟเวอร์ฐานข้อมูล 8765 หรือ Vite dev server 5173 หรือ loopback ไม่ใช่ static host
+  if (port === '8765' || port === '5173' || hostname === 'localhost' || hostname === '127.0.0.1') {
+    return false;
+  }
   return (
     hostname.includes('r2.dev') ||
     hostname.includes('github.io') ||
-    hostname.includes('cloudflare') ||
-    (hostname !== 'localhost' && hostname !== '127.0.0.1')
+    hostname.includes('pages.dev') ||
+    hostname.includes('workers.dev')
   );
 }
 
@@ -290,6 +322,8 @@ export function notifyGitHubTokenRequired(reason = 'bad_token') {
  */
 const lastTokenPromptAt = new Map();
 export function promptGitHubToken(reason = 'no_token', cooldownMs = 15000) {
+  // ละเว้นการแจ้งเตือน no_token หากเครื่องมี token อยู่แล้ว
+  if (reason === 'no_token' && getStoredGitHubToken()) return false;
   const now = Date.now();
   if (now - (lastTokenPromptAt.get(reason) || 0) < cooldownMs) return false;
   lastTokenPromptAt.set(reason, now);
@@ -584,10 +618,9 @@ export async function syncPendingLocalSurveys() {
   const pending = localSurveys.filter(
     (s) => s && s.recordId && !s.githubSynced && isCommittableRecordId(s.recordId)
   );
-  const token = getStoredGitHubToken();
+  const token = await getOrFetchGitHubToken();
   if (!token) {
-    // v2.9.0: bundle ไม่มี tokenฝังในแอปแล้ว — ต้องให้ผู้ใช้ใส่ PAT จึงจะซิงค์ขึ้น GitHub ได้
-    if (pending.length > 0) promptGitHubToken('no_token', 60000);
+    // หากยังไม่มี Token ในระบบศูนย์กลาง จะไม่แสดง alert เตือนรบกวนผู้ใช้งานทั่วไป
     return;
   }
 
@@ -1040,7 +1073,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
 
   // ทำเครื่องหมายก่อน saveLocalSurvey เพื่อให้ syncPendingLocalSurveys ที่ถูก trigger
   // ทางอ้อม (DashboardView reload) ข้าม record นี้ไป แล้วรอ write ที่กำลังจะเริ่มแทน
-  const ghToken = getStoredGitHubToken();
+  const ghToken = await getOrFetchGitHubToken();
   if (ghToken) {
     localSurvey.githubSyncing = true;
     localSurvey.githubSyncingAt = Date.now();
@@ -1077,7 +1110,10 @@ export async function submitSurvey(arg1, arg2, arg3) {
       }
     } else {
       finalResult.githubError = 'no_token';
-      promptGitHubToken('no_token');
+      // ละเว้นการ prompt เตือน หากเซิร์ฟเวอร์ส่วนกลางบันทึกข้อมูลเรียบร้อยแล้ว
+      if (!serverResult?.saved) {
+        promptGitHubToken('no_token');
+      }
     }
   }
 
@@ -1151,7 +1187,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
     photos: formattedPhotos,
   };
 
-  const ghToken = getStoredGitHubToken();
+  const ghToken = await getOrFetchGitHubToken();
   if (ghToken) {
     localSurvey.githubSyncing = true;
     localSurvey.githubSyncingAt = Date.now();
@@ -1190,7 +1226,10 @@ export async function updateSurvey(arg1, arg2, arg3) {
       }
     } else {
       finalResult.githubError = 'no_token';
-      promptGitHubToken('no_token');
+      // ละเว้นการ prompt เตือน หากเซิร์ฟเวอร์ส่วนกลางบันทึก/อัปเดตเรียบร้อยแล้ว
+      if (!serverResult?.saved && !serverResult?.updated) {
+        promptGitHubToken('no_token');
+      }
     }
   }
 
@@ -1235,7 +1274,7 @@ export async function deleteSurveys(recordIds) {
 
   const deletedIds = [];
   const failed = [];
-  const ghToken = getStoredGitHubToken();
+  const ghToken = await getOrFetchGitHubToken();
   const serverHandledGitHub = Boolean(serverResult?.githubDeleted);
   const serverDeletedIds = Array.isArray(serverResult?.deletedIds) ? serverResult.deletedIds : null;
 
@@ -1247,8 +1286,11 @@ export async function deleteSurveys(recordIds) {
     }
     if (!ghToken) {
       deletedIds.push(id);
-      failed.push({ id, reason: 'no_token' });
-      promptGitHubToken('no_token');
+      // หากเซิร์ฟเวอร์ส่วนกลางลบข้อมูลเรียบร้อยแล้ว ไม่ต้อง mark failed หรือ prompt เตือน no_token
+      if (!serverResult?.deleted) {
+        failed.push({ id, reason: 'no_token' });
+        promptGitHubToken('no_token');
+      }
       continue;
     }
     const ghRes = await deleteSurveyFromGitHubClient(id, ghToken);

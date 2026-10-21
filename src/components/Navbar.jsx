@@ -63,7 +63,7 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
     };
   }, [refreshGitHubStatus]);
 
-  // แจ้งเตือนตามสาเหตุของ problems ฝั่ง GitHub sync:
+  // แจ้งเตือนตามสาเหตุของ problems ฝั่ง GitHub sync (ไม่เปิด SettingsModal อัตโนมัติ เพื่อไม่ให้กวนการทำงานทั่วไป):
   useEffect(() => {
     const handleTokenRequired = (event) => {
       const reason = event?.detail?.reason || 'bad_token';
@@ -72,20 +72,18 @@ export function Navbar({ onToggleMobileMenu, isMobileMenuOpen }) {
         return;
       }
       if (reason === 'scope_insufficient') {
-        setSettingsInitialTab('github');
-        setIsSettingsModalOpen(true);
         toast.error(
           'สิทธิ์ GitHub Token ไม่เพียงพอ — กรุณาตั้งค่าสิทธิ์ "Contents: Read and write" สำหรับ Repository "Thaidimaru/Pre_PM2"'
         );
         return;
       }
-      setSettingsInitialTab('github');
-      setIsSettingsModalOpen(true);
-      toast.error(
-        reason === 'no_token'
-          ? 'ยังไม่ได้ตั้งค่า GitHub Token — ข้อมูลถูกบันทึกลงเครื่อง และจะซิงค์ขึ้น GitHub เมื่อใส่ Token'
-          : 'GitHub Token ไม่ถูกต้องหรือหมดอายุ — กรุณาใส่ Token ใหม่เพื่อซิงค์ข้อมูล'
-      );
+      // ละเว้น false-positive alert สำหรับ no_token เมื่อระบบมี Token ศูนย์กลางหรือบันทึกลงเซิร์ฟเวอร์แล้ว
+      if (reason === 'no_token') {
+        return;
+      }
+      if (reason === 'bad_token') {
+        toast.error('GitHub Token ไม่ถูกต้องหรือหมดอายุ — กรุณาตรวจสอบการตั้งค่าระบบ');
+      }
     };
     window.addEventListener('nbtc-github-token-required', handleTokenRequired);
     return () => window.removeEventListener('nbtc-github-token-required', handleTokenRequired);
