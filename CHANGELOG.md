@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.12.1] - 2026-10-21
+
+### Added
+- เพิ่มปุ่มไอคอนฟันเฟือง **"ตั้งค่าระบบ" (Settings Gear Button)** บนแถบ Header รวมศูนย์การตั้งค่าระบบทั้งหมด
+- เพิ่มหน้าต่างยืนยันความปลอดภัย **Security Verification Modal** ก่อนเข้าถึงการตั้งค่า:
+  - บังคับยืนยันรหัสผ่านความปลอดภัย (Passcode: `Welcomw@01`)
+  - ซ่อนรหัสผ่านเป็นจุด/ดอกจัน (`type="password"`) พร้อมปุ่มสลับการมองเห็น
+  - ไม่บันทึกสถานะการปลดล็อกลง `localStorage` หรือ `sessionStorage` (Pure component state)
+  - รีเซ็ตสถานะการปลดล็อกทันทีเมื่อปิดหน้าต่างการตั้งค่า เพื่อความปลอดภัยสูงสุดทุกครั้งที่เปิดใหม่
+
+### Changed
+- รวมหน้าต่างตั้งค่า GitHub Sync และ Microsoft OneDrive เข้าไว้ในหน้าต่างเดียว (**SettingsModal**) พร้อมแท็บสลับการทำงาน
+- นำปุ่มเดี่ยว "เชื่อมต่อ GitHub" และ "OneDrive ซิงค์" ออกจากแถบ Navigation Bar ด้านบน เพื่อความเรียบหรูและเป็นระเบียบ
+
 ## [2.12.0] - 2026-10-21
 
 ### Added
