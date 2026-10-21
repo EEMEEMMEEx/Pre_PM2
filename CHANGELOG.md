@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.4] - 2026-10-21
+
+### Security
+- ปิดข้อมูลส่วนบุคคลและข้อมูลระบบที่ตกค้างใน Cloudflare R2 API snapshots ทั้งหมด (B3):
+  - `/api/dashboard`: เพิ่ม `contactVillage` ใน `PUBLIC_DASHBOARD_PII_FIELDS` ตัดข้อมูลหมู่บ้านของประชาชนออกจาก recent surveys (ตัดเพิ่ม 180 ค่า รวมเป็น 872 ค่าที่ถูก scrub)
+  - `/api/onedrive-status`: ตัด `account`, `folder`, `surveysDir`, `dbPath` ป้องกันการรั่วไหลของ email ส่วนตัวและ local filesystem path บน Windows โดยคงเฉพาะสถานะภาพรวม (`configured`, `connected`, `surveysCount`, `photosCount`, `status`, `updatedAt`)
+  - `/api/github-status`: ตัด `user` (GitHub login) ออกจาก public snapshot
+  - `--dry-run`: ตรวจสอบและรายงาน "PII keys left in ..." ทั้ง 4 snapshots (`dashboard`, `stations`, `onedrive`, `github`) และคืน error code หากมี PII ตกค้าง
+  - ชุดทดสอบความปลอดภัย: [`tests/test_sanitize_snapshots.py`](tests/test_sanitize_snapshots.py) คลุมการ scrub ทุก snapshot
+
 ## [2.11.3] - 2026-10-21
 
 ### Security
