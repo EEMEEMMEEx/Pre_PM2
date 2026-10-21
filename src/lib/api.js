@@ -541,6 +541,29 @@ export async function syncPendingLocalSurveys() {
   }
 }
 
+export const DASHBOARD_CACHE_KEY = 'nbtc_pre_pm_dashboard_cache';
+
+export function getCachedDashboardData() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && data.stats && Array.isArray(data.recent)) return data;
+    }
+  } catch (e) {}
+  return null;
+}
+
+export function setCachedDashboardData(data) {
+  if (typeof window === 'undefined' || !data) return;
+  try {
+    if (data.stats && Array.isArray(data.recent)) {
+      localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch (e) {}
+}
+
 export async function fetchDashboardData(options = {}) {
   const force = options.force || false;
   const deletedIds = getDeletedSurveyIds();
@@ -560,6 +583,27 @@ export async function fetchDashboardData(options = {}) {
     }
   } catch (err) {
     console.warn('Failed to fetch dashboard metrics from server:', err);
+  }
+
+  // Fallback to Cloudflare R2 public snapshot if local backend is unavailable (e.g. running vite dev server without local python backend)
+  if (!serverData) {
+    try {
+      const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
+      const r2Res = await fetch(r2Url, { cache: 'no-store' });
+      if (r2Res.ok) {
+        serverData = await r2Res.json();
+        if (serverData && Array.isArray(serverData.recent)) {
+          serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
+        }
+      }
+    } catch (r2Err) {
+      console.warn('Failed to fetch fallback snapshot from Cloudflare R2:', r2Err);
+    }
+  }
+
+  // If still no serverData, hydrate from cached storage
+  if (!serverData) {
+    serverData = getCachedDashboardData();
   }
 
   // Pre-seed client in-memory cache if serverData has recent entries
@@ -603,7 +647,10 @@ export async function fetchDashboardData(options = {}) {
     ...localSurveys,
   ];
 
-  return mergeDashboardWithLocal(serverData, allCombinedSurveys, currentGhIds);
+  const mergedResult = mergeDashboardWithLocal(serverData, allCombinedSurveys, currentGhIds);
+  // Persist latest merged snapshot for instant SWR hydration on subsequent visits
+  setCachedDashboardData(mergedResult);
+  return mergedResult;
 }
 
 export const THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
