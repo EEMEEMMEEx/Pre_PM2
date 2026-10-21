@@ -17,15 +17,60 @@ DB_PATH = DATA_DIR / "survey.db"
 OUTPUT_DIR = DATA_DIR / "photos"
 
 
+def export_photos_from_json(by_folder: bool = False):
+    """Fallback export directly from data/surveys/*.json files."""
+    import base64
+    surveys_dir = ROOT_DIR / "data" / "surveys"
+    if not surveys_dir.exists():
+        print(f"[ERROR] Neither survey.db nor data/surveys/ found.")
+        sys.exit(1)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    files = sorted(surveys_dir.glob("*.json"))
+    print(f"[INFO] Exporting photos directly from {len(files)} survey JSON files to: {OUTPUT_DIR}\n")
+
+    exported_count = 0
+    for p in files:
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+            record_id = doc.get("recordId") or p.stem
+            fields = doc.get("fields") or {}
+            station_name = fields.get("station") or doc.get("station") or ""
+            photos = doc.get("photos") or fields.get("photos") or []
+            if not isinstance(photos, list):
+                continue
+            for idx, photo in enumerate(photos):
+                raw_name = photo.get("name") or f"photo_{idx+1}.jpg"
+                b64 = photo.get("base64Data") or (photo.get("url", "").split("base64,")[1] if "base64," in photo.get("url", "") else None) or (photo.get("dataUrl", "").split("base64,")[1] if "base64," in photo.get("dataUrl", "") else None)
+                if not b64:
+                    continue
+                photo_bytes = base64.b64decode(b64)
+                if by_folder:
+                    target_dir = OUTPUT_DIR / record_id
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    dest_path = target_dir / raw_name
+                else:
+                    dest_path = OUTPUT_DIR / f"{record_id}_{raw_name}"
+                dest_path.write_bytes(photo_bytes)
+                exported_count += 1
+                station_info = f" ({station_name})" if station_name else ""
+                print(f"  [OK] Exported #{exported_count}: {dest_path.name}{station_info} [{len(photo_bytes)/1024:.1f} KB]")
+        except Exception as e:
+            print(f"  [WARN] Failed to process {p.name}: {e}")
+
+    print(f"\n[SUCCESS] Successfully exported {exported_count} photo(s) from JSON records to '{OUTPUT_DIR}'.")
+
+
 def export_photos(by_folder: bool = False):
     """
-    Export photos from SQLite survey.db to photos/ folder.
+    Export photos from SQLite survey.db or fallback to data/surveys/*.json.
     
     :param by_folder: If True, organizes photos in subfolders named after record_id.
     """
     if not DB_PATH.exists():
-        print(f"[ERROR] Database file not found: {DB_PATH}")
-        sys.exit(1)
+        print(f"[INFO] Database file not found at {DB_PATH}. Falling back to data/surveys/*.json exporter.")
+        export_photos_from_json(by_folder=by_folder)
+        return
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

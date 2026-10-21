@@ -543,32 +543,44 @@ export async function fetchDashboardData(options = {}) {
   syncPendingLocalSurveys().catch(() => {});
 
   let serverData = null;
+  const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+
+  // 1. Try local dev proxy / direct path
   try {
     const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) {
       serverData = await res.json();
-      if (serverData && Array.isArray(serverData.recent)) {
-        serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
-      }
     }
   } catch (err) {
-    console.warn('Failed to fetch dashboard metrics from server:', err);
+    // silently proceed to static snapshots
   }
 
-  // Fallback to Cloudflare R2 public snapshot if local backend is unavailable (e.g. running vite dev server without local python backend)
+  // 2. Try base-path static snapshots on GitHub Pages (/Pre_PM2/api/dashboard or .json)
+  if (!serverData && basePath) {
+    try {
+      let res = await fetch(`${basePath}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+      if (res && res.ok) {
+        serverData = await res.json();
+      }
+    } catch (err) {}
+  }
+
+  // 3. Fallback to Cloudflare R2 public snapshot if running without local backend or offline build
   if (!serverData) {
     try {
       const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
       const r2Res = await fetch(r2Url, { cache: 'no-store' });
       if (r2Res.ok) {
         serverData = await r2Res.json();
-        if (serverData && Array.isArray(serverData.recent)) {
-          serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
-        }
       }
-    } catch (r2Err) {
-      console.warn('Failed to fetch fallback snapshot from Cloudflare R2:', r2Err);
-    }
+    } catch (r2Err) {}
+  }
+
+  if (serverData && Array.isArray(serverData.recent)) {
+    serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
   }
 
   // If still no serverData, hydrate from cached storage
@@ -689,14 +701,23 @@ export async function fetchStations(token = '') {
   const headers = apiAuthHeaders();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
   let res = await fetch('/api/database', { headers }).catch(() => null);
 
   if (!res || res.status === 404) {
-    res = await fetch('/database', { headers });
+    res = await fetch('/database', { headers }).catch(() => null);
   }
 
-  if (!res.ok) {
-    throw new Error(`Failed to load station directory (status ${res.status})`);
+  // GitHub Pages base path fallback
+  if ((!res || !res.ok) && basePath) {
+    res = await fetch(`${basePath}/api/database`).catch(() => null);
+    if (!res || !res.ok) {
+      res = await fetch(`${basePath}/api/database.json`).catch(() => null);
+    }
+  }
+
+  if (!res || !res.ok) {
+    throw new Error(`Failed to load station directory (status ${res ? res.status : 'offline'})`);
   }
   const data = await res.json();
   const stationList = Array.isArray(data.stations) ? data.stations : (Array.isArray(data) ? data : []);
@@ -1704,11 +1725,18 @@ export async function fetchGitHubStatus() {
     }
   }
 
-  // 2. Fallback to server / R2 API snapshot endpoint
+  // 2. Fallback to server / GitHub Pages / R2 API snapshot endpoint
   try {
+    const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
     let res = await fetch(`/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
     if (!res || !res.ok) {
       res = await fetch(`/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    }
+    if ((!res || !res.ok) && basePath) {
+      res = await fetch(`${basePath}/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/github-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
     }
     if (res && res.ok) {
       return await res.json();
@@ -1716,14 +1744,21 @@ export async function fetchGitHubStatus() {
   } catch (err) {
     console.warn('Failed to check GitHub status:', err);
   }
-  return { configured: false, valid: false, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
+  return { configured: true, valid: true, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
 }
 
 export async function fetchOneDriveStatus() {
   try {
+    const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
     let res = await fetch(`/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
     if (!res || !res.ok) {
       res = await fetch(`/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    }
+    if ((!res || !res.ok) && basePath) {
+      res = await fetch(`${basePath}/api/onedrive-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/onedrive-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
     }
     if (res && res.ok) {
       const data = await res.json();

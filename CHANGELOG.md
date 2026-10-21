@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.12.0] - 2026-10-21
+
+### Added
+- สถาปัตยกรรม Dual-Cloud (GitHub Pages + GitHub Contents API + OneDrive):
+  - โฮสติ้งเว็บแอปพลิเคชันบน **GitHub Pages** (`https://Thaidimaru.github.io/Pre_PM2/`) ทำงานแบบ static ไร้เซิร์ฟเวอร์
+  - รองรับ base path dynamic (`vite.config.mjs`, `src/lib/utils.js`, `src/App.jsx`, `src/main.jsx`) ไม่ว่าจะรันที่ root `/` หรือ subpath `/Pre_PM2/`
+  - สคริปต์สร้าง static snapshot อัตโนมัติ: `scripts/build_static_snapshots.mjs` รันพร้อม `npm run build` เพื่อสร้าง `/api/dashboard`, `/api/database`, `/api/github-status`, `/api/onedrive-status` พร้อมตัดข้อมูลส่วนบุคคล (PII scrubbed) และสร้าง `dist/404.html` + `dist/.nojekyll` สำหรับ GitHub Pages SPA routing
+  - GitHub Actions Workflow: `.github/workflows/deploy-gh-pages.yml` สำหรับ deploy ขึ้น GitHub Pages อัตโนมัติเมื่อ push ขึ้น `main`
+  - สคริปต์ส่งออกภาพถ่ายสำรวจ: `scripts/export_photos.mjs` (`npm run export:photos`) สำหรับดึงรูปภาพ base64 จาก `data/surveys/*.json` โดยตรงไปยังโฟลเดอร์ Microsoft OneDrive โดยไม่ต้องพึ่ง Python หรือ SQLite
+
+### Changed
+- ปรับปรุง `public/sw.js` ให้ตรวจจับ base path อัตโนมัติสำหรับการแคชออฟไลน์และ fallback navigation บน GitHub Pages
+- เพิ่มการค้นหา static snapshot endpoint บน GitHub Pages ใน `src/lib/api.js` (`fetchDashboardData`, `fetchStations`, `fetchGitHubStatus`, `fetchOneDriveStatus`)
+- ปรับปรุง `export_photos.py` ให้ fallback ดึงรูปจาก `data/surveys/*.json` เมื่อไม่พบ `survey.db` ในเครื่อง
+
 ## [2.11.4] - 2026-10-21
 
 ### Security

@@ -13,16 +13,26 @@ const SCRIPT_URL = new URL(self.location.href);
 const VERSION = SCRIPT_URL.searchParams.get('v') || 'dev';
 const CACHE_NAME = `pre-pm-nbtc-${VERSION}`;
 
-// Task C4: ตัด '/' ออกเพื่อแก้ปัญหา 404 pre-cache error บน r2.dev static storage (ใช้ '/index.html' แทน)
+// Dynamically compute base path (e.g., '/Pre_PM2' on GitHub Pages, or '' on root)
+const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '').replace(/\/+$/, '');
+
+// Task C4 + GitHub Pages: Assets with base prefix support
 const CORE_ASSETS = [
-  '/index.html',
-  '/manifest.json',
-  '/favicon.png',
-  '/nbtc-logo-dashboard.png',
+  `${BASE_PATH}/index.html`,
+  `${BASE_PATH}/manifest.json`,
+  `${BASE_PATH}/favicon.png`,
+  `${BASE_PATH}/nbtc-logo-dashboard.png`,
 ];
 
 // Endpoints ที่ยอมให้ใช้ cache สำรองตอน offline ได้ (network-first)
-const OFFLINE_CACHEABLE_PATHS = new Set(['/api/dashboard', '/api/database', '/database', '/dashboard']);
+const OFFLINE_CACHEABLE_PATHS = new Set([
+  '/api/dashboard',
+  '/api/database',
+  '/database',
+  '/dashboard',
+  `${BASE_PATH}/api/dashboard`,
+  `${BASE_PATH}/api/database`,
+]);
 
 // Install: pre-cache application shell ทีละไฟล์เพื่อบันทึก log รายไฟล์ที่ล้มเหลวโดยไม่ throw aggregate error
 self.addEventListener('install', (event) => {
@@ -89,19 +99,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Navigation requests (HTML page requests): Network-First, fallback to /index.html
+  // 5. Navigation requests (HTML page requests): Network-First, fallback to base index.html
   if (req.mode === 'navigate') {
+    const fallbackHtml = `${BASE_PATH}/index.html`;
     event.respondWith(
       fetch(req)
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+            caches.open(CACHE_NAME).then((cache) => cache.put(fallbackHtml, clone));
           }
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match('/index.html');
+          const cached = await caches.match(fallbackHtml);
           return cached || caches.match(req);
         })
     );
@@ -110,8 +121,11 @@ self.addEventListener('fetch', (event) => {
 
   // 6. Local API endpoints (server-only features) -> network only, never cache.
   //    /api/export-pdf, /api/sync-config, /api/github-status, ... ทำงานได้เฉพาะ local server
-  const isApiPath = url.pathname.startsWith('/api/') || url.pathname === '/database' || url.pathname === '/dashboard';
-  if (isApiPath && !OFFLINE_CACHEABLE_PATHS.has(url.pathname)) {
+  const cleanPath = BASE_PATH && url.pathname.startsWith(BASE_PATH)
+    ? url.pathname.slice(BASE_PATH.length)
+    : url.pathname;
+  const isApiPath = cleanPath.startsWith('/api/') || cleanPath === '/database' || cleanPath === '/dashboard';
+  if (isApiPath && !OFFLINE_CACHEABLE_PATHS.has(url.pathname) && !OFFLINE_CACHEABLE_PATHS.has(cleanPath)) {
     return;
   }
 
