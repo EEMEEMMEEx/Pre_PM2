@@ -1,0 +1,5 @@
+{
+  "workerUrl": "",
+  "service": "NBTC Microwave Survey Edge Proxy",
+  "description": "Public Edge API configuration for multi-user synchronization"
+}

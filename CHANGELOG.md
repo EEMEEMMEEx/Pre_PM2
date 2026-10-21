@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.12.4] - 2026-10-21
+
+### Added
+- **ทางเลือกที่ 2: สถาปัตยกรรม Cloudflare Worker Edge API Proxy (Zero-Client Token Multi-User Sync)**:
+  - เพิ่ม Cloudflare Worker ในโฟลเดอร์ `worker/index.js` และไฟล์คอนฟิก `wrangler.toml` สำหรับเป็น Edge API Proxy
+  - จัดเก็บ `GITHUB_TOKEN` อย่างปลอดภัยสูงสุดใน Cloudflare Worker Secrets (`wrangler secret put GITHUB_TOKEN`) ป้องกัน Token รั่วไหลบน Public R2 Bucket
+  - Edge Proxy ให้บริการ Endpoint: `/api/save`, `/api/update`, `/api/delete`, `/api/github-status`, และ `/api/health`
+  - เมื่อผู้ดูแลระบบตั้งค่า Cloudflare Worker URL ในระบบ ผู้ใช้งานทุกคน (ทั้งภาคสนามและสำนักงาน ทุกเบราว์เซอร์และทุกอุปกรณ์) จะสามารถบันทึก, แก้ไข, และลบข้อมูลแบบสำรวจขึ้น GitHub ได้ทันทีอัตโนมัติ โดยไม่ต้องใส่ GitHub Token บนเครื่องของตัวเอง
+  - เพิ่ม UI ส่วน "Cloudflare Worker Edge API" ในหน้าต่างการตั้งค่าระบบ (`SettingsModal.jsx`) พร้อมปุ่มทดสอบและบันทึก URL
+  - เพิ่มไฟล์ค้นหาคอนฟิก `public/api/cloud-config.json` และฟังก์ชัน `fetchRemoteWorkerUrl()` ใน `src/lib/api.js` สำหรับกระจาย Worker URL ไปยังทุกไคลเอนต์อัตโนมัติ
+  - เพิ่มคู่มือภาษาไทยฉบับสมบูรณ์ [`docs/cloudflare-worker-setup.md`](docs/cloudflare-worker-setup.md) แนะนำการ deploy และใช้งานใน 2 นาที
+
+### Changed
+- ปรับปรุง `submitSurvey`, `updateSurvey`, `deleteSurveys`, และ `syncPendingLocalSurveys` ใน `src/lib/api.js` ให้เรียกใช้ Cloudflare Worker Edge API เป็นลำดับแรก
+- ปรับปรุง `fetchGitHubStatus` ให้แสดงสถานะการเชื่อมต่อผ่าน Cloudflare Worker API อย่างถูกต้อง พร้อมป้ายสถานะสีเขียวชัดเจน
+- ปรับปรุงข้อความสถานะใน `SettingsModal.jsx` แยกความแตกต่างระหว่างการเชื่อมต่อผ่าน Worker (แชร์สิทธิ์ทุกคน) กับ Personal Access Token (เฉพาะเครื่อง) อย่างโปร่งใสและตรงไปตรงมา
+
 ## [2.12.3] - 2026-10-21
 
 ### Fixed

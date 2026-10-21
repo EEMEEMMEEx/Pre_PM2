@@ -1,0 +1,7 @@
+name = "pre-pm-api"
+main = "worker/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+GITHUB_REPO = "Thaidimaru/Pre_PM2"
+GITHUB_BRANCH = "main"
