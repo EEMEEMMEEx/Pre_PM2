@@ -55,7 +55,7 @@
 > **Security debt — สถานะล่าสุด**:
 > - [x] `src/lib/api.js` ไม่มี GitHub token ฝังใน bundle อีกแล้ว และ client ไม่เรียก `/api/sync-config` (v2.9.0)
 > - [ ] **ต้อง revoke/rotate GitHub token เก่า** — ค่าเดิมยังอยู่ใน git history สาธารณะและเคยถูกเผยแพร่ผ่าน R2; ต้องเพิกถอนที่ต้นทาง (GitHub → Settings → Developer settings) โดยผู้ดูแล
-> - [ ] [`deploy_r2.py`](deploy_r2.py) ยังอัปโหลด token ขึ้น `/api/sync-config` + `sync-config` บน R2 และ object เดิมยัง live อยู่ (ตรวจแล้ว: HTTP 200 พร้อมคีย์ `token`) → ต้องลบ code path และ purge object ก่อน/พร้อม deploy ครั้งถัดไป
+> - [x] [`deploy_r2.py`](deploy_r2.py) ไม่อัปโหลด token ขึ้น bucket อีกแล้ว (v2.11.0) และ purge `/api/sync-config` + `/sync-config` ทุกรอบ deploy — **object เดิมยัง live บน R2 จนกว่าจะ deploy จริง** (ตรวจแล้ว: HTTP 200 พร้อมคีย์ `token`); รัน `python deploy_r2.py --purge-secrets-only` หรือ `--dry-run` เพื่อตรวจสอบก่อนได้ (ต้องได้รับอนุญาตก่อน)
 > - [ ] `access-password.txt` ยังถูก track ใน git (เปิดเผยสาธารณะ) → `git rm --cached` + เพิ่ม `.gitignore` + ตั้ง `FORM_PASSWORD` ค่าใหม่
 > - [ ] `data/surveys/*.json` และ `DATABASE.xlsx` มีข้อมูลติดต่อผู้ให้ข้อมูลอยู่ใน repo สาธารณะ → ต้องทำ repo/data เป็น private หรือใช้ server proxy (ยังไม่อยู่ในขอบเขตงานที่อนุมัติ)
 

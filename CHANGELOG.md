@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.0] - 2026-10-21
+
+### Security
+- `deploy_r2.py` **ไม่อัปโหลด GitHub token ขึ้น bucket สาธารณะอีก** (เดิมเขียน `{token, repo, branch}` ลง `/api/sync-config` + `/sync-config` ซึ่งใครก็ดาวน์โหลดได้) และเพิ่ม `LEGACY_SECRET_KEYS` เพื่อ **purge object ทั้งสองทุกรอบ deploy** (idempotent, ล้มเหลวได้โดยไม่ทำให้ deploy crash) (`deploy_r2.py`)
+- API snapshot ที่ขึ้น Cloudflare R2 ถูก sanitize ก่อนอัปโหลด: `sanitize_dashboard_payload()` ตัด `contactName` / `contactPosition` / `contactPhone` / `informantName` ออกจาก `recent[]` ทั้งระดับ root และ `fields` (ค่า实测บนข้อมูลจริง: 695 ค่าจาก 184 รายการ; `operatorName` และข้อมูลงานสำรวจอื่นคงเดิม, ไม่แก้ข้อมูลต้นทางใน SQLite/GitHub)
+- เพิ่มโหมดตรวจสอบก่อนแตะ production: `--dry-run` (ไม่ใช้ credentials, ไม่เขียน/ลบ object, รายงานจำนวน PII ที่ถูกตัดและ key ที่ค้าง) และ `--purge-secrets-only` (ล้างเฉพาะ object ที่เคยแจก token) — ลดความจำเป็นในการ deploy จริงเพื่อพิสูจน์ว่าโค้ดถูก
+
+### Added
+- opt-in `--strip-station-contacts` (หรือ env `R2_STRIP_STATION_CONTACTS=1`) เพื่อตัด `contact_name`/`contact_position`/`contact_phone`/`house_no` จาก snapshot `/api/database` ด้วย — ตั้งเป็น opt-in เพราะฟอร์มภาคสนามบน r2.dev ใช้ข้อมูลนี้เติมอัตโนมัติ (FieldVisitView.jsx:81-84, 124-127); ค่าเริ่มต้นคงพฤติกรรมเดิม (63.3 KB → 197 stations)
+- `deploy_r2.py` import boto3 แบบยอมให้ขาดได้ (`require_boto3()`) เพื่อให้ `--dry-run` รันบนเครื่องที่ยังไม่ติดตั้ง library โดยไม่เปลี่ยนพฤติกรรมของโหมด deploy จริง
+
+### Changed
+- เอกสาร: `AGENTS.md` (Security debt checklist แยกสถานะโค้ดเสร็จ/R2 ยังไม่ล้าง), `.agents/skills/backend-api-pro/SKILL.md` (นโยบาย snapshot ห้ามอัปโหลด secret + คำสั่งใหม่)
+- ข้อจำกัดที่ยังเหลือ (ทราบและจงใจยังไม่แก้ในรอบนี้): ข้อมูลติดต่อชาวบ้านยังอยู่ใน `data/surveys/*.json` และ `DATABASE.xlsx` บน GitHub repo สาธารณะ — การปิดจริงต้องทำ repo/data เป็น private หรือใช้ server proxy
+
 ## [2.10.0] - 2026-10-21
 
 ### Security

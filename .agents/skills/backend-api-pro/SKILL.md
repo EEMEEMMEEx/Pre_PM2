@@ -16,6 +16,9 @@ license: Internal project skill (no external redistribution terms)
 1. **Local Backend (`database.py`)**: Python 3 `http.server` + SQLite (`survey.db`) สำหรับเครื่อง local / OneDrive
 2. **Client API Layer (`src/lib/api.js`)**: Direct GitHub sync, BroadcastChannel, Offline localStorage cache
 3. **Production Static Snapshots (`deploy_r2.py`)**: อัปโหลดข้อมูล snapshot ไปยัง Cloudflare R2
+   - v2.11.0: snapshot ที่ขึ้น CDN ถูก `sanitize_dashboard_payload()` ตัด `contactName`/`contactPosition`/`contactPhone`/`informantName` ออกจาก `recent[]` (ข้อมูลติดต่อในเครื่อง local ยังครบ)
+   - **ห้ามเพิ่มการอัปโหลด secret ใด ๆ ขึ้น bucket สาธารณะ** — `/api/sync-config` และ `/sync-config` ถอดออกแล้วและถูก purge ทุกรอบ deploy (`LEGACY_SECRET_KEYS`)
+   - ตัวเลือกใหม่: `--dry-run` (ตรวจสอบสิ่งที่จะอัปโหลด/ลบโดยไม่แตะ R2), `--purge-secrets-only` (ล้าง object ที่เคยแจก token อย่างเดียว), `--strip-station-contacts` หรือ env `R2_STRIP_STATION_CONTACTS=1`
 
 ---
 

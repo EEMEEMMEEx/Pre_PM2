@@ -6,7 +6,7 @@
 ![GitHub](https://img.shields.io/badge/Sync-GitHub%20Data-181717?logo=github)
 ![OneDrive](https://img.shields.io/badge/Storage-OneDrive%20Local-0078D4?logo=microsoftonedrive)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Version](https://img.shields.io/badge/version-2.10.0-blue)
+![Version](https://img.shields.io/badge/version-2.11.0-blue)
 
 > เวอร์ชันที่ใช้ได้จริงอ่านจาก `src/version.js` (Single Source of Truth) และประวัติการแก้ดูใน [`CHANGELOG.md`](CHANGELOG.md)
 
