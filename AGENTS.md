@@ -50,14 +50,19 @@
 - **ห้ามส่ง secret ขึ้น R2 หรือ bundle frontend** — ทุกอย่างใน `dist/` และ R2 bucket อ่านได้สาธารณะ
 - **GitHub write path**: ทุก PUT/DELETE ต้องใช้ `sha` ล่าสุด, retry 409 แบบจำกัดครั้ง, ห้าม commit ซ้ำ record เดิม, ห้าม force
 - **Sensitive files**: `access-password.txt`, `DATABASE.xlsx`, `survey.db`, `SURVEY_DATA.xlsx` ห้ามถูก serve ผ่าน web/R2
+- **เครื่องมือตรวจสอบ (read-only, stdlib เท่านั้น)**: `python scripts/verify_revoked_token.py` · `python scripts/pii_scan.py` · `python scripts/audit_data.py`
+- **เอกสารปฏิบัติการ**: [`docs/ops-credentials.md`](docs/ops-credentials.md) · [`docs/ops-local-server.md`](docs/ops-local-server.md) · [`docs/pat-register.md`](docs/pat-register.md) · [`docs/pii-inventory.md`](docs/pii-inventory.md) · [`docs/qa-evidence/`](docs/qa-evidence/)
 
 > [!CAUTION]
 > **Security debt — สถานะล่าสุด**:
 > - [x] `src/lib/api.js` ไม่มี GitHub token ฝังใน bundle อีกแล้ว และ client ไม่เรียก `/api/sync-config` (v2.9.0)
-> - [ ] **ต้อง revoke/rotate GitHub token เก่า** — ค่าเดิมยังอยู่ใน git history สาธารณะและเคยถูกเผยแพร่ผ่าน R2; ต้องเพิกถอนที่ต้นทาง (GitHub → Settings → Developer settings) โดยผู้ดูแล
-> - [x] [`deploy_r2.py`](deploy_r2.py) ไม่อัปโหลด token ขึ้น bucket อีกแล้ว (v2.11.0) และ purge `/api/sync-config` + `/sync-config` ทุกรอบ deploy — **object เดิมยัง live บน R2 จนกว่าจะ deploy จริง** (ตรวจแล้ว: HTTP 200 พร้อมคีย์ `token`); รัน `python deploy_r2.py --purge-secrets-only` หรือ `--dry-run` เพื่อตรวจสอบก่อนได้ (ต้องได้รับอนุญาตก่อน)
+> - [x] **revoke GitHub token เก่าแล้ว** (2026-10-21) — ยืนยันด้วย `python scripts/verify_revoked_token.py` ว่า **401 Bad credentials ทั้ง 3 แหล่ง** (bundle เก่าบน R2 สองไฟล์ + git history) · หลักฐาน: [`docs/qa-evidence/2026-10-21-revoke-verification.md`](docs/qa-evidence/2026-10-21-revoke-verification.md)
+> - [ ] **Account hardening ของเจ้าของบัญชี** — Sign out ทุก session, ยืนยัน 2FA, เปลี่ยนรหัสผ่าน (runbook: [`docs/ops-credentials.md`](docs/ops-credentials.md)) · ทีมอื่นทำแทนไม่ได้
+> - [ ] **แจก Fine-grained PAT ให้เครื่องภาคสนาม** — เครื่องที่ยังไม่มี PAT เขียน GitHub ไม่ได้ (ข้อมูลค้างใน `localStorage`) · ทะเบียน: [`docs/pat-register.md`](docs/pat-register.md)
+> - [x] [`deploy_r2.py`](deploy_r2.py) ไม่อัปโหลด token ขึ้น bucket อีกแล้ว (v2.11.0) และ purge `/api/sync-config` + `/sync-config` ทุกรอบ deploy — ตรวจสดแล้ว **404 ทั้งคู่** · ยังเหลือ bundle hashed เก่า 2 ไฟล์ที่ดาวน์โหลดได้ (`assets/index-Bo0eDo-P.js`, `assets/index-DOixsAy_.js`) แต่ค่าที่ฝังอยู่ถูก revoke แล้ว → ลบในงาน `B2` (`--purge-stale-assets`)
 > - [ ] `access-password.txt` ยังถูก track ใน git (เปิดเผยสาธารณะ) → `git rm --cached` + เพิ่ม `.gitignore` + ตั้ง `FORM_PASSWORD` ค่าใหม่
-> - [ ] `data/surveys/*.json` และ `DATABASE.xlsx` มีข้อมูลติดต่อผู้ให้ข้อมูลอยู่ใน repo สาธารณะ → ต้องทำ repo/data เป็น private หรือใช้ server proxy (ยังไม่อยู่ในขอบเขตงานที่อนุมัติ)
+> - [ ] `data/surveys/*.json` และ `DATABASE.xlsx` มีข้อมูลติดต่อผู้ให้ข้อมูลอยู่ใน repo สาธารณะ — วัดแล้ว: **180/180 ไฟล์สำรวจมีฟิลด์ติดต่อ** และ `DATABASE.xlsx` มีคอลัมน์ติดต่อ 181 แถว (ดู [`docs/pii-inventory.md`](docs/pii-inventory.md)) → ทางเลือกที่ต้องตัดสินใจ: private data repo + proxy (`B8`) หรือลด/ปกปิดฟิลด์
+> - [x] snapshot บน CDN ถูก scrub แล้ว (v2.11.4, ตรวจรับโดย P3): `/api/dashboard` ไม่มีฟิลด์ติดต่อ (รวม `contactVillage`), `/api/onedrive-status` ไม่มีอีเมล/พาธ, `/api/github-status` ไม่มีชื่อบัญชี — หลักฐาน: [`docs/qa-evidence/2026-10-21-v1-acceptance-2-11-4.md`](docs/qa-evidence/2026-10-21-v1-acceptance-2-11-4.md) (ยังคง `contact_*` ใน `/api/database` ตามนโยบาย auto-fill)
 
 ---
 
