@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # Deploy แยกจาก R2 โดยสิ้นเชิง:
-# - ไม่แตะ deploy-r2.yml / deploy_r2.py / bucket R2
+# - ไม่แตะ bucket R2 (v2.11.6 เรียก deploy_r2.py เฉพาะ --write-snapshots ที่เขียนลง dist/ ไม่มีการเชื่อมต่อ R2)
 # - ใช้ GitHub Pages project site ใต้ subpath /<repo>/ (vite base = PAGES_BASE_PATH)
 #
 # on.push.branches: ต้องมี main ด้วย เพราะ GitHub Pages environment อนุญาตให้
@@ -20,6 +20,14 @@ on:
       - 'vite.config.mjs'
       - 'package.json'
       - '.github/workflows/deploy-pages.yml'
+      # v2.11.6: snapshot ถูกสร้างตอน build จากสคริปต์เหล่านี้ -> แก้แล้วต้อง rebuild Pages ด้วย
+      - 'deploy_r2.py'
+      - 'database.py'
+      - 'scripts/verify_pages_snapshots.py'
+      # ข้อมูลสำรวจ + master data เป็น input ของ snapshot (ข้อมูลจะ refresh ตามรอบ deploy)
+      - 'data/surveys/**'
+      - 'DATABASE.xlsx'
+      - 'AGWBS.xlsx'
   workflow_dispatch:
 
 permissions:
@@ -78,6 +86,20 @@ jobs:
           export PAGES_BASE_PATH="${PAGES_BASE_PATH%/}/"
           echo "Building with base: $PAGES_BASE_PATH"
           npm run build
+
+      # v2.11.6: GitHub Pages ไม่มี backend และไม่ได้อัปโหลดขึ้น R2 -> ไม่มี /api/* เลย
+      # เดิมแอปจึง fallback ไปยิง GitHub API ซึ่งโควตา unauthenticated เพียง 60 req/ชม. ต่อ IP
+      # ไม่พอสำหรับ 180 ไฟล์ (cold load ~182 คำขอ) -> dashboard แสดง 0 ทุกช่อง
+      # แก้โดยสร้าง snapshot ตอน build แล้วฝังลง artifact (ข้อมูล lag ตามรอบ deploy)
+      - name: Install Snapshot Dependency
+        run: pip install openpyxl
+
+      - name: Generate API Snapshots for Pages
+        run: python deploy_r2.py --write-snapshots dist
+
+      # fail fast ถ้า snapshot ไม่มีข้อมูลจริง ก่อนปล่อย artifact ขึ้น Pages
+      - name: Verify Snapshots
+        run: python scripts/verify_pages_snapshots.py dist
 
       # SPA fallback: GitHub Pages ไม่มี rewrite rule -> ใช้ 404.html ส่ง shell กลับ
       - name: Add SPA fallback (404.html)

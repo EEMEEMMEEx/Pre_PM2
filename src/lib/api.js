@@ -188,14 +188,20 @@ function snapshotUrl(path) {
 
 /**
  * R2 เป็น static host ที่ "มี" snapshot (deploy_r2.py อัปโหลด /api/* ขึ้น bucket)
- * ส่วน GitHub Pages ไม่มี backend และ workflow ไม่ได้รัน deploy_r2.py -> ไม่มี snapshot
- * แยกสองกรณีนี้เพื่อให้ R2 ยังได้ข้อมูล และ Pages ไม่ต้องยิง 404 ทิ้ง
+ *
+ * v2.11.6: GitHub Pages มี snapshot แล้วเช่นกัน — workflow deploy-pages.yml เรียก
+ * `python deploy_r2.py --write-snapshots dist` ก่อน upload artifact ทำให้ได้ไฟล์
+ * /api/* ใต้ subpath เดียวกับตัวแอป จึงอ่านข้อมูลได้ทันทีโดยไม่ต้องใช้โควตา GitHub API
+ * (โควตา unauthenticated 60 req/ชม. ไม่พอสำหรับ 180 ไฟล์ -> dashboard เคยแสดง 0)
+ *
+ * ยังคงคืน false เฉพาะกรณีที่อยู่นอก static host ที่รู้จัก (เช่น localhost ที่ไม่มี backend)
+ * เพราะ snapshot ไม่ได้ถูกฝังใน dev server — ผู้เรียกจะได้ไม่ยิง 404 ทิ้ง
  */
 function hasStaticSnapshots() {
   if (!isStaticHost()) return true;
   if (typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  return !host.includes('github.io');
+  // ทั้ง r2.dev และ github.io มี snapshot จากขั้นตอน build/deploy แล้ว
+  return true;
 }
 
 /** แจ้ง UI (Navbar) ให้เปิด GitHubTokenModal เมื่อ token หมดอายุ/ไม่มีสิทธิ์ */

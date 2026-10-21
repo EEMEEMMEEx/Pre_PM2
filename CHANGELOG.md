@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.6] - 2026-10-21
+
+### Fixed
+- **GitHub Pages แสดงข้อมูล 0 ทุกช่อง ทั้งที่ R2 แสดง 180 สถานี** — Pages ไม่มี backend และ workflow ไม่ได้อัปโหลดขึ้น R2 จึงไม่มีไฟล์ `/api/*` เลย แอปจึง fallback ไปยิง GitHub API ตรงจากเบราว์เซอร์ ซึ่งโควตา unauthenticated เพียง 60 req/ชม. ต่อ IP ไม่พอสำหรับ 180 ไฟล์ (cold load ต้องใช้ ~182 คำขอ) → 403 rate limit → dashboard ว่าง
+  - แก้โดยสร้าง snapshot ตอน build แล้วฝังลง Pages artifact (ข้อมูล lag ตามรอบ deploy) ไม่ต้องใช้โควตาผู้ใช้แต่ละคน
+
+### Added
+- `deploy_r2.py`:
+  - `build_snapshot_payloads()` — แยกการสร้าง + sanitize snapshot ทั้ง 4 ตัวออกมาเป็นแหล่งความจริงเดียว ใช้ร่วมกันระหว่าง R2 และ Pages
+  - `SNAPSHOT_KEYS` — นิยาม key/alias ของ snapshot (`api/database` + `database` ฯลฯ) แทนการ hardcode กระจายในโค้ด
+  - `--write-snapshots DIR` — เขียน snapshot เป็นไฟล์ static ลง DIR แล้วจบ ไม่แตะ R2 และไม่ต้องใช้ credentials (stdlib + openpyxl เท่านั้น)
+  - ตรวจ PII ก่อนเขียนไฟล์ และ **raise** หากพบฟิลด์ติดต่อหลุด (ไม่ปล่อยไฟล์ที่ทุกคนอ่านได้)
+- `scripts/verify_pages_snapshots.py` — ตรวจ snapshot ก่อนปล่อย artifact: ไฟล์ครบ, `recent[]` ไม่ว่าง, `stations > 0`, JSON parse ได้, และไม่มีฟิลด์ติดต่อหลุด (exit 1 = ไม่ผ่าน)
+- `tests/test_pages_snapshots.py` — ครอบคลุมทั้ง writer และ verifier รวมเคสลบ (snapshot ว่าง / ไฟล์ขาด / PII หลุด)
+
+### Changed
+- `deploy_frontend_to_r2()` เรียก `build_snapshot_payloads()` แทนการสร้าง payload ซ้ำในตัวฟังก์ชัน (พฤติกรรมบน R2 คงเดิม ทุก key และลำดับการอัปโหลดไม่เปลี่ยน)
+- `.github/workflows/deploy-pages.yml`:
+  - เพิ่มขั้นตอน `Generate API Snapshots for Pages` (`python deploy_r2.py --write-snapshots dist`) และ `Verify Snapshots` ก่อน upload artifact
+  - เพิ่ม `paths` trigger: `deploy_r2.py`, `database.py`, `scripts/verify_pages_snapshots.py`, `data/surveys/**`, `DATABASE.xlsx`, `AGWBS.xlsx` เพื่อให้ข้อมูล refresh เมื่อมีการเปลี่ยนแปลงจริง
+  - แก้คอมเมนต์หัวไฟล์ที่ระบุว่า "ไม่แตะ deploy_r2.py" ให้ตรงกับพฤติกรรมใหม่ (ยังไม่แตะ bucket R2)
+
 ## [2.11.5] - 2026-10-21
 
 ### Added
