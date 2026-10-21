@@ -44,7 +44,9 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # ---- Quality gate (แก้ I-04 จาก audit: CI ต้องรันเทสต์ก่อน deploy) ----
+      # ---- Quality gate (แก้ I-04 จาก audit: CI ต้องมีเทสต์ก่อน deploy) ----
+      # หมายเหตุลำดับ: tests/ import deploy_r2 ซึ่งต้องมี dist/ ให้ตรวจ
+      # จึงต้อง build ก่อน แล้วรันเทสต์ แล้ว build Pages ทับด้วย base ที่ถูกต้อง
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -53,10 +55,13 @@ jobs:
       - name: Syntax Check Python
         run: python -m py_compile database.py deploy_r2.py export_pdf.py export_photos.py
 
+      - name: Build (bootstrap dist/ สำหรับเทสต์)
+        run: npm run build
+
       - name: Run Python Tests
         run: npm run test:py
 
-      # ---- Build for GitHub Pages subpath ----
+      # ---- Build for GitHub Pages subpath (build จริงที่อัปโหลด) ----
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
