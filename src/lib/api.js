@@ -1899,6 +1899,18 @@ export async function fetchGitHubStatus() {
     const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
     let res = null;
     if (isStaticHost()) {
+      // บน static host หากเครื่องนี้ยังไม่มี token จะไม่สามารถเขียนข้อมูลขึ้น GitHub ได้
+      if (!localToken) {
+        return {
+          configured: false,
+          valid: false,
+          canWrite: false,
+          source: 'static_host',
+          repo: 'Thaidimaru/Pre_PM2',
+          branch: 'main',
+          message: 'ยังไม่ได้ใส่ GitHub Token บนเครื่องนี้ (โหมดอ่านอย่างเดียว)',
+        };
+      }
       res = await fetch(`${basePath}/api/github-status.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
       if (!res || !res.ok) {
         res = await fetch(`${basePath}/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
@@ -1918,7 +1930,13 @@ export async function fetchGitHubStatus() {
   } catch (err) {
     console.warn('Failed to check GitHub status:', err);
   }
-  return { configured: true, valid: true, repo: 'Thaidimaru/Pre_PM2', branch: 'main' };
+  return {
+    configured: Boolean(localToken),
+    valid: Boolean(localToken),
+    repo: 'Thaidimaru/Pre_PM2',
+    branch: 'main',
+    message: localToken ? 'เชื่อมต่อ GitHub สำเร็จ' : 'ยังไม่ได้ใส่ GitHub Token บนเครื่องนี้ (โหมดอ่านอย่างเดียว)',
+  };
 }
 
 export async function fetchOneDriveStatus() {

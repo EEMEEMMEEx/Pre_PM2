@@ -37,7 +37,8 @@ import {
   fetchOneDriveStatus,
   fetchDashboardData,
   getUnsyncedSurveysCount,
-  syncPendingLocalSurveys
+  syncPendingLocalSurveys,
+  isStaticHost
 } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 
@@ -602,43 +603,49 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
               {activeTab === 'github' && (
                 <div className="mt-4 space-y-4 animate-fade-in">
                   {/* Current GitHub Status Banner */}
-                  <div
-                    className={cn(
-                      'rounded-xl border p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2',
-                      gitHubStatus?.valid
-                        ? isDark
-                          ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
-                          : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                        : isDark
-                        ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
-                        : 'border-amber-200 bg-amber-50 text-amber-800'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      {gitHubStatus?.valid ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
-                      )}
-                      <div>
-                        <span className="font-semibold">
-                          {gitHubStatus?.valid
-                            ? `เชื่อมต่อ GitHub แล้ว (${gitHubStatus.user || 'Authorized PAT'})`
-                            : 'ยังไม่ได้ใส่ Token หรือ Token หมดอายุ (โหมดอ่านอย่างเดียว)'}
-                        </span>
-                        {unsyncedCount > 0 && (
-                          <p className="text-[11px] opacity-90 mt-0.5">
-                            {gitHubStatus?.valid
-                              ? `มีแบบสำรวจค้างส่งในเครื่องนี้ ${unsyncedCount} รายการ — ระบบกำลังซิงค์ขึ้น GitHub ส่วนกลางอัตโนมัติ`
-                              : `มีแบบสำรวจค้างส่ง ${unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อใส่ Token ที่มีสิทธิ์`}
-                          </p>
+                  {(() => {
+                    const hasToken = Boolean(tokenInput.trim() || getStoredGitHubToken());
+                    const isValid = Boolean(gitHubStatus?.valid && (hasToken || !isStaticHost()));
+                    return (
+                      <div
+                        className={cn(
+                          'rounded-xl border p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2',
+                          isValid
+                            ? isDark
+                              ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : isDark
+                            ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
+                            : 'border-amber-200 bg-amber-50 text-amber-800'
                         )}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isValid ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                          )}
+                          <div>
+                            <span className="font-semibold">
+                              {isValid
+                                ? `เชื่อมต่อ GitHub สำเร็จ (${gitHubStatus?.user || 'Authorized PAT'})`
+                                : 'ยังไม่ได้ใส่ Token บนเครื่องนี้ (โหมดอ่านอย่างเดียว)'}
+                            </span>
+                            {unsyncedCount > 0 && (
+                              <p className="text-[11px] opacity-90 mt-0.5">
+                                {isValid
+                                  ? `มีแบบสำรวจค้างส่งในเครื่องนี้ ${unsyncedCount} รายการ — ระบบกำลังซิงค์ขึ้น GitHub ส่วนกลางอัตโนมัติ`
+                                  : `มีแบบสำรวจค้างส่ง ${unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อใส่ Token และกดบันทึก`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-mono text-[11px] opacity-75 shrink-0">
+                          Repo: Thaidimaru/Pre_PM2
+                        </span>
                       </div>
-                    </div>
-                    <span className="font-mono text-[11px] opacity-75 shrink-0">
-                      Repo: Thaidimaru/Pre_PM2
-                    </span>
-                  </div>
+                    );
+                  })()}
 
                   {/* Token Input */}
                   <div>
