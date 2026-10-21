@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.2] - 2026-10-21
+
+### Fixed
+- แก้ปัญหา deploy บน Cloudflare R2 เสี่ยงพังเมื่อถูก cancel กลางคัน (`cancel-in-progress`): ปรับลำดับการอัปโหลดใน `deploy_r2.py` (`prepare_upload_files`) ให้อัปโหลดไฟล์ static, fonts, assets/** ทั้งหมด (27 ไฟล์) ขึ้น R2 ให้เสร็จสมบูรณ์ก่อน แล้วจึงอัปโหลด `/index.html` และ SPA route fallbacks เป็นรายการสุดท้าย (atomic cutover) เพื่อให้ผู้ใช้งานยังคงเข้าถึง bundle เดิมได้ปกติแม้ CI/CD ถูก cancel ระหว่าง deploy (`deploy_r2.py`, `tests/test_deploy_order.py`)
+
+### Added
+- เพิ่มคำสั่ง `npm run test:py` (`tests/test_deploy_order.py`) สำหรับรันชุดทดสอบความถูกต้องของ deploy upload sequence ด้วย stdlib `unittest`
+
 ## [2.11.1] - 2026-10-21
 
 ### Fixed

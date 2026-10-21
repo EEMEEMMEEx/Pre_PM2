@@ -1,11 +1,12 @@
 {
   "name": "survey-control-room",
-  "version": "2.11.1",
+  "version": "2.11.2",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:py": "python -m unittest discover -s tests",
     "start": "python database.py",
     "deploy": "python deploy_r2.py",
     "deploy:r2": "python deploy_r2.py",
