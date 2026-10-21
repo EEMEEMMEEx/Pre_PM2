@@ -13,12 +13,14 @@ const SCRIPT_URL = new URL(self.location.href);
 const VERSION = SCRIPT_URL.searchParams.get('v') || 'dev';
 const CACHE_NAME = `pre-pm-nbtc-${VERSION}`;
 
-// Dynamically compute base path (e.g., '/Pre_PM2' on GitHub Pages, or '' on root)
-const BASE_PATH = self.location.pathname.replace(/\/sw\.js$/, '').replace(/\/+$/, '');
+// GitHub Pages เสิร์ฟใต้ subpath (scope = '/<repo>/') ส่วน R2/local = '/'
+const BASE = (self.registration?.scope ? new URL(self.registration.scope).pathname : self.location.pathname.replace(/\/sw\.js$/, '')).replace(/\/+$/, '') + '/';
+const BASE_PATH = BASE.slice(0, -1);
+const SHELL_URL = `${BASE_PATH}/index.html`;
 
 // Task C4 + GitHub Pages: Assets with base prefix support
 const CORE_ASSETS = [
-  `${BASE_PATH}/index.html`,
+  SHELL_URL,
   `${BASE_PATH}/manifest.json`,
   `${BASE_PATH}/favicon.png`,
   `${BASE_PATH}/nbtc-logo-dashboard.png`,
@@ -107,12 +109,12 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(fallbackHtml, clone));
+            caches.open(CACHE_NAME).then((cache) => cache.put(SHELL_URL, clone));
           }
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match(fallbackHtml);
+          const cached = await caches.match(SHELL_URL);
           return cached || caches.match(req);
         })
     );

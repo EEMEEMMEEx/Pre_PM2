@@ -166,6 +166,119 @@ def sanitize_github_payload(payload: dict):
     return safe, removed
 
 
+# v2.11.6: key ของ snapshot ที่เสิร์ฟเป็น static file บน CDN และบน GitHub Pages
+# (/api/database มี alias /database เพราะ client บางเส้นทางยิงแบบไม่มี prefix)
+SNAPSHOT_KEYS = {
+    "database": ("api/database", "database"),
+    "dashboard": ("api/dashboard",),
+    "github-status": ("api/github-status", "github-status"),
+    "onedrive-status": ("api/onedrive-status", "onedrive-status"),
+}
+
+
+def build_snapshot_payloads(strip_station_contacts: bool = False):
+    """สร้าง payload ของ snapshot ทั้ง 4 ตัวพร้อม sanitize PII แล้ว
+
+    เป็นแหล่งความจริงเดียวที่ใช้ทั้ง:
+      * การอัปโหลดขึ้น Cloudflare R2 (deploy_frontend_to_r2)
+      * การเขียนเป็นไฟล์ static สำหรับ GitHub Pages (--write-snapshots)
+
+    คืน (payloads, report) โดย payloads เป็น dict ของ bytes ที่พร้อมเขียน/อัปโหลด
+    และ report เป็น dict สรุปจำนวนเพื่อพิมพ์ log/ตรวจสอบ
+
+    หมายเหตุ: ฟังก์ชันนี้ไม่แตะเครือข่าย — ผู้เรียกเป็นคนตัดสินใจว่าจะอัปโหลดหรือเขียนไฟล์
+    """
+    from database import DatabaseService
+
+    # CI checkout ไม่มี survey.db -> initialize() สร้างตาราง + sync สถานีจาก xlsx + seed จาก data/surveys/
+    DatabaseService.initialize()
+
+    raw_stations = DatabaseService.get_stations()
+    if strip_station_contacts:
+        public_stations, dropped_station_fields = sanitize_stations(raw_stations)
+    else:
+        public_stations, dropped_station_fields = list(raw_stations), 0
+
+    public_dashboard, dropped_survey_fields = sanitize_dashboard_payload(
+        DatabaseService.get_dashboard_payload()
+    )
+    public_gh, dropped_gh = sanitize_github_payload(DatabaseService.check_github_auth())
+    public_od, dropped_od = sanitize_onedrive_payload(DatabaseService.get_onedrive_status())
+
+    payloads = {
+        "database": json.dumps({"stations": public_stations}, ensure_ascii=False).encode("utf-8"),
+        "dashboard": json.dumps(public_dashboard, ensure_ascii=False).encode("utf-8"),
+        "github-status": json.dumps(public_gh, ensure_ascii=False).encode("utf-8"),
+        "onedrive-status": json.dumps(public_od, ensure_ascii=False).encode("utf-8"),
+    }
+
+    report = {
+        "stations": len(public_stations),
+        "surveys": len(public_dashboard.get("recent") or []),
+        "dashboard_stats": public_dashboard.get("stats") or {},
+        "provinces": len(public_dashboard.get("provinces") or []),
+        "github_valid": public_gh.get("valid"),
+        "onedrive_status": public_od.get("status"),
+        "dropped_station_fields": dropped_station_fields,
+        "dropped_survey_fields": dropped_survey_fields,
+        "dropped_gh": dropped_gh,
+        "dropped_od": dropped_od,
+    }
+    return payloads, report
+
+
+def write_snapshots_to_dir(
+    out_dir: Path,
+    strip_station_contacts: bool = False,
+    dist_dir: Path = None,
+):
+    """เขียน snapshot เป็นไฟล์ static ใต้ out_dir เพื่อฝังใน artifact ของ GitHub Pages
+
+    GitHub Pages ไม่มี backend และ workflow ไม่ได้อัปโหลดขึ้น R2 -> ไม่มี /api/* เลย
+    ทำให้แอปต้อง fallback ไปยิง GitHub API ซึ่งโควตา unauthenticated เพียง 60 req/ชม.
+    ไม่พอสำหรับ 180 ไฟล์ (cold load ต้องใช้ ~182 คำขอ) -> dashboard แสดง 0
+
+    การเขียน snapshot ตอน build ทำให้หน้า Pages ได้ตัวเลขทันทีเหมือน r2.dev
+    โดยไม่ต้องใช้โควตา GitHub API ของผู้ใช้แต่ละคน
+    ข้อมูลจะ lag ตามรอบ deploy (อัปเดตทุกครั้งที่ push เข้า main ที่ trigger workflow)
+
+    คืน (written_paths, report)
+    """
+    target_dist = dist_dir if dist_dir is not None else DIST_DIR
+    payloads, report = build_snapshot_payloads(strip_station_contacts)
+
+    written = []
+    for name, aliases in SNAPSHOT_KEYS.items():
+        body = payloads[name]
+        for key in aliases:
+            dest = out_dir / key
+            # alias บางตัวมี '/' -> ต้องสร้างโฟลเดอร์ก่อน
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(body)
+            written.append(dest)
+
+    print(f"  [OK] เขียน snapshot {len(payloads)} ตัว ลง {out_dir} ({len(written)} ไฟล์รวม alias)")
+    print(f"       /api/database        : {report['stations']} stations, {len(payloads['database']) / 1024:.1f} KB")
+    print(f"       /api/dashboard       : {report['surveys']} surveys, {len(payloads['dashboard']) / 1024:.1f} KB, stations={report['dashboard_stats'].get('stations')}, provinces={report['provinces']}")
+    print(f"       /api/github-status   : valid={report['github_valid']}")
+    print(f"       /api/onedrive-status : status={report['onedrive_status']}")
+
+    # ยืนยันว่าไม่มี PII หลุดลงไฟล์ static ที่ทุกคนอ่านได้ (เหมือนที่ R2 ตรวจ)
+    leftovers = sorted({key for key in PUBLIC_DASHBOARD_PII_FIELDS if f'"{key}"' in payloads['dashboard'].decode('utf-8')})
+    od_leftovers = sorted({key for key in PUBLIC_ONEDRIVE_PII_FIELDS if f'"{key}"' in payloads['onedrive-status'].decode('utf-8')})
+    gh_leftovers = sorted({key for key in PUBLIC_GITHUB_PII_FIELDS if f'"{key}"' in payloads['github-status'].decode('utf-8')})
+    station_leftovers = sorted({key for key in PUBLIC_STATION_PII_FIELDS if f'"{key}"' in payloads['database'].decode('utf-8')})
+    if leftovers or od_leftovers or gh_leftovers:
+        raise RuntimeError(
+            f"PII หลุดลง snapshot: dashboard={leftovers} onedrive={od_leftovers} github={gh_leftovers}"
+        )
+    if strip_station_contacts and station_leftovers:
+        raise RuntimeError(f"PII หลุดลง stations snapshot: {station_leftovers}")
+    print("  [OK] ตรวจ PII ใน snapshot ที่เขียนลงไฟล์: ไม่พบฟิลด์ติดต่อหลุด")
+
+    return written, report
+
+
 def purge_legacy_secret_keys(s3, bucket_name: str):
     """ลบ object ที่เคยแจก GitHub token สาธารณะออกจาก bucket (ปลอดภัยที่จะรันซ้ำ)"""
     for key in LEGACY_SECRET_KEYS:
@@ -447,73 +560,29 @@ def deploy_frontend_to_r2(
     # initialize() สร้างตาราง + sync สถานีจาก DATABASE.xlsx/AGWBS.xlsx และ seed จาก data/surveys/ ตามปกติของเซิร์ฟเวอร์
     snapshot_ok = False
     try:
-        from database import DatabaseService
+        # v2.11.6: ใช้ build_snapshot_payloads() ร่วมกับ --write-snapshots ของ GitHub Pages
+        # เพื่อให้ sanitize PII และโครงสร้าง payload เป็นแหล่งความจริงเดียว (ไม่แตกเป็นสองทาง)
+        payloads, report = build_snapshot_payloads(strip_station_contacts)
 
-        DatabaseService.initialize()
-        raw_stations = DatabaseService.get_stations()
-        if strip_station_contacts:
-            public_stations, dropped_station_fields = sanitize_stations(raw_stations)
-        else:
-            public_stations, dropped_station_fields = list(raw_stations), 0
-        stations_data = {"stations": public_stations}
-        stations_json = json.dumps(stations_data, ensure_ascii=False).encode("utf-8")
-        for k in ["api/database", "database"]:
-            s3.put_object(
-                Bucket=bucket_name,
-                Key=k,
-                Body=stations_json,
-                ContentType="application/json; charset=utf-8",
-                CacheControl="no-cache",
-            )
-            print(f"  [OK] Uploaded API snapshot: /{k} [application/json] ({len(stations_json)/1024:.1f} KB, {len(public_stations)} stations)")
+        for name, aliases in SNAPSHOT_KEYS.items():
+            body = payloads[name]
+            for k in aliases:
+                s3.put_object(
+                    Bucket=bucket_name,
+                    Key=k,
+                    Body=body,
+                    ContentType="application/json; charset=utf-8",
+                    CacheControl="no-cache",
+                )
+                print(f"  [OK] Uploaded API snapshot: /{k} [application/json] ({len(body)/1024:.1f} KB)")
 
+        print(f"  [OK] Dashboard snapshot: {report['surveys']} surveys, stations={report['dashboard_stats'].get('stations')}, provinces={report['provinces']}")
+        print(f"  [OK] Contact values removed: dashboard={report['dropped_survey_fields']}, github={report['dropped_gh']}, onedrive={report['dropped_od']}")
         if strip_station_contacts:
-            print(f"  [OK] Station snapshot scrubbed: {dropped_station_fields} contact values removed")
+            print(f"  [OK] Station snapshot scrubbed: {report['dropped_station_fields']} contact values removed")
         else:
             print(f"  [NOTE] Station snapshot still includes contact fields (needed by field form autofill on r2.dev).")
             print(f"         ใช้ --strip-station-contacts หากต้องการตัดออก (ฟอร์มจะต้องพิมพ์เอง)")
-
-        public_dashboard, dropped_survey_fields = sanitize_dashboard_payload(DatabaseService.get_dashboard_payload())
-        dashboard_json = json.dumps(public_dashboard, ensure_ascii=False).encode("utf-8")
-        s3.put_object(
-            Bucket=bucket_name,
-            Key="api/dashboard",
-            Body=dashboard_json,
-            ContentType="application/json; charset=utf-8",
-            CacheControl="no-cache",
-        )
-        print(f"  [OK] Uploaded API snapshot: /api/dashboard [application/json] ({len(dashboard_json)/1024:.1f} KB) with {len(public_dashboard.get('recent', []))} surveys")
-        print(f"  [OK] Dashboard snapshot scrubbed: {dropped_survey_fields} contact values removed")
-
-        gh_status = DatabaseService.check_github_auth()
-        public_gh_status, dropped_gh = sanitize_github_payload(gh_status)
-        gh_status_json = json.dumps(public_gh_status, ensure_ascii=False).encode("utf-8")
-        for k in ["api/github-status", "github-status"]:
-            s3.put_object(
-                Bucket=bucket_name,
-                Key=k,
-                Body=gh_status_json,
-                ContentType="application/json; charset=utf-8",
-                CacheControl="no-cache",
-            )
-            print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
-        if dropped_gh:
-            print(f"  [OK] GitHub status snapshot scrubbed: {dropped_gh} PII values removed")
-
-        od_status = DatabaseService.get_onedrive_status()
-        public_od_status, dropped_od = sanitize_onedrive_payload(od_status)
-        od_status_json = json.dumps(public_od_status, ensure_ascii=False).encode("utf-8")
-        for k in ["api/onedrive-status", "onedrive-status"]:
-            s3.put_object(
-                Bucket=bucket_name,
-                Key=k,
-                Body=od_status_json,
-                ContentType="application/json; charset=utf-8",
-                CacheControl="no-cache",
-            )
-            print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
-        if dropped_od:
-            print(f"  [OK] OneDrive status snapshot scrubbed: {dropped_od} PII/local path values removed")
         snapshot_ok = True
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
@@ -571,6 +640,11 @@ if __name__ == "__main__":
         action="store_true",
         help="ลบเฉพาะ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ แล้วจบ (ไม่ deploy)",
     )
+    parser.add_argument(
+        "--write-snapshots",
+        metavar="DIR",
+        help="เขียน snapshot /api/* เป็นไฟล์ static ใต้ DIR แล้วจบ (ไม่แตะ R2, ไม่ต้องมี credentials) — ใช้กับ GitHub Pages",
+    )
 
     args = parser.parse_args()
     key_id, secret = load_credentials(args)
@@ -584,6 +658,24 @@ if __name__ == "__main__":
         endpoint = f"https://{account_id}.r2.cloudflarestorage.com"
     else:
         endpoint = raw_endpoint
+
+    if args.write_snapshots:
+        # v2.11.6: GitHub Pages ไม่มี backend และไม่ได้อัปโหลดขึ้น R2 -> ต้องฝัง snapshot เข้า artifact ตอน build
+        out_dir = Path(args.write_snapshots).resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print("=" * 70)
+        print(" Static API Snapshots for GitHub Pages — NBTC Microwave")
+        print("=" * 70)
+        print(f" Output Directory: {out_dir}")
+        print(f" Snapshot PII    : {'dashboard + stations' if args.strip_station_contacts else 'dashboard only'}")
+        print("=" * 70)
+        try:
+            write_snapshots_to_dir(out_dir, strip_station_contacts=args.strip_station_contacts)
+        except Exception as e:
+            print(f"\n[ERROR] สร้าง snapshot ไม่สำเร็จ: {e}")
+            sys.exit(1)
+        print("\n[SUCCESS] เขียน snapshot สำหรับ GitHub Pages เรียบร้อย")
+        sys.exit(0)
 
     if args.dry_run:
         sys.exit(

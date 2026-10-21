@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - โฮสติ้งเว็บแอปพลิเคชันบน **GitHub Pages** (`https://Thaidimaru.github.io/Pre_PM2/`) ทำงานแบบ static ไร้เซิร์ฟเวอร์
   - รองรับ base path dynamic (`vite.config.mjs`, `src/lib/utils.js`, `src/App.jsx`, `src/main.jsx`) ไม่ว่าจะรันที่ root `/` หรือ subpath `/Pre_PM2/`
   - สคริปต์สร้าง static snapshot อัตโนมัติ: `scripts/build_static_snapshots.mjs` รันพร้อม `npm run build` เพื่อสร้าง `/api/dashboard`, `/api/database`, `/api/github-status`, `/api/onedrive-status` พร้อมตัดข้อมูลส่วนบุคคล (PII scrubbed) และสร้าง `dist/404.html` + `dist/.nojekyll` สำหรับ GitHub Pages SPA routing
-  - GitHub Actions Workflow: `.github/workflows/deploy-gh-pages.yml` สำหรับ deploy ขึ้น GitHub Pages อัตโนมัติเมื่อ push ขึ้น `main`
   - สคริปต์ส่งออกภาพถ่ายสำรวจ: `scripts/export_photos.mjs` (`npm run export:photos`) สำหรับดึงรูปภาพ base64 จาก `data/surveys/*.json` โดยตรงไปยังโฟลเดอร์ Microsoft OneDrive โดยไม่ต้องพึ่ง Python หรือ SQLite
 
 ### Changed
@@ -19,6 +18,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - เพิ่มการค้นหา static snapshot endpoint บน GitHub Pages ใน `src/lib/api.js` (`fetchDashboardData`, `fetchStations`, `fetchGitHubStatus`, `fetchOneDriveStatus`)
 - ปรับปรุง `export_photos.py` ให้ fallback ดึงรูปจาก `data/surveys/*.json` เมื่อไม่พบ `survey.db` ในเครื่อง
 
+## [2.11.6] - 2026-10-21
+
+### Fixed
+- **GitHub Pages แสดงข้อมูล 0 ทุกช่อง ทั้งที่ R2 แสดง 180 สถานี** — Pages ไม่มี backend และ workflow ไม่ได้อัปโหลดขึ้น R2 จึงไม่มีไฟล์ `/api/*` เลย แอปจึง fallback ไปยิง GitHub API ตรงจากเบราว์เซอร์ ซึ่งโควตา unauthenticated เพียง 60 req/ชม. ต่อ IP ไม่พอสำหรับ 180 ไฟล์ (cold load ต้องใช้ ~182 คำขอ) → 403 rate limit → dashboard ว่าง
+  - แก้โดยสร้าง snapshot ตอน build แล้วฝังลง Pages artifact (ข้อมูล lag ตามรอบ deploy) ไม่ต้องใช้โควตาผู้ใช้แต่ละคน
+
+### Added
+- `deploy_r2.py`:
+  - `build_snapshot_payloads()` — แยกการสร้าง + sanitize snapshot ทั้ง 4 ตัวออกมาเป็นแหล่งความจริงเดียว ใช้ร่วมกันระหว่าง R2 และ Pages
+  - `SNAPSHOT_KEYS` — นิยาม key/alias ของ snapshot (`api/database` + `database` ฯลฯ) แทนการ hardcode กระจายในโค้ด
+  - `--write-snapshots DIR` — เขียน snapshot เป็นไฟล์ static ลง DIR แล้วจบ ไม่แตะ R2 และไม่ต้องใช้ credentials (stdlib + openpyxl เท่านั้น)
+  - ตรวจ PII ก่อนเขียนไฟล์ และ **raise** หากพบฟิลด์ติดต่อหลุด (ไม่ปล่อยไฟล์ที่ทุกคนอ่านได้)
+- `scripts/verify_pages_snapshots.py` — ตรวจ snapshot ก่อนปล่อย artifact: ไฟล์ครบ, `recent[]` ไม่ว่าง, `stations > 0`, JSON parse ได้, และไม่มีฟิลด์ติดต่อหลุด (exit 1 = ไม่ผ่าน)
+- `tests/test_pages_snapshots.py` — ครอบคลุมทั้ง writer และ verifier รวมเคสลบ (snapshot ว่าง / ไฟล์ขาด / PII หลุด)
+
+### Changed
+- `deploy_frontend_to_r2()` เรียก `build_snapshot_payloads()` แทนการสร้าง payload ซ้ำในตัวฟังก์ชัน (พฤติกรรมบน R2 คงเดิม ทุก key และลำดับการอัปโหลดไม่เปลี่ยน)
+- `.github/workflows/deploy-pages.yml`:
+  - เพิ่มขั้นตอน `Generate API Snapshots for Pages` (`python deploy_r2.py --write-snapshots dist`) และ `Verify Snapshots` ก่อน upload artifact
+  - เพิ่ม `paths` trigger: `deploy_r2.py`, `database.py`, `scripts/verify_pages_snapshots.py`, `data/surveys/**`, `DATABASE.xlsx`, `AGWBS.xlsx` เพื่อให้ข้อมูล refresh เมื่อมีการเปลี่ยนแปลงจริง
+  - แก้คอมเมนต์หัวไฟล์ที่ระบุว่า "ไม่แตะ deploy_r2.py" ให้ตรงกับพฤติกรรมใหม่ (ยังไม่แตะ bucket R2)
+
+## [2.11.5] - 2026-10-21
+
+### Added
+- รองรับการ deploy ขึ้น **GitHub Pages** เป็นช่องทางสำรองนอกจาก Cloudflare R2 โดยไม่กระทบ deploy เดิม:
+  - `.github/workflows/deploy-pages.yml` — build + deploy ผ่าน GitHub Pages Actions (permissions: pages/id-token, `cancel-in-progress: false` เพื่อไม่ให้เหลือ asset ค้าง เหตุผลเดียวกับ B9)
+  - quality gate ก่อน deploy: `python -m py_compile` + `npm run test:py` (ปิดช่อง I-04 ที่ CI เดิมไม่มีเทสต์)
+  - สร้าง `404.html` (SPA fallback เนื่องจาก GitHub Pages ไม่มี rewrite rule) และ `.nojekyll`
+- `vite.config.mjs`: เพิ่ม `base` ที่ override ได้ผ่าน env `PAGES_BASE_PATH` (default `'/'` คงเดิมสำหรับ R2)
+
+### Changed
+- ทำ asset/route path ให้รองรับการเสิร์ฟใต้ subpath โดยไม่กระทบ root domain:
+  - `index.html`: manifest / favicon / apple-touch-icon / font preload เปลี่ยนเป็น relative (`./`)
+  - `src/App.jsx`: เพิ่ม `stripBase()` + `routeUrl()` ให้ route matching และ `pushState` ทำงานทั้ง base `'/'` และ `'/'`
+  - `public/sw.js`: อนุมาน `BASE` จาก `self.registration.scope` แทน hardcode `'/index.html'`
+  - `public/manifest.json`: `start_url`, `scope`, `icons[].src` เปลี่ยนเป็น relative
+
+> หมายเหตุ: การ deploy ขึ้น GitHub Pages เป็นการเพิ่มช่องทาง static hosting เท่านั้น ไม่ได้ย้าย backend
+> (`database.py`) และไม่เปลี่ยนพฤติกรรมบน r2.dev — `data/surveys/*.json` และ PII ยังอยู่ใน repo สาธารณะเหมือนเดิม
 ## [2.11.4] - 2026-10-21
 
 ### Security

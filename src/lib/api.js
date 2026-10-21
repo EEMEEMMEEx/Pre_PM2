@@ -171,6 +171,39 @@ export function isStaticHost() {
   );
 }
 
+/**
+ * สร้าง URL สำหรับ snapshot endpoint ที่เสิร์ฟเป็น static file
+ * บน GitHub Pages ไฟล์จะอยู่ใต้ subpath (/<repo>/) จึงต้องเติม BASE_URL
+ * บน R2/local BASE_URL = '/' -> path เดิมไม่เปลี่ยน
+ *
+ * สำคัญ: บน GitHub Pages ไม่มี snapshot เหล่านี้เลย (เพราะไม่มี backend
+ * และ workflow ไม่ได้รัน deploy_r2.py) การยิงไปจะได้ 404 และทำให้ console
+ * เต็มไปด้วย error โดยไม่ได้ข้อมูลอะไร -> ข้ามไปเลยเมื่ออยู่บน static host
+ */
+function snapshotUrl(path) {
+  if (!hasStaticSnapshots()) return null;
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+  return `${base}${path}`;
+}
+
+/**
+ * R2 เป็น static host ที่ "มี" snapshot (deploy_r2.py อัปโหลด /api/* ขึ้น bucket)
+ *
+ * v2.11.6: GitHub Pages มี snapshot แล้วเช่นกัน — workflow deploy-pages.yml เรียก
+ * `python deploy_r2.py --write-snapshots dist` ก่อน upload artifact ทำให้ได้ไฟล์
+ * /api/* ใต้ subpath เดียวกับตัวแอป จึงอ่านข้อมูลได้ทันทีโดยไม่ต้องใช้โควตา GitHub API
+ * (โควตา unauthenticated 60 req/ชม. ไม่พอสำหรับ 180 ไฟล์ -> dashboard เคยแสดง 0)
+ *
+ * ยังคงคืน false เฉพาะกรณีที่อยู่นอก static host ที่รู้จัก (เช่น localhost ที่ไม่มี backend)
+ * เพราะ snapshot ไม่ได้ถูกฝังใน dev server — ผู้เรียกจะได้ไม่ยิง 404 ทิ้ง
+ */
+function hasStaticSnapshots() {
+  if (!isStaticHost()) return true;
+  if (typeof window === 'undefined') return false;
+  // ทั้ง r2.dev และ github.io มี snapshot จากขั้นตอน build/deploy แล้ว
+  return true;
+}
+
 /** แจ้ง UI (Navbar) ให้เปิด GitHubTokenModal เมื่อ token หมดอายุ/ไม่มีสิทธิ์ */
 export function notifyGitHubTokenRequired(reason = 'bad_token') {
   if (typeof window !== 'undefined') {
@@ -381,9 +414,11 @@ export function deleteLocalSurvey(recordId) {
 
 function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) {
   const deletedIds = getDeletedSurveyIds();
+  // เดิม hardcode stations: 197 ไว้ ทำให้ผู้ใช้เข้าใจผิดว่าข้อมูลโหลดสำเร็จ
+  // ทั้งที่ยังอ่านไม่ได้ (ไม่มี PAT / rate limit) — ใช้ 0 เมื่อไม่มีข้อมูลจริง
   const base = serverData || {
     updatedAt: new Date().toISOString(),
-    stats: { surveys: 0, stations: 197, allowed: 0, denied: 0 },
+    stats: { surveys: 0, stations: 0, allowed: 0, denied: 0 },
     provinces: [],
     recent: [],
   };
@@ -457,7 +492,7 @@ function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) 
     updatedAt: new Date().toISOString(),
     stats: {
       surveys: totalCount,
-      stations: base.stats?.stations || 197,
+      stations: base.stats?.stations || 0,
       allowed: finalAllowed,
       denied: finalDenied,
     },

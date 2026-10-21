@@ -1,0 +1,125 @@
+name: Deploy to GitHub Pages
+
+# Deploy แยกจาก R2 โดยสิ้นเชิง:
+# - ไม่แตะ bucket R2 (v2.11.6 เรียก deploy_r2.py เฉพาะ --write-snapshots ที่เขียนลง dist/ ไม่มีการเชื่อมต่อ R2)
+# - ใช้ GitHub Pages project site ใต้ subpath /<repo>/ (vite base = PAGES_BASE_PATH)
+#
+# on.push.branches: ต้องมี main ด้วย เพราะ GitHub Pages environment อนุญาตให้
+# deploy จาก main เป็นค่า default และ work ที่ merge เข้า main แล้วจะไม่ trigger
+# ถ้ากรองเฉพาะ branch งาน (เคสจริง: merge PR #1 เข้า main แล้ว Pages ไม่ rebuild
+# ทำให้หน้าเว็บยังเสิร์ฟ artifact เก่า -> manifest/font 404)
+on:
+  push:
+    branches:
+      - main
+      - track-pages/deploy-github-pages
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.mjs'
+      - 'package.json'
+      - '.github/workflows/deploy-pages.yml'
+      # v2.11.6: snapshot ถูกสร้างตอน build จากสคริปต์เหล่านี้ -> แก้แล้วต้อง rebuild Pages ด้วย
+      - 'deploy_r2.py'
+      - 'database.py'
+      - 'scripts/verify_pages_snapshots.py'
+      # ข้อมูลสำรวจ + master data เป็น input ของ snapshot (ข้อมูลจะ refresh ตามรอบ deploy)
+      - 'data/surveys/**'
+      - 'DATABASE.xlsx'
+      - 'AGWBS.xlsx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# ไม่ยกเลิก deploy ที่กำลังรัน เพื่อไม่ให้ Pages เหลือ asset ค้าง (บทเรียนจาก B9)
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # ---- Quality gate (แก้ I-04 จาก audit: CI ต้องมีเทสต์ก่อน deploy) ----
+      # หมายเหตุลำดับ: tests/ import deploy_r2 ซึ่งต้องมี dist/ ให้ตรวจ
+      # จึงต้อง build ก่อน แล้วรันเทสต์ แล้ว build Pages ทับด้วย base ที่ถูกต้อง
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Syntax Check Python
+        run: python -m py_compile database.py deploy_r2.py export_pdf.py export_photos.py
+
+      - name: Build (bootstrap dist/ สำหรับเทสต์)
+        run: npm run build
+
+      - name: Run Python Tests
+        run: npm run test:py
+
+      # ---- Build for GitHub Pages subpath (build จริงที่อัปโหลด) ----
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build Web Application (Pages base path)
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          # configure-pages ให้ base_path มาแล้ว (เช่น /Pre_PM2) — เติม '/' ปิดท้ายให้ Vite
+          export PAGES_BASE_PATH="${PAGES_BASE_PATH%/}/"
+          echo "Building with base: $PAGES_BASE_PATH"
+          npm run build
+
+      # v2.11.6: GitHub Pages ไม่มี backend และไม่ได้อัปโหลดขึ้น R2 -> ไม่มี /api/* เลย
+      # เดิมแอปจึง fallback ไปยิง GitHub API ซึ่งโควตา unauthenticated เพียง 60 req/ชม. ต่อ IP
+      # ไม่พอสำหรับ 180 ไฟล์ (cold load ~182 คำขอ) -> dashboard แสดง 0 ทุกช่อง
+      # แก้โดยสร้าง snapshot ตอน build แล้วฝังลง artifact (ข้อมูล lag ตามรอบ deploy)
+      - name: Install Snapshot Dependency
+        run: pip install openpyxl
+
+      - name: Generate API Snapshots for Pages
+        run: python deploy_r2.py --write-snapshots dist
+
+      # fail fast ถ้า snapshot ไม่มีข้อมูลจริง ก่อนปล่อย artifact ขึ้น Pages
+      - name: Verify Snapshots
+        run: python scripts/verify_pages_snapshots.py dist
+
+      # SPA fallback: GitHub Pages ไม่มี rewrite rule -> ใช้ 404.html ส่ง shell กลับ
+      - name: Add SPA fallback (404.html)
+        run: cp dist/index.html dist/404.html
+
+      - name: Disable Jekyll processing
+        run: touch dist/.nojekyll
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
