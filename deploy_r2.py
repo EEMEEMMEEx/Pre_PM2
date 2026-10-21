@@ -121,6 +121,72 @@ def purge_legacy_secret_keys(s3, bucket_name: str):
             print(f"  [WARN] Could not purge /{key}: {e}")
 
 
+def find_stale_assets(s3, bucket_name: str, dist_dir: Path = DIST_DIR) -> list:
+    """ค้นหา object ภายใต้ prefix 'assets/' บน bucket ที่ไม่อยู่ใน dist/assets/
+
+    ความปลอดภัย (Hardened Guardrails):
+    - ค้นหาเฉพาะ key ที่ขึ้นต้นด้วย 'assets/'
+    - กรองไม่ให้แตะ root files (index.html, sw.js, manifest.json, favicon.png ฯลฯ)
+    - กรองไม่ให้แตะ API snapshots (api/*, database ฯลฯ)
+    """
+    if not dist_dir.exists():
+        return []
+
+    current_asset_keys = {
+        p.relative_to(dist_dir).as_posix()
+        for p in dist_dir.rglob("*")
+        if p.is_file() and p.relative_to(dist_dir).as_posix().startswith("assets/")
+    }
+
+    stale_keys = []
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name, Prefix="assets/"):
+            for obj in page.get("Contents") or []:
+                key = obj.get("Key", "")
+                if key.startswith("assets/") and key not in current_asset_keys:
+                    stale_keys.append(key)
+    except Exception as e:
+        print(f"  [WARN] Could not list bucket objects for stale asset check: {e}")
+    return stale_keys
+
+
+def purge_stale_assets(s3, bucket_name: str, dist_dir: Path = DIST_DIR, dry_run: bool = False) -> list:
+    """ลบ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ เพื่อป้องกัน asset บวมและล้าง token ใน bundle เก่า
+
+    กฎความปลอดภัย:
+    1. ตรวจสอบว่า key ขึ้นต้นด้วย 'assets/' เท่านั้น
+    2. ห้ามลบ root files หรือ API snapshots โดยเด็ดขาด
+    3. หาก dry_run=True จะคืนรายชื่อแต่ไม่ส่งคำสั่ง delete_object
+    """
+    stale_keys = find_stale_assets(s3, bucket_name, dist_dir)
+    if not stale_keys:
+        print("  [OK] No stale assets found on bucket.")
+        return []
+
+    print(f"  [INFO] Found {len(stale_keys)} stale asset(s) on bucket:")
+    for k in stale_keys:
+        print(f"    - /{k}")
+
+    if dry_run:
+        print(f"  [DRY RUN] Would purge {len(stale_keys)} stale asset(s).")
+        return stale_keys
+
+    purged = []
+    for key in stale_keys:
+        if not key.startswith("assets/"):
+            print(f"  [SKIP] Guard blocked non-asset key: /{key}")
+            continue
+        try:
+            s3.delete_object(Bucket=bucket_name, Key=key)
+            print(f"  [OK] Purged stale asset: /{key}")
+            purged.append(key)
+        except Exception as e:
+            print(f"  [WARN] Failed to purge stale asset /{key}: {e}")
+
+    return purged
+
+
 def load_credentials(args):
     """Load R2 credentials from CLI, environment, or r2-credentials.json."""
     raw_key = (args.key or "").strip()
@@ -158,7 +224,14 @@ def get_s3_client(key_id: str, secret: str, endpoint: str):
     )
 
 
-def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: bool = False) -> int:
+def preview_deployment(
+    bucket_name: str,
+    endpoint: str,
+    strip_station_contacts: bool = False,
+    purge_stale_assets_enabled: bool = False,
+    key_id: str = None,
+    secret: str = None,
+) -> int:
     """แสดงสิ่งที่ *จะ*ถูกอัปโหลด/ลบ โดยไม่แตะ object ใดบน R2
 
     หมายเหตุ: เรียก DatabaseService เหมือนคำขอ /api/dashboard ปกติ จึงมีการ seed/prune SQLite แบบ idempotent
@@ -178,6 +251,21 @@ def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: 
     print(f"  SPA fallbacks  : dashboard/, field/, login/ + index, home")
     print(f"  will NOT upload: /api/sync-config (GitHub token) — ถอดออกแล้วใน v2.11.0")
     print(f"  will purge     : {', '.join('/' + k for k in LEGACY_SECRET_KEYS)} (รันเสมอ แม้ snapshot ล้มเหลว)")
+    if purge_stale_assets_enabled:
+        if key_id and secret and boto3 is not None:
+            try:
+                s3 = get_s3_client(key_id, secret, endpoint)
+                stale = find_stale_assets(s3, bucket_name, DIST_DIR)
+                if stale:
+                    print(f"  stale assets to purge ({len(stale)}): {', '.join('/' + k for k in stale)}")
+                else:
+                    print("  stale assets to purge : none found on bucket")
+            except Exception as e:
+                print(f"  stale assets check     : [WARN] Could not query remote bucket: {e}")
+        else:
+            print("  stale assets to purge  : enabled via --purge-stale-assets (ต้องมี R2 credentials เพื่อดึงรายชื่อจาก bucket จริง)")
+    else:
+        print("  stale assets purge     : disabled (use --purge-stale-assets to inspect/purge old assets on bucket)")
     print("  note v2.11.1   : เรียก DatabaseService.initialize() ก่อนสร้าง snapshot (CI checkout ไม่มี survey.db)")
     try:
         from database import DatabaseService
@@ -215,6 +303,7 @@ def deploy_frontend_to_r2(
     bucket_name: str,
     endpoint: str,
     strip_station_contacts: bool = False,
+    purge_stale: bool = False,
 ):
     """Upload all files from dist/ to Cloudflare R2, refresh API snapshots, and purge leaked secrets."""
     if not DIST_DIR.exists() or not any(DIST_DIR.iterdir()):
@@ -359,6 +448,11 @@ def deploy_frontend_to_r2(
     # แม้การสร้าง snapshot จะล้มเหลว (เดิม purge อยู่ท้าย try จึงถูก skip ไปพร้อมกัน)
     purge_legacy_secret_keys(s3, bucket_name)
 
+    # v2.11.3 (B2): ลบ stale hashed assets บน bucket หลัง upload frontend และ snapshot สำเร็จครบถ้วน
+    if purge_stale:
+        print("\n[INFO] Checking and purging stale hashed assets from Cloudflare R2...")
+        purge_stale_assets(s3, bucket_name, DIST_DIR)
+
     print("\n" + "=" * 70)
     print("[SUCCESS] Frontend web application successfully deployed to Cloudflare R2!")
     print(f"  Bucket: {bucket_name}")
@@ -391,6 +485,17 @@ if __name__ == "__main__":
         action="store_true",
         help="ลบเฉพาะ object เก่าที่เคยเผยแพร่ GitHub token (/api/sync-config, /sync-config) แล้วจบ",
     )
+    parser.add_argument(
+        "--purge-stale-assets",
+        action="store_true",
+        default=os.environ.get("R2_PURGE_STALE_ASSETS", "").strip().lower() in ("1", "true", "yes", "on"),
+        help="ลบ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ เพื่อป้องกัน asset บวมและล้าง token ที่หลงเหลือใน hashed bundle เก่า",
+    )
+    parser.add_argument(
+        "--purge-stale-assets-only",
+        action="store_true",
+        help="ลบเฉพาะ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ แล้วจบ (ไม่ deploy)",
+    )
 
     args = parser.parse_args()
     key_id, secret = load_credentials(args)
@@ -406,7 +511,16 @@ if __name__ == "__main__":
         endpoint = raw_endpoint
 
     if args.dry_run:
-        sys.exit(preview_deployment(bucket, endpoint, args.strip_station_contacts))
+        sys.exit(
+            preview_deployment(
+                bucket,
+                endpoint,
+                strip_station_contacts=args.strip_station_contacts,
+                purge_stale_assets_enabled=args.purge_stale_assets or args.purge_stale_assets_only,
+                key_id=key_id,
+                secret=secret,
+            )
+        )
 
     if args.purge_secrets_only:
         if not key_id or not secret:
@@ -414,6 +528,15 @@ if __name__ == "__main__":
             sys.exit(1)
         purge_legacy_secret_keys(get_s3_client(key_id, secret, endpoint), bucket)
         print("\n[SUCCESS] Purged legacy public secret objects.")
+        sys.exit(0)
+
+    if args.purge_stale_assets_only:
+        if not key_id or not secret:
+            print("\n[ERROR] --purge-stale-assets-only ต้องใช้ R2 credentials (env R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY หรือ r2-credentials.json)")
+            sys.exit(1)
+        s3 = get_s3_client(key_id, secret, endpoint)
+        purge_stale_assets(s3, bucket, DIST_DIR)
+        print("\n[SUCCESS] Purged stale assets from bucket.")
         sys.exit(0)
 
     if not key_id or not secret:
@@ -435,5 +558,6 @@ if __name__ == "__main__":
         bucket,
         endpoint,
         strip_station_contacts=args.strip_station_contacts,
+        purge_stale=args.purge_stale_assets,
     )
 
