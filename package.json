@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.11.2",
+  "version": "2.11.4",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -36,7 +36,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.4"
+    "vite": "^5.4.14"
   },
   "optionalDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.63.3"

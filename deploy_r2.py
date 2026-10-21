@@ -45,9 +45,31 @@ DEFAULT_ENDPOINT = f"https://{DEFAULT_ACCOUNT_ID}.r2.cloudflarestorage.com"
 LEGACY_SECRET_KEYS = ("api/sync-config", "sync-config")
 
 # ฟิลด์ข้อมูลติดต่อของประชาชนในรายการสำรวจ — ไม่ควรถูกแพ็คขึ้น CDN snapshot
-PUBLIC_DASHBOARD_PII_FIELDS = ("contactName", "contactPosition", "contactPhone", "informantName")
+PUBLIC_DASHBOARD_PII_FIELDS = (
+    "contactName",
+    "contactPosition",
+    "contactPhone",
+    "informantName",
+    "contactVillage",
+)
 # ฟิลด์ข้อมูลติดต่อใน master stations (ใช้กับฟอร์มภาคสนาม จึงเป็น opt-in)
-PUBLIC_STATION_PII_FIELDS = ("contact_name", "contact_position", "contact_phone", "house_no")
+PUBLIC_STATION_PII_FIELDS = (
+    "contact_name",
+    "contact_position",
+    "contact_phone",
+    "house_no",
+)
+# ฟิลด์ path เครื่องและบัญชีส่วนตัวใน onedrive-status
+PUBLIC_ONEDRIVE_PII_FIELDS = (
+    "account",
+    "folder",
+    "surveysDir",
+    "dbPath",
+)
+# ฟิลด์ชื่อบัญชีผู้ใช้ใน github-status
+PUBLIC_GITHUB_PII_FIELDS = (
+    "user",
+)
 
 # Ensure MIME types are properly registered
 mimetypes.add_type("application/javascript", ".js")
@@ -111,6 +133,39 @@ def sanitize_stations(stations: list):
     return sanitized, removed
 
 
+def sanitize_onedrive_payload(payload: dict):
+    """คืน (payload สำเนา, จำนวนค่าที่ตัดออก) โดยตัดข้อมูล path เครื่องและ email บัญชีส่วนบุคคลออก
+
+    เก็บเฉพาะสถานะการเชื่อมต่อภาพรวม:
+    configured, connected, service, surveysCount, photosCount, status, message (แบบไม่มี email), updatedAt
+    """
+    safe = dict(payload or {})
+    removed = 0
+    for key in PUBLIC_ONEDRIVE_PII_FIELDS:
+        if safe.get(key):
+            removed += 1
+        safe.pop(key, None)
+
+    # ปรับ message ให้ไม่มีอีเมลส่วนตัว
+    msg = safe.get("message") or ""
+    if "@" in msg or "utai323" in msg:
+        safe["message"] = "เชื่อมต่อศูนย์กลางจัดเก็บข้อมูล Microsoft OneDrive สำเร็จ"
+        removed += 1
+
+    return safe, removed
+
+
+def sanitize_github_payload(payload: dict):
+    """คืน (payload สำเนา, จำนวนค่าที่ตัดออก) โดยตัดชื่อบัญชี GitHub (user) ออกจาก public snapshot"""
+    safe = dict(payload or {})
+    removed = 0
+    for key in PUBLIC_GITHUB_PII_FIELDS:
+        if safe.get(key):
+            removed += 1
+        safe.pop(key, None)
+    return safe, removed
+
+
 def purge_legacy_secret_keys(s3, bucket_name: str):
     """ลบ object ที่เคยแจก GitHub token สาธารณะออกจาก bucket (ปลอดภัยที่จะรันซ้ำ)"""
     for key in LEGACY_SECRET_KEYS:
@@ -119,6 +174,72 @@ def purge_legacy_secret_keys(s3, bucket_name: str):
             print(f"  [OK] Purged legacy public secret object: /{key}")
         except Exception as e:
             print(f"  [WARN] Could not purge /{key}: {e}")
+
+
+def find_stale_assets(s3, bucket_name: str, dist_dir: Path = DIST_DIR) -> list:
+    """ค้นหา object ภายใต้ prefix 'assets/' บน bucket ที่ไม่อยู่ใน dist/assets/
+
+    ความปลอดภัย (Hardened Guardrails):
+    - ค้นหาเฉพาะ key ที่ขึ้นต้นด้วย 'assets/'
+    - กรองไม่ให้แตะ root files (index.html, sw.js, manifest.json, favicon.png ฯลฯ)
+    - กรองไม่ให้แตะ API snapshots (api/*, database ฯลฯ)
+    """
+    if not dist_dir.exists():
+        return []
+
+    current_asset_keys = {
+        p.relative_to(dist_dir).as_posix()
+        for p in dist_dir.rglob("*")
+        if p.is_file() and p.relative_to(dist_dir).as_posix().startswith("assets/")
+    }
+
+    stale_keys = []
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket_name, Prefix="assets/"):
+            for obj in page.get("Contents") or []:
+                key = obj.get("Key", "")
+                if key.startswith("assets/") and key not in current_asset_keys:
+                    stale_keys.append(key)
+    except Exception as e:
+        print(f"  [WARN] Could not list bucket objects for stale asset check: {e}")
+    return stale_keys
+
+
+def purge_stale_assets(s3, bucket_name: str, dist_dir: Path = DIST_DIR, dry_run: bool = False) -> list:
+    """ลบ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ เพื่อป้องกัน asset บวมและล้าง token ใน bundle เก่า
+
+    กฎความปลอดภัย:
+    1. ตรวจสอบว่า key ขึ้นต้นด้วย 'assets/' เท่านั้น
+    2. ห้ามลบ root files หรือ API snapshots โดยเด็ดขาด
+    3. หาก dry_run=True จะคืนรายชื่อแต่ไม่ส่งคำสั่ง delete_object
+    """
+    stale_keys = find_stale_assets(s3, bucket_name, dist_dir)
+    if not stale_keys:
+        print("  [OK] No stale assets found on bucket.")
+        return []
+
+    print(f"  [INFO] Found {len(stale_keys)} stale asset(s) on bucket:")
+    for k in stale_keys:
+        print(f"    - /{k}")
+
+    if dry_run:
+        print(f"  [DRY RUN] Would purge {len(stale_keys)} stale asset(s).")
+        return stale_keys
+
+    purged = []
+    for key in stale_keys:
+        if not key.startswith("assets/"):
+            print(f"  [SKIP] Guard blocked non-asset key: /{key}")
+            continue
+        try:
+            s3.delete_object(Bucket=bucket_name, Key=key)
+            print(f"  [OK] Purged stale asset: /{key}")
+            purged.append(key)
+        except Exception as e:
+            print(f"  [WARN] Failed to purge stale asset /{key}: {e}")
+
+    return purged
 
 
 def load_credentials(args):
@@ -158,7 +279,14 @@ def get_s3_client(key_id: str, secret: str, endpoint: str):
     )
 
 
-def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: bool = False) -> int:
+def preview_deployment(
+    bucket_name: str,
+    endpoint: str,
+    strip_station_contacts: bool = False,
+    purge_stale_assets_enabled: bool = False,
+    key_id: str = None,
+    secret: str = None,
+) -> int:
     """แสดงสิ่งที่ *จะ*ถูกอัปโหลด/ลบ โดยไม่แตะ object ใดบน R2
 
     หมายเหตุ: เรียก DatabaseService เหมือนคำขอ /api/dashboard ปกติ จึงมีการ seed/prune SQLite แบบ idempotent
@@ -178,6 +306,21 @@ def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: 
     print(f"  SPA fallbacks  : dashboard/, field/, login/ + index, home")
     print(f"  will NOT upload: /api/sync-config (GitHub token) — ถอดออกแล้วใน v2.11.0")
     print(f"  will purge     : {', '.join('/' + k for k in LEGACY_SECRET_KEYS)} (รันเสมอ แม้ snapshot ล้มเหลว)")
+    if purge_stale_assets_enabled:
+        if key_id and secret and boto3 is not None:
+            try:
+                s3 = get_s3_client(key_id, secret, endpoint)
+                stale = find_stale_assets(s3, bucket_name, DIST_DIR)
+                if stale:
+                    print(f"  stale assets to purge ({len(stale)}): {', '.join('/' + k for k in stale)}")
+                else:
+                    print("  stale assets to purge : none found on bucket")
+            except Exception as e:
+                print(f"  stale assets check     : [WARN] Could not query remote bucket: {e}")
+        else:
+            print("  stale assets to purge  : enabled via --purge-stale-assets (ต้องมี R2 credentials เพื่อดึงรายชื่อจาก bucket จริง)")
+    else:
+        print("  stale assets purge     : disabled (use --purge-stale-assets to inspect/purge old assets on bucket)")
     print("  note v2.11.1   : เรียก DatabaseService.initialize() ก่อนสร้าง snapshot (CI checkout ไม่มี survey.db)")
     try:
         from database import DatabaseService
@@ -194,13 +337,28 @@ def preview_deployment(bucket_name: str, endpoint: str, strip_station_contacts: 
         )
         dashboard_json = json.dumps(public_dashboard, ensure_ascii=False)
 
-        print(f"  /api/database  : {len(public_stations)} stations, {len(stations_json) / 1024:.1f} KB, contact values removed = {dropped_stations}")
-        print(f"  /api/dashboard : {len(public_dashboard.get('recent') or [])} surveys, {len(dashboard_json) / 1024:.1f} KB, contact values removed = {dropped_dashboard}")
+        public_gh, dropped_gh = sanitize_github_payload(DatabaseService.check_github_auth())
+        gh_json = json.dumps(public_gh, ensure_ascii=False)
 
-        leftovers = sorted({key for key in PUBLIC_DASHBOARD_PII_FIELDS if f'\"{key}\"' in dashboard_json})
-        station_leftovers = sorted({key for key in PUBLIC_STATION_PII_FIELDS if f'\"{key}\"' in stations_json})
+        public_od, dropped_od = sanitize_onedrive_payload(DatabaseService.get_onedrive_status())
+        od_json = json.dumps(public_od, ensure_ascii=False)
+
+        print(f"  /api/database        : {len(public_stations)} stations, {len(stations_json) / 1024:.1f} KB, contact values removed = {dropped_stations}")
+        print(f"  /api/dashboard       : {len(public_dashboard.get('recent') or [])} surveys, {len(dashboard_json) / 1024:.1f} KB, contact values removed = {dropped_dashboard}")
+        print(f"  /api/onedrive-status : status={public_od.get('status')}, PII/local path values removed = {dropped_od}")
+        print(f"  /api/github-status   : valid={public_gh.get('valid')}, PII values removed = {dropped_gh}")
+
+        leftovers = sorted({key for key in PUBLIC_DASHBOARD_PII_FIELDS if f'"{key}"' in dashboard_json})
+        station_leftovers = sorted({key for key in PUBLIC_STATION_PII_FIELDS if f'"{key}"' in stations_json})
+        od_leftovers = sorted({key for key in PUBLIC_ONEDRIVE_PII_FIELDS if f'"{key}"' in od_json})
+        gh_leftovers = sorted({key for key in PUBLIC_GITHUB_PII_FIELDS if f'"{key}"' in gh_json})
+
         print(f"  PII keys left in dashboard snapshot : {', '.join(leftovers) or 'none'}")
         print(f"  PII keys left in stations snapshot  : {', '.join(station_leftovers) or 'none'}")
+        print(f"  PII keys left in onedrive snapshot  : {', '.join(od_leftovers) or 'none'}")
+        print(f"  PII keys left in github snapshot    : {', '.join(gh_leftovers) or 'none'}")
+        if leftovers or od_leftovers or gh_leftovers:
+            return 2
         if strip_station_contacts and station_leftovers:
             return 2
         return 0
@@ -215,6 +373,7 @@ def deploy_frontend_to_r2(
     bucket_name: str,
     endpoint: str,
     strip_station_contacts: bool = False,
+    purge_stale: bool = False,
 ):
     """Upload all files from dist/ to Cloudflare R2, refresh API snapshots, and purge leaked secrets."""
     if not DIST_DIR.exists() or not any(DIST_DIR.iterdir()):
@@ -229,7 +388,7 @@ def deploy_frontend_to_r2(
     print(f" Target Endpoint : {endpoint}")
     print(f" Target Bucket   : {bucket_name}")
     print(f" Source Directory: {DIST_DIR}")
-    print(f" Data Storage    : Strictly OneDrive (utai323@gmail.com) — 0 bytes wasted on R2")
+    print(f" Data Storage    : Strictly OneDrive Local — 0 bytes wasted on R2")
     print(f" Snapshot PII    : {'dashboard + stations' if strip_station_contacts else 'dashboard only'}")
     print("=" * 70)
 
@@ -327,7 +486,8 @@ def deploy_frontend_to_r2(
         print(f"  [OK] Dashboard snapshot scrubbed: {dropped_survey_fields} contact values removed")
 
         gh_status = DatabaseService.check_github_auth()
-        gh_status_json = json.dumps(gh_status, ensure_ascii=False).encode("utf-8")
+        public_gh_status, dropped_gh = sanitize_github_payload(gh_status)
+        gh_status_json = json.dumps(public_gh_status, ensure_ascii=False).encode("utf-8")
         for k in ["api/github-status", "github-status"]:
             s3.put_object(
                 Bucket=bucket_name,
@@ -337,9 +497,12 @@ def deploy_frontend_to_r2(
                 CacheControl="no-cache",
             )
             print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
+        if dropped_gh:
+            print(f"  [OK] GitHub status snapshot scrubbed: {dropped_gh} PII values removed")
 
         od_status = DatabaseService.get_onedrive_status()
-        od_status_json = json.dumps(od_status, ensure_ascii=False).encode("utf-8")
+        public_od_status, dropped_od = sanitize_onedrive_payload(od_status)
+        od_status_json = json.dumps(public_od_status, ensure_ascii=False).encode("utf-8")
         for k in ["api/onedrive-status", "onedrive-status"]:
             s3.put_object(
                 Bucket=bucket_name,
@@ -348,8 +511,9 @@ def deploy_frontend_to_r2(
                 ContentType="application/json; charset=utf-8",
                 CacheControl="no-cache",
             )
-            print(f"  [OK] Uploaded API snapshot: /{k} [application/json] (OneDrive: utai323@gmail.com)")
-
+            print(f"  [OK] Uploaded API snapshot: /{k} [application/json]")
+        if dropped_od:
+            print(f"  [OK] OneDrive status snapshot scrubbed: {dropped_od} PII/local path values removed")
         snapshot_ok = True
     except Exception as e:
         print(f"  [WARN] Could not upload API snapshots: {e}")
@@ -358,6 +522,11 @@ def deploy_frontend_to_r2(
     # v2.11.1: แยก purge ออกจาก try ของ snapshot — object ที่เคยแจก GitHub token ต้องถูกลบ
     # แม้การสร้าง snapshot จะล้มเหลว (เดิม purge อยู่ท้าย try จึงถูก skip ไปพร้อมกัน)
     purge_legacy_secret_keys(s3, bucket_name)
+
+    # v2.11.3 (B2): ลบ stale hashed assets บน bucket หลัง upload frontend และ snapshot สำเร็จครบถ้วน
+    if purge_stale:
+        print("\n[INFO] Checking and purging stale hashed assets from Cloudflare R2...")
+        purge_stale_assets(s3, bucket_name, DIST_DIR)
 
     print("\n" + "=" * 70)
     print("[SUCCESS] Frontend web application successfully deployed to Cloudflare R2!")
@@ -391,6 +560,17 @@ if __name__ == "__main__":
         action="store_true",
         help="ลบเฉพาะ object เก่าที่เคยเผยแพร่ GitHub token (/api/sync-config, /sync-config) แล้วจบ",
     )
+    parser.add_argument(
+        "--purge-stale-assets",
+        action="store_true",
+        default=os.environ.get("R2_PURGE_STALE_ASSETS", "").strip().lower() in ("1", "true", "yes", "on"),
+        help="ลบ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ เพื่อป้องกัน asset บวมและล้าง token ที่หลงเหลือใน hashed bundle เก่า",
+    )
+    parser.add_argument(
+        "--purge-stale-assets-only",
+        action="store_true",
+        help="ลบเฉพาะ assets เก่า (assets/*) บน bucket ที่ไม่อยู่ใน dist/ แล้วจบ (ไม่ deploy)",
+    )
 
     args = parser.parse_args()
     key_id, secret = load_credentials(args)
@@ -406,7 +586,16 @@ if __name__ == "__main__":
         endpoint = raw_endpoint
 
     if args.dry_run:
-        sys.exit(preview_deployment(bucket, endpoint, args.strip_station_contacts))
+        sys.exit(
+            preview_deployment(
+                bucket,
+                endpoint,
+                strip_station_contacts=args.strip_station_contacts,
+                purge_stale_assets_enabled=args.purge_stale_assets or args.purge_stale_assets_only,
+                key_id=key_id,
+                secret=secret,
+            )
+        )
 
     if args.purge_secrets_only:
         if not key_id or not secret:
@@ -414,6 +603,15 @@ if __name__ == "__main__":
             sys.exit(1)
         purge_legacy_secret_keys(get_s3_client(key_id, secret, endpoint), bucket)
         print("\n[SUCCESS] Purged legacy public secret objects.")
+        sys.exit(0)
+
+    if args.purge_stale_assets_only:
+        if not key_id or not secret:
+            print("\n[ERROR] --purge-stale-assets-only ต้องใช้ R2 credentials (env R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY หรือ r2-credentials.json)")
+            sys.exit(1)
+        s3 = get_s3_client(key_id, secret, endpoint)
+        purge_stale_assets(s3, bucket, DIST_DIR)
+        print("\n[SUCCESS] Purged stale assets from bucket.")
         sys.exit(0)
 
     if not key_id or not secret:
@@ -435,5 +633,6 @@ if __name__ == "__main__":
         bucket,
         endpoint,
         strip_station_contacts=args.strip_station_contacts,
+        purge_stale=args.purge_stale_assets,
     )
 

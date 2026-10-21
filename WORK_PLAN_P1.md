@@ -17,8 +17,8 @@
 
 | id | งาน | P | สถานะ | ผลลัพธ์ที่คาดหวัง (วัดได้) | พึ่งพา/ส่งผลถึง |
 |---|---|---|---|---|---|
-| B2 | `--purge-stale-assets` ใน `deploy_r2.py` | P0 | READY | bundle เก่าที่เก็บ token → HTTP 404 | P3 ใช้ต่อใน D3 |
-| B3 | ปิด PII ที่เหลือใน CDN snapshot | P0 | READY | `/api/dashboard` `/api/database` `/api/onedrive-status` `/api/github-status` ไม่มีฟิลด์ต้องห้าม | P2 ตรวจใน C5 |
+| B2 | `--purge-stale-assets` ใน `deploy_r2.py` | P0 | DONE | bundle เก่าที่เก็บ token → HTTP 404 | v2.11.3 (`track-b/b2`) |
+| B3 | ปิด PII ที่เหลือใน CDN snapshot | P0 | DONE | `/api/dashboard` `/api/database` `/api/onedrive-status` `/api/github-status` ไม่มีฟิลด์ต้องห้าม | v2.11.4 (`track-b/b3`) |
 | B4 | ถอด `access-password.txt` จากการ track | P0 | GATED | repo clone ใหม่ไม่มีไฟล์รหัส · ระบบยัง login ได้ด้วย `FORM_PASSWORD` | P3 ตั้งรหัสก่อน (D2/D6) |
 | B1 | rate-limit/lockout ที่ `POST /api/login` | P1 | READY | ครั้งที่ 11 ใน 5 นาที → `429` และ log ไม่มี attempt/รหัสผ่าน | P2 ใช้ shape นี้ใน C1 |
 | B5 | ชุดเทสต์ Python (`tests/`) | P1 | READY | `npm run test:py` ผ่าน + เป็น gate ของทุก track | ทุกคนพึ่ง |
@@ -111,8 +111,8 @@
 |---|---|---|---|---|
 | 2026-10-21 | RL | DOING | `75ed619` → merge `7526ecf` · run `39533128570` | production = 2.11.1 |
 | 2026-10-21 | B9 | DONE | `tests/test_deploy_order.py` PASS (mock S3), dry-run order verified | v2.11.2 |
-|  | B2 | READY |  |  |
-|  | B3 | READY |  |  |
+| 2026-10-21 | B2 | DONE | `tests/test_purge_stale_assets.py` PASS (5 tests), dry-run flag verified | v2.11.3 |
+| 2026-10-21 | B3 | DONE | `tests/test_sanitize_snapshots.py` PASS (4 tests), 0 PII leftovers | v2.11.4 |
 |  | B4 | GATED |  | รอนับหนึ่ง `FORM_PASSWORD` จาก P3 |
 
 ## จุดประสานงาน (กันทำงานซ้ำและกันแก้ไฟล์ทับกัน)

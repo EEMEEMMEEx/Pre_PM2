@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.4] - 2026-10-21
+
+### Security
+- ปิดข้อมูลส่วนบุคคลและข้อมูลระบบที่ตกค้างใน Cloudflare R2 API snapshots ทั้งหมด (B3):
+  - `/api/dashboard`: เพิ่ม `contactVillage` ใน `PUBLIC_DASHBOARD_PII_FIELDS` ตัดข้อมูลหมู่บ้านของประชาชนออกจาก recent surveys (ตัดเพิ่ม 180 ค่า รวมเป็น 872 ค่าที่ถูก scrub)
+  - `/api/onedrive-status`: ตัด `account`, `folder`, `surveysDir`, `dbPath` ป้องกันการรั่วไหลของ email ส่วนตัวและ local filesystem path บน Windows โดยคงเฉพาะสถานะภาพรวม (`configured`, `connected`, `surveysCount`, `photosCount`, `status`, `updatedAt`)
+  - `/api/github-status`: ตัด `user` (GitHub login) ออกจาก public snapshot
+  - `--dry-run`: ตรวจสอบและรายงาน "PII keys left in ..." ทั้ง 4 snapshots (`dashboard`, `stations`, `onedrive`, `github`) และคืน error code หากมี PII ตกค้าง
+  - ชุดทดสอบความปลอดภัย: [`tests/test_sanitize_snapshots.py`](tests/test_sanitize_snapshots.py) คลุมการ scrub ทุก snapshot
+
+## [2.11.3] - 2026-10-21
+
+### Security
+- เพิ่ม `--purge-stale-assets` และ `--purge-stale-assets-only` ใน `deploy_r2.py` สำหรับค้นหาและลบ hashed bundle เก่า (เช่น `assets/index-Bo0eDo-P.js`, `assets/index-DOixsAy_.js` ที่เคยมี GitHub token ตกค้าง) ออกจาก Cloudflare R2 bucket:
+  - Guard ป้องกันไฟล์สำคัญ: ตรวจสอบ prefix `assets/` อย่างเข้มงวด และกันไม่ให้แตะ root files (`index.html`, `sw.js`, `manifest.json`, `favicon.png`) หรือ API snapshots (`api/*`, `database`)
+  - รันหลัง upload สำเร็จ 100%: ลบเฉพาะไฟล์ที่ไม่อยู่ใน `dist/assets/` หลังจากอัปโหลด bundle ใหม่และ snapshot ครบถ้วนแล้ว
+  - โหมดตรวจสอบล่วงหน้า: `--dry-run --purge-stale-assets` พิมพ์รายชื่อ assets เก่าที่จะถูกลบก่อนแตะ R2 จริง
+  - ชุดทดสอบความปลอดภัย: [`tests/test_purge_stale_assets.py`](tests/test_purge_stale_assets.py) คลุมการกรอง key, dry-run, live delete, และ deployment integration
+
 ## [2.11.2] - 2026-10-21
 
 ### Fixed
