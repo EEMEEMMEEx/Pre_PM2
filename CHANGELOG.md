@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.12.3] - 2026-10-21
+
+### Fixed
+- **แยกส่วนการยืนยันรหัสผ่านความปลอดภัย (Passcode) ออกจากการใช้งานข้อมูลทั่วไปอย่างเด็ดขาด**:
+  - กำหนดให้หน้าต่างยืนยันความปลอดภัย (Security Verification Modal) แสดงเฉพาะเมื่อผู้ใช้คลิกปุ่มไอคอนฟันเฟือง "ตั้งค่าระบบ" (Settings Gear) โดยตรงเท่านั้น
+  - ลบการเรียกเปิดหน้าต่างตั้งค่าระบบอัตโนมัติจาก Event `nbtc-github-token-required` ใน `Navbar.jsx` เพื่อไม่ให้ขัดจังหวะหรือบล็อกการทำงานภาคสนาม
+  - ผู้ใช้งานทั่วไปสามารถเพิ่ม, แก้ไข, บันทึก หรือลบรายการสำรวจได้ตามปกติโดยไม่ต้องยืนยันรหัสผ่าน Admin
+- **รวมศูนย์การใช้ GitHub Token สำหรับการซิงค์ข้อมูลทั้งหมด (Global Backend Token Integration)**:
+  - การทำงานเขียนข้อมูลทั้งหมด (สร้าง, แก้ไข, ลบ) ถูกส่งผ่านไปยังเซิร์ฟเวอร์ฐานข้อมูล (`database.py` ➔ `/api/save`, `/api/update`, `/api/delete`) และใช้ GitHub Token ศูนย์กลางในการคอมมิต/ลบบน GitHub อัตโนมัติ
+  - เพิ่มฟังก์ชัน `getOrFetchGitHubToken()` และ Eager Hydration ดึง Token ศูนย์กลางมาแคชบนไคลเอนต์ตั้งแต่เริ่มโหลดแอป เพื่อให้การซิงค์แบบสำรวจค้างส่ง (`syncPendingLocalSurveys`) ทำงานได้ราบรื่นทุกเครื่องโดยไม่ต้องใส่ Token ประจำเครื่อง
+  - แก้ไข `isStaticHost()` ให้ระบุพอร์ตแบ็กเอนด์ (:8765, :5173) ได้ถูกต้อง ไม่จัดเป็น static host เมื่อเชื่อมต่อผ่าน LAN
+- **ตัดการแจ้งเตือน False-Positive ที่ไม่จำเป็นออก**:
+  - ละเว้นข้อความแจ้งเตือน "ยังไม่ได้ตั้งค่า GitHub Token — ข้อมูลถูกบันทึกลงเครื่อง..." เมื่อเซิร์ฟเวอร์ส่วนกลางได้บันทึกข้อมูลเรียบร้อยแล้ว หรือเมื่อมี Token ศูนย์กลางอยู่แล้ว
+  - ปรับปรุง `deleteSurveys` และ `syncPendingLocalSurveys` ให้ทำงานเงียบ ไม่รบกวนผู้ใช้งานทั่วไปด้วยการแจ้งเตือนเตือนผิดพลาด
+
 ## [2.12.2] - 2026-10-21
 
 ### Fixed
