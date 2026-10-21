@@ -24,7 +24,11 @@ import {
   FileText,
   Image as ImageIcon,
   Check,
-  ArrowRight
+  ArrowRight,
+  Server,
+  Globe,
+  Zap,
+  Cpu
 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
@@ -38,7 +42,10 @@ import {
   fetchDashboardData,
   getUnsyncedSurveysCount,
   syncPendingLocalSurveys,
-  isStaticHost
+  isStaticHost,
+  getCloudWorkerUrl,
+  saveCloudWorkerUrl,
+  fetchRemoteWorkerUrl
 } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 
@@ -68,6 +75,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
   const [gitHubStatus, setGitHubStatus] = useState(null);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
 
+  // Cloudflare Worker API states (Option 2: Proxy ซิงค์รวมทุกคน)
+  const [workerUrlInput, setWorkerUrlInput] = useState('');
+  const [isTestingWorker, setIsTestingWorker] = useState(false);
+  const [isSavingWorker, setIsSavingWorker] = useState(false);
+  const [isRemovingWorker, setIsRemovingWorker] = useState(false);
+  const [workerTestResult, setWorkerTestResult] = useState(null);
+
   // OneDrive states
   const [oneDriveStatus, setOneDriveStatus] = useState(null);
   const [isSyncingOneDrive, setIsSyncingOneDrive] = useState(false);
@@ -83,6 +97,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
         setTokenInput(t || '');
         fetchGitHubStatus().then((st) => setGitHubStatus(st));
         setUnsyncedCount(getUnsyncedSurveysCount());
+      }
+      if (e?.detail?.type === 'CLOUD_WORKER_URL_CHANGED') {
+        const u = getCloudWorkerUrl();
+        setWorkerUrlInput(u || '');
+        fetchGitHubStatus().then((st) => setGitHubStatus(st));
       }
     };
     window.addEventListener('nbtc-settings-updated', handleSync);
@@ -108,6 +127,10 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       // Hydrate initial status from centralized storage + client cache
       const localToken = getStoredGitHubToken() || '';
       setTokenInput(localToken);
+      const currentWorkerUrl = getCloudWorkerUrl() || '';
+      setWorkerUrlInput(currentWorkerUrl);
+      setWorkerTestResult(null);
+
       setUnsyncedCount(getUnsyncedSurveysCount());
       fetchGitHubStatus().then((st) => setGitHubStatus(st));
       fetchOneDriveStatus().then((st) => setOneDriveStatus(st));
@@ -131,9 +154,13 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       setPasscodeError('');
       setShowPasscode(false);
       setGitHubTestResult(null);
+      setWorkerTestResult(null);
       setSyncSuccess(false);
       setIsSavingGitHub(false);
       setIsRemovingGitHub(false);
+      setIsTestingWorker(false);
+      setIsSavingWorker(false);
+      setIsRemovingWorker(false);
     }
   }, [isOpen, initialTab]);
 
@@ -145,6 +172,10 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
     setShowPasscode(false);
     setIsSavingGitHub(false);
     setIsRemovingGitHub(false);
+    setIsTestingWorker(false);
+    setIsSavingWorker(false);
+    setIsRemovingWorker(false);
+    setWorkerTestResult(null);
     onClose?.();
   };
 
@@ -318,6 +349,103 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       toast.error(`ไม่สามารถลบ Token ได้: ${err.message || 'เกิดข้อผิดพลาด'}`);
     } finally {
       setIsRemovingGitHub(false);
+    }
+  };
+
+  // --- Cloudflare Worker API Handlers (Option 2: Proxy ซิงค์รวมทุกคน) ---
+  const handleTestWorker = async () => {
+    const url = workerUrlInput.trim().replace(/\/+$/, '');
+    if (!url) {
+      setWorkerTestResult({ ok: false, message: 'กรุณากรอก Cloudflare Worker URL ก่อนกดทดสอบ' });
+      return;
+    }
+    setIsTestingWorker(true);
+    setWorkerTestResult(null);
+    try {
+      const res = await fetch(`${url}/api/github-status?_t=${Date.now()}`);
+      if (!res.ok) {
+        setWorkerTestResult({
+          ok: false,
+          message: `Worker ตอบกลับ HTTP ${res.status} — กรุณาตรวจสอบ URL ให้ถูกต้อง`,
+        });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.valid && data.configured) {
+        setWorkerTestResult({
+          ok: true,
+          message: `Worker ออนไลน์และยืนยันสิทธิ์ GitHub สำเร็จ (${data.user || 'Authorized'}) — ผู้ใช้งานทุกคนสามารถบันทึกและซิงค์ข้อมูลได้ทันที`,
+        });
+      } else if (!data.configured) {
+        setWorkerTestResult({
+          ok: false,
+          message: 'Worker ออนไลน์แล้ว แต่ยังไม่ได้ระบุ GITHUB_TOKEN ใน Cloudflare Secrets (ใช้คำสั่ง: wrangler secret put GITHUB_TOKEN)',
+        });
+      } else {
+        setWorkerTestResult({
+          ok: false,
+          message: data.message || 'Worker แจ้งว่า Token ใน Cloudflare Secrets ไม่ถูกต้องหรือหมดอายุ',
+        });
+      }
+    } catch (err) {
+      setWorkerTestResult({
+        ok: false,
+        message: `ไม่สามารถเชื่อมต่อ Cloudflare Worker ได้: ${err.message}`,
+      });
+    } finally {
+      setIsTestingWorker(false);
+    }
+  };
+
+  const handleSaveWorkerUrl = async () => {
+    const url = workerUrlInput.trim().replace(/\/+$/, '');
+    setIsSavingWorker(true);
+    setWorkerTestResult(null);
+    try {
+      await saveCloudWorkerUrl(url);
+      const newStatus = await fetchGitHubStatus();
+      setGitHubStatus(newStatus);
+      const updatedCount = getUnsyncedSurveysCount();
+      setUnsyncedCount(updatedCount);
+      if (onGitHubUpdated) onGitHubUpdated(newStatus);
+
+      if (url) {
+        toast.success('บันทึก Cloudflare Worker API เรียบร้อยแล้ว (เปิดใช้งานระบบซิงค์รวมสำหรับทุกคน)');
+        setWorkerTestResult({
+          ok: true,
+          message: 'บันทึกสำเร็จ! ข้อมูลจะถูกซิงค์ผ่าน Worker โดยที่ผู้ใช้ทุกคนไม่ต้องใส่ Token เอง',
+        });
+        if (updatedCount > 0) {
+          syncPendingLocalSurveys().catch(() => {});
+        }
+      } else {
+        toast.success('ลบ Worker URL ออกจากระบบแล้ว');
+      }
+    } catch (err) {
+      toast.error(`ไม่สามารถบันทึก Worker URL: ${err.message}`);
+      setWorkerTestResult({
+        ok: false,
+        message: `บันทึกล้มเหลว: ${err.message}`,
+      });
+    } finally {
+      setIsSavingWorker(false);
+    }
+  };
+
+  const handleRemoveWorkerUrl = async () => {
+    setIsRemovingWorker(true);
+    setWorkerTestResult(null);
+    try {
+      await saveCloudWorkerUrl('');
+      setWorkerUrlInput('');
+      const newStatus = await fetchGitHubStatus();
+      setGitHubStatus(newStatus);
+      if (onGitHubUpdated) onGitHubUpdated(newStatus);
+      toast.success('ล้างการตั้งค่า Cloudflare Worker เรียบร้อยแล้ว');
+    } catch (err) {
+      toast.error(`ไม่สามารถลบ Worker URL ได้: ${err.message}`);
+    } finally {
+      setIsRemovingWorker(false);
     }
   };
 
@@ -604,177 +732,345 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
                 <div className="mt-4 space-y-4 animate-fade-in">
                   {/* Current GitHub Status Banner */}
                   {(() => {
+                    const isWorker = gitHubStatus?.source === 'cloudflare_worker';
                     const hasToken = Boolean(tokenInput.trim() || getStoredGitHubToken());
-                    const isValid = Boolean(gitHubStatus?.valid && (hasToken || !isStaticHost()));
+                    const hasWorker = Boolean(workerUrlInput.trim() || getCloudWorkerUrl());
+                    const isValid = Boolean(gitHubStatus?.valid && (isWorker || hasToken || !isStaticHost()));
+
                     return (
                       <div
                         className={cn(
-                          'rounded-xl border p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2',
+                          'rounded-xl border p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 transition-all',
                           isValid
                             ? isDark
-                              ? 'border-emerald-500/30 bg-emerald-950/40 text-emerald-300'
-                              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-200'
+                              : 'border-emerald-300 bg-emerald-50 text-emerald-900'
                             : isDark
-                            ? 'border-amber-500/30 bg-amber-950/40 text-amber-300'
-                            : 'border-amber-200 bg-amber-50 text-amber-800'
+                            ? 'border-amber-500/30 bg-amber-950/40 text-amber-200'
+                            : 'border-amber-200 bg-amber-50 text-amber-900'
                         )}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           {isValid ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                              <CheckCircle2 className="h-4 w-4" />
+                            </div>
                           ) : (
-                            <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 shrink-0">
+                              <AlertCircle className="h-4 w-4" />
+                            </div>
                           )}
                           <div>
-                            <span className="font-semibold">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm">
+                                {isValid
+                                  ? isWorker
+                                    ? `เชื่อมต่อผ่าน Cloudflare Worker API (${gitHubStatus?.user || 'แชร์สิทธิ์ทุกคน'})`
+                                    : `เชื่อมต่อ GitHub สำเร็จ (${gitHubStatus?.user || 'Authorized PAT'})`
+                                  : 'ยังไม่ได้เชื่อมต่อระบบซิงค์ (โหมดอ่านอย่างเดียว)'}
+                              </span>
+                              {isValid && isWorker && (
+                                <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-300">
+                                  ผู้ใช้ทุกคนซิงค์ได้อัตโนมัติ
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] opacity-85 mt-0.5">
                               {isValid
-                                ? `เชื่อมต่อ GitHub สำเร็จ (${gitHubStatus?.user || 'Authorized PAT'})`
-                                : 'ยังไม่ได้ใส่ Token บนเครื่องนี้ (โหมดอ่านอย่างเดียว)'}
-                            </span>
+                                ? isWorker
+                                  ? 'ระบบเปิดใช้งาน Edge Proxy ซิงค์ข้อมูลเข้า GitHub อัตโนมัติ — ทุกเครื่องสามารถบันทึกข้อมูลได้ทันที'
+                                  : 'ใช้งานผ่าน GitHub Token ส่วนบุคคลบนเครื่องนี้'
+                                : 'ตั้งค่า Cloudflare Worker ด้านล่างเพื่อเปิดสิทธิ์ซิงค์อัตโนมัติให้ผู้ใช้ทุกคน หรือใส่ Token เฉพาะเครื่อง'}
+                            </p>
                             {unsyncedCount > 0 && (
-                              <p className="text-[11px] opacity-90 mt-0.5">
+                              <p className="text-[11px] font-semibold text-amber-400 mt-1">
                                 {isValid
                                   ? `มีแบบสำรวจค้างส่งในเครื่องนี้ ${unsyncedCount} รายการ — ระบบกำลังซิงค์ขึ้น GitHub ส่วนกลางอัตโนมัติ`
-                                  : `มีแบบสำรวจค้างส่ง ${unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อใส่ Token และกดบันทึก`}
+                                  : `มีแบบสำรวจค้างส่ง ${unsyncedCount} รายการ — จะซิงค์ขึ้น GitHub อัตโนมัติเมื่อเชื่อมต่อระบบสำเร็จ`}
                               </p>
                             )}
                           </div>
                         </div>
-                        <span className="font-mono text-[11px] opacity-75 shrink-0">
+                        <span className="font-mono text-[11px] opacity-75 shrink-0 px-2 py-1 rounded bg-black/20">
                           Repo: Thaidimaru/Pre_PM2
                         </span>
                       </div>
                     );
                   })()}
 
-                  {/* Token Input */}
-                  <div>
-                    <label className="block text-xs font-semibold mb-1.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <KeyRound className="h-3.5 w-3.5 text-sky-400" />
-                        GitHub Personal Access Token (PAT)
-                      </span>
-                      <a
-                        href="https://github.com/settings/personal-access-tokens/new"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
-                      >
-                        สร้าง Fine-grained Token ที่นี่
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </label>
-
-                    <div className="relative">
-                      <input
-                        type={showTokenText ? 'text' : 'password'}
-                        value={tokenInput}
-                        onChange={(e) => {
-                          setTokenInput(e.target.value);
-                          setGitHubTestResult(null);
-                        }}
-                        placeholder="github_pat_... หรือ ghp_..."
-                        className={cn(
-                          'w-full rounded-xl border py-2.5 pl-3.5 pr-10 text-sm font-mono transition-colors focus:outline-none focus:ring-2',
-                          isDark
-                            ? 'border-slate-700 bg-slate-900/80 text-white placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/30'
-                            : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:ring-sky-500/20'
-                        )}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowTokenText((prev) => !prev)}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200 cursor-pointer"
-                        title={showTokenText ? 'ซ่อน Token' : 'แสดง Token'}
-                      >
-                        {showTokenText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                  {/* =========================================================================
+                      SECTION 1: CLOUDFLARE WORKER EDGE API (ทางเลือกที่ 2: แนะนำสูงสุด)
+                     ========================================================================= */}
+                  <div
+                    className={cn(
+                      'rounded-xl border p-4 space-y-3 transition-all',
+                      isDark
+                        ? 'border-cyan-500/30 bg-gradient-to-br from-cyan-950/20 via-slate-900/60 to-blue-950/30'
+                        : 'border-sky-200 bg-sky-50/60'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'flex h-7 w-7 items-center justify-center rounded-lg border shadow-xs',
+                            isDark ? 'border-cyan-500/40 bg-cyan-950/60 text-cyan-400' : 'border-sky-300 bg-sky-100 text-sky-700'
+                          )}
+                        >
+                          <Globe className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                            <span>Cloudflare Worker Edge API</span>
+                            <span className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-cyan-400">
+                              ทางเลือกที่ 2 (แนะนำ: ทุกคนซิงค์ได้อัตโนมัติ)
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            เก็บ GITHUB_TOKEN ไว้ใน Cloudflare Secrets — ผู้ใช้ทุกคนในระบบจะสามารถบันทึกข้อมูลเข้า GitHub ได้ทันทีโดยไม่ต้องใส่ Token บนเครื่องตัวเอง
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed">
-                      ใช้ <strong>Fine-grained PAT</strong> เท่านั้น: กำหนดสิทธิ์เข้าถึง Repository{' '}
-                      <code>Thaidimaru/Pre_PM2</code> และเปิด Permissions →{' '}
-                      <code>Contents: Read and write</code> สำหรับบันทึกข้อมูลผลสำรวจเข้าโฟลเดอร์ <code>data/surveys</code>
-                    </p>
-                  </div>
-
-                  {/* Test result display */}
-                  {gitHubTestResult && (
-                    <div
-                      className={cn(
-                        'rounded-xl border p-3 text-xs flex items-center gap-2 animate-fade-in',
-                        gitHubTestResult.ok
-                          ? isDark
-                            ? 'border-emerald-500/40 bg-emerald-950/60 text-emerald-200'
-                            : 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                          : isDark
-                          ? 'border-rose-500/40 bg-rose-950/60 text-rose-200'
-                          : 'border-rose-300 bg-rose-50 text-rose-800'
-                      )}
-                    >
-                      {gitHubTestResult.ok ? (
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-                      )}
-                      <span>{gitHubTestResult.message}</span>
-                    </div>
-                  )}
-
-                  {/* Actions Bar */}
-                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/10">
                     <div>
-                      {Boolean(tokenInput.trim() || getStoredGitHubToken()) && (
+                      <label className="block text-xs font-semibold mb-1 text-slate-300">
+                        Cloudflare Worker API URL
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="url"
+                          value={workerUrlInput}
+                          onChange={(e) => {
+                            setWorkerUrlInput(e.target.value);
+                            setWorkerTestResult(null);
+                          }}
+                          placeholder="https://pre-pm-api.your-subdomain.workers.dev"
+                          className={cn(
+                            'w-full rounded-xl border py-2.5 pl-3.5 pr-10 text-xs sm:text-sm font-mono transition-colors focus:outline-none focus:ring-2',
+                            isDark
+                              ? 'border-slate-700 bg-slate-900/90 text-white placeholder:text-slate-500 focus:border-cyan-500 focus:ring-cyan-500/30'
+                              : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:ring-sky-500/20'
+                          )}
+                        />
+                      </div>
+                      <p className="mt-1 text-[10.5px] text-slate-400">
+                        deploy ได้ง่ายด้วยคำสั่ง <code>npx wrangler deploy</code> ในโฟลเดอร์โปรเจกต์ แล้วตั้งค่า secret ด้วย <code>npx wrangler secret put GITHUB_TOKEN</code>
+                      </p>
+                    </div>
+
+                    {/* Worker Test Result Display */}
+                    {workerTestResult && (
+                      <div
+                        className={cn(
+                          'rounded-xl border p-3 text-xs flex items-center gap-2 animate-fade-in',
+                          workerTestResult.ok
+                            ? isDark
+                              ? 'border-emerald-500/40 bg-emerald-950/60 text-emerald-200'
+                              : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            : isDark
+                            ? 'border-rose-500/40 bg-rose-950/60 text-rose-200'
+                            : 'border-rose-300 bg-rose-50 text-rose-800'
+                        )}
+                      >
+                        {workerTestResult.ok ? (
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                        )}
+                        <span>{workerTestResult.message}</span>
+                      </div>
+                    )}
+
+                    {/* Worker Action Buttons */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                      <div>
+                        {Boolean(workerUrlInput.trim() || getCloudWorkerUrl()) && (
+                          <button
+                            type="button"
+                            onClick={handleRemoveWorkerUrl}
+                            disabled={isRemovingWorker || isSavingWorker || isTestingWorker}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {isRemovingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            <span>ล้าง Worker URL</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={handleRemoveGitHubToken}
-                          disabled={isRemovingGitHub || isSavingGitHub}
-                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {isRemovingGitHub ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
+                          onClick={handleTestWorker}
+                          disabled={isTestingWorker || isSavingWorker || !workerUrlInput.trim()}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer',
+                            isDark
+                              ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                              : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
                           )}
-                          <span>{isRemovingGitHub ? 'กำลังลบ...' : 'ลบ Token ออกจากระบบ'}</span>
+                        >
+                          {isTestingWorker ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          <span>ทดสอบ Worker</span>
                         </button>
-                      )}
+
+                        <button
+                          type="button"
+                          onClick={handleSaveWorkerUrl}
+                          disabled={isSavingWorker || isTestingWorker || !workerUrlInput.trim()}
+                          className="flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-gradient-to-r from-cyan-500 to-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-md hover:from-cyan-400 hover:to-blue-500 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingWorker ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              <span>กำลังบันทึก...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-3.5 w-3.5" />
+                              <span>บันทึก Worker URL</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* =========================================================================
+                      SECTION 2: MANUAL PERSONAL ACCESS TOKEN (PAT เฉพาะเครื่อง)
+                     ========================================================================= */}
+                  <div
+                    className={cn(
+                      'rounded-xl border p-4 space-y-3 transition-all',
+                      isDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50/50'
+                    )}
+                  >
+                    <div>
+                      <label className="block text-xs font-semibold mb-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <KeyRound className="h-3.5 w-3.5 text-slate-400" />
+                          <span>ตัวเลือกสำรอง: GitHub Personal Access Token (PAT เฉพาะเครื่องนี้)</span>
+                        </span>
+                        <a
+                          href="https://github.com/settings/personal-access-tokens/new"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                        >
+                          สร้าง Fine-grained Token ที่นี่
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </label>
+
+                      <div className="relative">
+                        <input
+                          type={showTokenText ? 'text' : 'password'}
+                          value={tokenInput}
+                          onChange={(e) => {
+                            setTokenInput(e.target.value);
+                            setGitHubTestResult(null);
+                          }}
+                          placeholder="github_pat_... หรือ ghp_..."
+                          className={cn(
+                            'w-full rounded-xl border py-2.5 pl-3.5 pr-10 text-xs sm:text-sm font-mono transition-colors focus:outline-none focus:ring-2',
+                            isDark
+                              ? 'border-slate-700 bg-slate-900/80 text-white placeholder:text-slate-500 focus:border-sky-500 focus:ring-sky-500/30'
+                              : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:ring-sky-500/20'
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowTokenText((prev) => !prev)}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200 cursor-pointer"
+                          title={showTokenText ? 'ซ่อน Token' : 'แสดง Token'}
+                        >
+                          {showTokenText ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+
+                      <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
+                        ใช้เฉพาะเมื่อต้องการให้เครื่องนี้ยิงตรงเข้า GitHub โดยไม่ผ่าน Worker: กำหนดสิทธิ์ Repository <code>Thaidimaru/Pre_PM2</code> และเปิดสิทธิ์ <code>Contents: Read and write</code>
+                      </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleTestGitHubToken}
-                        disabled={isTestingGitHub || isSavingGitHub || !tokenInput.trim()}
+                    {/* Test result display */}
+                    {gitHubTestResult && (
+                      <div
                         className={cn(
-                          'flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer',
-                          isDark
-                            ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
-                            : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          'rounded-xl border p-3 text-xs flex items-center gap-2 animate-fade-in',
+                          gitHubTestResult.ok
+                            ? isDark
+                              ? 'border-emerald-500/40 bg-emerald-950/60 text-emerald-200'
+                              : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            : isDark
+                            ? 'border-rose-500/40 bg-rose-950/60 text-rose-200'
+                            : 'border-rose-300 bg-rose-50 text-rose-800'
                         )}
                       >
-                        {isTestingGitHub ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                        <span>ทดสอบการเชื่อมต่อ</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleSaveGitHubToken}
-                        disabled={isSavingGitHub || isTestingGitHub || !tokenInput.trim()}
-                        className="flex items-center gap-1.5 rounded-xl border border-sky-400/40 bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:from-sky-400 hover:to-blue-500 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {isSavingGitHub ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>กำลังบันทึก...</span>
-                          </>
+                        {gitHubTestResult.ok ? (
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
                         ) : (
-                          <>
-                            <Check className="h-4 w-4" />
-                            <span>บันทึก Token</span>
-                          </>
+                          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
                         )}
-                      </button>
+                        <span>{gitHubTestResult.message}</span>
+                      </div>
+                    )}
+
+                    {/* Actions Bar for PAT */}
+                    <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/10">
+                      <div>
+                        {Boolean(tokenInput.trim() || getStoredGitHubToken()) && (
+                          <button
+                            type="button"
+                            onClick={handleRemoveGitHubToken}
+                            disabled={isRemovingGitHub || isSavingGitHub}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {isRemovingGitHub ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            <span>ลบ Token</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleTestGitHubToken}
+                          disabled={isTestingGitHub || isSavingGitHub || !tokenInput.trim()}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer',
+                            isDark
+                              ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                              : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          )}
+                        >
+                          {isTestingGitHub ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                          <span>ทดสอบ PAT</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSaveGitHubToken}
+                          disabled={isSavingGitHub || isTestingGitHub || !tokenInput.trim()}
+                          className="flex items-center gap-1.5 rounded-xl border border-sky-400/40 bg-gradient-to-r from-sky-500 to-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-md hover:from-sky-400 hover:to-blue-500 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isSavingGitHub ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>กำลังบันทึก...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>บันทึก PAT</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

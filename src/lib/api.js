@@ -54,6 +54,54 @@ export function getStoredGitHubToken() {
   }
 }
 
+export const CLOUD_WORKER_URL_KEY = 'nbtc_cloud_worker_url';
+let remoteWorkerUrl = '';
+
+export async function fetchRemoteWorkerUrl() {
+  if (remoteWorkerUrl) return remoteWorkerUrl;
+  try {
+    const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
+    const res = await fetch(`${basePath}/api/cloud-config.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.workerUrl) {
+        remoteWorkerUrl = data.workerUrl.trim().replace(/\/+$/, '');
+        return remoteWorkerUrl;
+      }
+    }
+  } catch (e) {}
+  return '';
+}
+
+export function getCloudWorkerUrl() {
+  try {
+    if (typeof window === 'undefined') return '';
+    const stored = localStorage.getItem(CLOUD_WORKER_URL_KEY);
+    if (stored && stored.trim()) return stored.trim().replace(/\/+$/, '');
+    if (remoteWorkerUrl) return remoteWorkerUrl;
+    const envUrl = (import.meta.env?.VITE_WORKER_API_URL || '').trim();
+    if (envUrl) return envUrl.replace(/\/+$/, '');
+    return '';
+  } catch (e) {
+    return '';
+  }
+}
+
+export async function saveCloudWorkerUrl(url) {
+  const clean = (url || '').trim().replace(/\/+$/, '');
+  try {
+    if (typeof window !== 'undefined') {
+      if (clean) {
+        localStorage.setItem(CLOUD_WORKER_URL_KEY, clean);
+      } else {
+        localStorage.removeItem(CLOUD_WORKER_URL_KEY);
+      }
+      notifySurveysUpdated({ type: 'CLOUD_WORKER_URL_CHANGED', url: clean });
+    }
+  } catch (e) {}
+  return clean;
+}
+
 export async function saveGitHubToken(token) {
   const clean = (token || '').trim();
   let serverResult = null;
@@ -153,9 +201,10 @@ export async function getOrFetchGitHubToken() {
   return serverToken || '';
 }
 
-// Eagerly hydrate centralized token on client startup
+// Eagerly hydrate centralized token & worker URL on client startup
 if (typeof window !== 'undefined') {
   fetchServerGitHubToken().catch(() => {});
+  fetchRemoteWorkerUrl().catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -322,8 +371,8 @@ export function notifyGitHubTokenRequired(reason = 'bad_token') {
  */
 const lastTokenPromptAt = new Map();
 export function promptGitHubToken(reason = 'no_token', cooldownMs = 15000) {
-  // ละเว้นการแจ้งเตือน no_token หากเครื่องมี token อยู่แล้ว
-  if (reason === 'no_token' && getStoredGitHubToken()) return false;
+  // ละเว้นการแจ้งเตือน no_token หากเครื่องมี token หรือเชื่อมต่อ Cloudflare Worker API อยู่แล้ว
+  if (reason === 'no_token' && (getStoredGitHubToken() || getCloudWorkerUrl())) return false;
   const now = Date.now();
   if (now - (lastTokenPromptAt.get(reason) || 0) < cooldownMs) return false;
   lastTokenPromptAt.set(reason, now);
@@ -618,9 +667,12 @@ export async function syncPendingLocalSurveys() {
   const pending = localSurveys.filter(
     (s) => s && s.recordId && !s.githubSynced && isCommittableRecordId(s.recordId)
   );
+  if (pending.length === 0) return;
+
+  const workerUrl = getCloudWorkerUrl();
   const token = await getOrFetchGitHubToken();
-  if (!token) {
-    // หากยังไม่มี Token ในระบบศูนย์กลาง จะไม่แสดง alert เตือนรบกวนผู้ใช้งานทั่วไป
+  if (!workerUrl && !token) {
+    // หากยังไม่มี Worker URL หรือ Token ในระบบศูนย์กลาง จะไม่แสดง alert เตือนรบกวนผู้ใช้งานทั่วไป
     return;
   }
 
@@ -636,8 +688,24 @@ export async function syncPendingLocalSurveys() {
       // ข้าม record ที่กำลังถูกเขียนอยู่ หรือเพิ่งเริ่มเขียน (กัน commit ซ้ำจากหลาย code path)
       if (isGitHubWritePending(survey.recordId) || isSurveySyncing(survey)) continue;
       try {
-        const ghRes = await commitSurveyToGitHubClient(survey, token);
-        if (ghRes.success) {
+        let synced = false;
+        if (workerUrl) {
+          const res = await callWorkerMutatingApi(workerUrl, '/api/save', {
+            recordId: survey.recordId,
+            fields: survey.fields || survey,
+            photos: survey.photos || [],
+          });
+          if (res.ok && res.data?.saved) {
+            synced = true;
+          }
+        } else if (token) {
+          const ghRes = await commitSurveyToGitHubClient(survey, token);
+          if (ghRes.success) {
+            synced = true;
+          }
+        }
+
+        if (synced) {
           delete survey.githubSyncing;
           delete survey.githubSyncingAt;
           survey.githubSynced = true;
@@ -1008,6 +1076,44 @@ async function callLocalMutatingApi(endpoint, fallbackEndpoint, payload, customH
   return { ok: false, status: 0, data: null, error: 'network_error' };
 }
 
+/**
+ * Helper สำหรับเรียก Cloudflare Worker Edge API (/api/save, /api/update, /api/delete)
+ * ในสถาปัตยกรรม Option 2: ให้ Worker ทำหน้าที่เป็น Secure Proxy ซิงค์เข้า GitHub Repository โดยตรง
+ * ทำให้ผู้ใช้งานทุกเครื่องสามารถบันทึก/แก้ไข/ลบ ข้อมูลได้ทันทีโดยไม่ต้องใส่ GitHub Token บนเครื่องของตัวเอง
+ */
+export async function callWorkerMutatingApi(workerUrl, endpoint, payload) {
+  const base = (workerUrl || '').trim().replace(/\/+$/, '');
+  if (!base) {
+    return { ok: false, error: 'no_worker_url', status: 0, data: null };
+  }
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+  const targetUrl = `${base}${cleanEndpoint}`;
+
+  try {
+    const res = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      return { ok: true, status: res.status, data, error: null };
+    }
+    return {
+      ok: false,
+      status: res.status,
+      data,
+      error: data.message || data.error || `Worker HTTP ${res.status}`,
+    };
+  } catch (err) {
+    console.error(`Call to Cloudflare Worker API failed (${endpoint}):`, err);
+    return { ok: false, status: 0, data: null, error: err.message };
+  }
+}
+
 export async function submitSurvey(arg1, arg2, arg3) {
   // Support both submitSurvey(fields, photos) and submitSurvey(token, fields, photos)
   let token = '';
@@ -1026,8 +1132,18 @@ export async function submitSurvey(arg1, arg2, arg3) {
   let serverResult = null;
   let serverError = null;
 
-  // static host ไม่มี backend: POST /api/save จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
-  if (!isStaticHost()) {
+  const workerUrl = getCloudWorkerUrl();
+
+  // Option 2 (Cloudflare Worker Edge API):
+  // หากมีการตั้งค่า Worker API URL ให้บันทึกผ่าน Worker ซึ่งจะใช้ GITHUB_TOKEN กลางคอมมิตเข้า GitHub ทันที
+  if (workerUrl) {
+    const res = await callWorkerMutatingApi(workerUrl, '/api/save', { fields, photos });
+    if (res.ok && res.data) {
+      serverResult = res.data;
+    } else {
+      serverError = res.error;
+    }
+  } else if (!isStaticHost()) {
     const extraHeaders = token ? { Authorization: `Bearer ${token}` } : {};
     const res = await callLocalMutatingApi('/api/save', '/save', { fields, photos }, extraHeaders);
     if (res.ok) {
@@ -1146,8 +1262,17 @@ export async function updateSurvey(arg1, arg2, arg3) {
   let serverResult = null;
   let serverError = null;
 
-  // static host ไม่มี backend: POST /api/update จะได้ 401 ทุกครั้ง -> ข้ามไปใช้ GitHub โดยตรง
-  if (!isStaticHost()) {
+  const workerUrl = getCloudWorkerUrl();
+
+  // Option 2 (Cloudflare Worker Edge API):
+  if (workerUrl) {
+    const res = await callWorkerMutatingApi(workerUrl, '/api/update', { recordId, fields, photos, isUpdate: true });
+    if (res.ok && res.data) {
+      serverResult = res.data;
+    } else {
+      serverError = res.error;
+    }
+  } else if (!isStaticHost()) {
     const res = await callLocalMutatingApi('/api/update', '/api/save', { recordId, fields, photos, isUpdate: true });
     if (res.ok) {
       serverResult = res.data;
@@ -1262,8 +1387,17 @@ export async function deleteSurveys(recordIds) {
 
   let serverResult = null;
 
-  // 4. Server delete when backend is available
-  if (!isStaticHost()) {
+  const workerUrl = getCloudWorkerUrl();
+
+  // 4. Delete via Cloudflare Worker Edge API or Local Server
+  if (workerUrl) {
+    const res = await callWorkerMutatingApi(workerUrl, '/api/delete', { recordIds: ids });
+    if (res.ok && res.data) {
+      serverResult = res.data;
+    } else {
+      console.warn('Worker delete failed, falling back to client:', res.error);
+    }
+  } else if (!isStaticHost()) {
     const res = await callLocalMutatingApi('/api/delete', '/delete', { recordIds: ids });
     if (res.ok) {
       serverResult = res.data;
@@ -1856,7 +1990,27 @@ async function performSurveyDelete(recordId, token) {
 }
 
 export async function fetchGitHubStatus() {
-  // 1. Check if token is configured in local browser storage (for Cloudflare R2 / client usage)
+  const workerUrl = getCloudWorkerUrl();
+
+  // 1. ตรวจสอบสถานะผ่าน Cloudflare Worker API (Option 2: Proxy ซิงค์รวมทุกคน)
+  if (workerUrl) {
+    try {
+      const res = await fetch(`${workerUrl}/api/github-status?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return {
+          ...data,
+          source: 'cloudflare_worker',
+          workerUrl,
+          message: data.message || `เชื่อมต่อ GitHub สำเร็จผ่าน Cloudflare Worker (${data.user || 'Authorized'})`,
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to query GitHub status from Cloudflare Worker:', e);
+    }
+  }
+
+  // 2. Check if token is configured in local browser storage (for Cloudflare R2 / client usage)
   const localToken = getStoredGitHubToken();
   if (localToken) {
     try {
@@ -1871,17 +2025,19 @@ export async function fetchGitHubStatus() {
         return {
           configured: true,
           valid: true,
+          canWrite: true,
           source: 'local_storage',
           user: u.login,
           repo: 'Thaidimaru/Pre_PM2',
           branch: 'main',
-          message: `เชื่อมต่อ GitHub สำเร็จ (${u.login})`,
+          message: `เชื่อมต่อ GitHub สำเร็จ (${u.login}) ผ่าน Token บนเครื่องนี้`,
         };
       }
       if (res.status === 401) {
         return {
           configured: true,
           valid: false,
+          canWrite: false,
           source: 'local_storage',
           reason: 'bad_token',
           message: 'GitHub Token ในเบราว์เซอร์ไม่ถูกต้องหรือหมดอายุ',
@@ -1894,13 +2050,13 @@ export async function fetchGitHubStatus() {
     }
   }
 
-  // 2. Fallback to server / GitHub Pages / R2 API snapshot endpoint
+  // 3. Fallback to server / GitHub Pages / R2 API snapshot endpoint
   try {
     const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
     let res = null;
     if (isStaticHost()) {
-      // บน static host หากเครื่องนี้ยังไม่มี token จะไม่สามารถเขียนข้อมูลขึ้น GitHub ได้
-      if (!localToken) {
+      // บน static host หากเครื่องนี้ยังไม่มี token หรือ worker จะไม่สามารถเขียนข้อมูลขึ้น GitHub ได้
+      if (!localToken && !workerUrl) {
         return {
           configured: false,
           valid: false,
@@ -1931,11 +2087,11 @@ export async function fetchGitHubStatus() {
     console.warn('Failed to check GitHub status:', err);
   }
   return {
-    configured: Boolean(localToken),
+    configured: Boolean(localToken || workerUrl),
     valid: Boolean(localToken),
     repo: 'Thaidimaru/Pre_PM2',
     branch: 'main',
-    message: localToken ? 'เชื่อมต่อ GitHub สำเร็จ' : 'ยังไม่ได้ใส่ GitHub Token บนเครื่องนี้ (โหมดอ่านอย่างเดียว)',
+    message: localToken ? 'เชื่อมต่อ GitHub สำเร็จ' : 'ยังไม่ได้เชื่อมต่อระบบซิงค์ (โหมดอ่านอย่างเดียว)',
   };
 }
 
