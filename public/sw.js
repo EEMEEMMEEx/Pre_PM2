@@ -13,13 +13,19 @@ const SCRIPT_URL = new URL(self.location.href);
 const VERSION = SCRIPT_URL.searchParams.get('v') || 'dev';
 const CACHE_NAME = `pre-pm-nbtc-${VERSION}`;
 
-// Task C4: ตัด '/' ออกเพื่อแก้ปัญหา 404 pre-cache error บน r2.dev static storage (ใช้ '/index.html' แทน)
+// GitHub Pages เสิร์ฟใต้ subpath (scope = '/<repo>/') ส่วน R2/local = '/'
+// อนุมาน base จาก scope ของ SW เอง เพื่อให้ pre-cache ถูก path ทั้งสองแบบ
+const BASE = new URL(self.registration.scope).pathname;
+
+// Task C4: ตัด '/' ออกเพื่อแก้ปัญหา 404 pre-cache error บน r2.dev static storage (ใช้ index.html แทน)
 const CORE_ASSETS = [
-  '/index.html',
-  '/manifest.json',
-  '/favicon.png',
-  '/nbtc-logo-dashboard.png',
+  BASE + 'index.html',
+  BASE + 'manifest.json',
+  BASE + 'favicon.png',
+  BASE + 'nbtc-logo-dashboard.png',
 ];
+
+const SHELL_URL = BASE + 'index.html';
 
 // Endpoints ที่ยอมให้ใช้ cache สำรองตอน offline ได้ (network-first)
 const OFFLINE_CACHEABLE_PATHS = new Set(['/api/dashboard', '/api/database', '/database', '/dashboard']);
@@ -96,12 +102,12 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+            caches.open(CACHE_NAME).then((cache) => cache.put(SHELL_URL, clone));
           }
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match('/index.html');
+          const cached = await caches.match(SHELL_URL);
           return cached || caches.match(req);
         })
     );

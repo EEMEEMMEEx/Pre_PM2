@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.5] - 2026-10-21
+
+### Added
+- รองรับการ deploy ขึ้น **GitHub Pages** เป็นช่องทางสำรองนอกจาก Cloudflare R2 โดยไม่กระทบ deploy เดิม:
+  - `.github/workflows/deploy-pages.yml` — build + deploy ผ่าน GitHub Pages Actions (permissions: pages/id-token, `cancel-in-progress: false` เพื่อไม่ให้เหลือ asset ค้าง เหตุผลเดียวกับ B9)
+  - quality gate ก่อน deploy: `python -m py_compile` + `npm run test:py` (ปิดช่อง I-04 ที่ CI เดิมไม่มีเทสต์)
+  - สร้าง `404.html` (SPA fallback เนื่องจาก GitHub Pages ไม่มี rewrite rule) และ `.nojekyll`
+- `vite.config.mjs`: เพิ่ม `base` ที่ override ได้ผ่าน env `PAGES_BASE_PATH` (default `'/'` คงเดิมสำหรับ R2)
+
+### Changed
+- ทำ asset/route path ให้รองรับการเสิร์ฟใต้ subpath โดยไม่กระทบ root domain:
+  - `index.html`: manifest / favicon / apple-touch-icon / font preload เปลี่ยนเป็น relative (`./`)
+  - `src/App.jsx`: เพิ่ม `stripBase()` + `routeUrl()` ให้ route matching และ `pushState` ทำงานทั้ง base `'/'` และ `'/'`
+  - `public/sw.js`: อนุมาน `BASE` จาก `self.registration.scope` แทน hardcode `'/index.html'`
+  - `public/manifest.json`: `start_url`, `scope`, `icons[].src` เปลี่ยนเป็น relative
+
+> หมายเหตุ: การ deploy ขึ้น GitHub Pages เป็นการเพิ่มช่องทาง static hosting เท่านั้น ไม่ได้ย้าย backend
+> (`database.py`) และไม่เปลี่ยนพฤติกรรมบน r2.dev — `data/surveys/*.json` และ PII ยังอยู่ใน repo สาธารณะเหมือนเดิม
+
 ## [2.11.4] - 2026-10-21
 
 ### Security
