@@ -4,12 +4,12 @@ import { Lock, Radio, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, Sun, Moon }
 import { GlassCard } from '@/components/ui/glass-card';
 import { ShinyText } from '@/components/ui/shiny-text';
 import { APP_VERSION } from '@/version';
-import { loginUser } from '@/lib/api';
+import { loginUser, saveLocalApiToken } from '@/lib/api';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 import nbtcLogo from '@/assets/images/nbtc-logo-dashboard.png';
 
-export function LoginView({ onLoginSuccess }) {
+export function LoginView({ onLoginSuccess, onCancel }) {
   const { isDark, toggleTheme } = useTheme();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,8 +26,8 @@ export function LoginView({ onLoginSuccess }) {
       if (!data?.ok || !data?.token) {
         throw new Error(data?.error === 'invalid_password' ? 'รหัสผ่านไม่ถูกต้อง' : (data?.error || 'ไม่สามารถเข้าสู่ระบบได้'));
       }
-      sessionStorage.setItem('surveyToken', data.token);
-      onLoginSuccess(data.token);
+      saveLocalApiToken(data.token);
+      if (onLoginSuccess) onLoginSuccess(data.token);
     } catch (err) {
       setErrorMsg(err.message || 'ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบรหัสผ่าน');
     } finally {
@@ -166,25 +166,42 @@ export function LoginView({ onLoginSuccess }) {
               </motion.div>
             )}
 
-            <motion.button
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              type="submit"
-              disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-blue-500/25 hover:shadow-cyan-500/35 transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>กำลังตรวจสอบ...</span>
-                </>
-              ) : (
-                <>
-                  <span>เข้าสู่ระบบ</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
+            <div className="flex flex-col gap-2">
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                type="submit"
+                disabled={isSubmitting}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-blue-500/25 hover:shadow-cyan-500/35 transition-all disabled:opacity-60 cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>กำลังตรวจสอบ...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>เข้าสู่ระบบ</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </motion.button>
+
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className={cn(
+                    'w-full py-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
+                    isDark
+                      ? 'border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/50'
+                      : 'border-slate-300 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  )}
+                >
+                  ยกเลิก / กลับ
+                </button>
               )}
-            </motion.button>
+            </div>
           </form>
 
           {/* Footer note */}

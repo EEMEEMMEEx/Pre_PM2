@@ -121,31 +121,44 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
     fields.record_id ||
     `PM-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 15)}`;
 
-  // Contact Info
-  const contactName =
+  // Helper to sanitize PII (returns fallback if scrubbed or empty)
+  const sanitizePii = (val, fallback = '-') => {
+    if (!val) return fallback;
+    const str = String(val).trim();
+    if (!str || str === '-' || str === '***' || /^[*]+$/.test(str)) return fallback;
+    return str;
+  };
+
+  // Contact Info (defensive against scrubbed PII)
+  const contactName = sanitizePii(
     fields.contactName ||
     fields.contact_name ||
     stationLookup?.contact_name ||
     fields.informantName ||
-    fields.informant_name ||
-    '-';
-  const contactPosition =
+    fields.informant_name,
+    '-'
+  );
+  const contactPosition = sanitizePii(
     fields.contactPosition ||
     fields.contact_position ||
-    stationLookup?.contact_position ||
-    'เจ้าของพื้นที่ / ผู้ดูแลสถานี';
-  const contactVillage =
+    stationLookup?.contact_position,
+    'เจ้าของพื้นที่ / ผู้ดูแลสถานี'
+  );
+  const contactVillage = sanitizePii(
     fields.contactVillage ||
     fields.contact_village ||
-    (subdistrict ? `ต.${subdistrict.replace(/^ต\./, '')}` : '-');
-  const contactPhone =
+    (subdistrict ? `ต.${subdistrict.replace(/^ต\./, '')}` : ''),
+    '-'
+  );
+  const contactPhone = sanitizePii(
     fields.contactPhone ||
     fields.contact_phone ||
     fields.phone ||
     fields.tel ||
     stationLookup?.contact_phone ||
-    stationLookup?.contactPhone ||
-    '-';
+    stationLookup?.contactPhone,
+    '-'
+  );
 
   // Permission
   const permit = fields.permit || surveyData.permit || 'อนุญาต';
@@ -195,9 +208,11 @@ function StationA4ReportPages({ surveyData = {}, stationIndex = 0, totalStations
     fields.summary ||
     fields.userSummary ||
     'เจ้าของพื้นที่ให้ความร่วมมือในการเข้าตรวจเยี่ยมและตรวจสอบสภาพระบบอุปกรณ์เป็นอย่างดี';
-  const informantName =
-    fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : '');
-  const operatorName = fields.operatorName || fields.operator_name || 'วิศวกรผู้ควบคุมงาน';
+  const informantName = sanitizePii(
+    fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : ''),
+    '-'
+  );
+  const operatorName = sanitizePii(fields.operatorName || fields.operator_name, 'วิศวกรผู้ควบคุมงาน');
 
   // Photo attachments with full base64 data resolution
   const rawPhotos =

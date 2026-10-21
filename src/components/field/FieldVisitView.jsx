@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText } from '@/lib/api';
+import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText, isLocalApiRateLimited } from '@/lib/api';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { Printer, FileText, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -58,9 +58,29 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [statusMessage, setStatusMessage] = useState({ text: '', type: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(() => isLocalApiRateLimited());
   const [activePreviewPhoto, setActivePreviewPhoto] = useState(null);
   const fileInputRef = useRef(null);
   const lastAutoFilledStationRef = useRef('');
+
+  // Sanitize scrubbed PII helper
+  const sanitizePii = (v) => (!v || v === '***' || /^[*]+$/.test(String(v).trim()) ? '' : String(v).trim());
+
+  // Rate limit listener for 429 throttle
+  useEffect(() => {
+    const handleRateLimit = () => {
+      setIsRateLimited(true);
+      setStatusMessage({
+        text: 'เซิร์ฟเวอร์จำกัดอัตราคำขอ (429 Too Many Requests) กรุณารอสักครู่ก่อนทำรายการใหม่',
+        type: 'error',
+      });
+      setTimeout(() => {
+        setIsRateLimited(isLocalApiRateLimited());
+      }, 15000);
+    };
+    window.addEventListener('nbtc-rate-limited', handleRateLimit);
+    return () => window.removeEventListener('nbtc-rate-limited', handleRateLimit);
+  }, []);
 
   // Handle editing mode initialization
   const isEditMode = Boolean(editingSurvey && (editingSurvey.recordId || editingSurvey.fields?.recordId));
@@ -121,10 +141,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
           subdistrict: activeStation.subdistrict || prev.subdistrict || '',
           installationPlace: activeStation.installationPlace || prev.installationPlace || '',
           equipmentPlace: activeStation.equipmentPlace || prev.equipmentPlace || '',
-          contactName: activeStation.contactName || prev.contactName || '',
-          contactPosition: activeStation.contactPosition || prev.contactPosition || '',
-          contactVillage: activeStation.village || prev.contactVillage || '',
-          contactPhone: activeStation.contactPhone || prev.contactPhone || ''
+          contactName: sanitizePii(activeStation.contactName) || prev.contactName || '',
+          contactPosition: sanitizePii(activeStation.contactPosition) || prev.contactPosition || '',
+          contactVillage: sanitizePii(activeStation.village) || prev.contactVillage || '',
+          contactPhone: sanitizePii(activeStation.contactPhone) || prev.contactPhone || ''
         }));
       }
     }
@@ -209,10 +229,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
         equipmentPlace: rawFields.equipmentPlace || '',
         visitDate: rawFields.visitDate || rawFields.visit_date || (editingSurvey.savedAt ? editingSurvey.savedAt.slice(0, 10) : ''),
         visitTime: rawFields.visitTime || rawFields.visit_time || '',
-        contactName: rawFields.contactName || '',
-        contactPosition: rawFields.contactPosition || '',
-        contactVillage: rawFields.contactVillage || '',
-        contactPhone: rawFields.contactPhone || '',
+        contactName: sanitizePii(rawFields.contactName),
+        contactPosition: sanitizePii(rawFields.contactPosition),
+        contactVillage: sanitizePii(rawFields.contactVillage),
+        contactPhone: sanitizePii(rawFields.contactPhone),
         permit: rawFields.permit === 'on' ? 'อนุญาต' : (rawFields.permit || 'อนุญาต'),
         accessLimit: rawFields.accessLimit || rawFields.access_limit || '',
         radioStatus: rawFields.radioStatus || 'ปกติ',
@@ -255,6 +275,13 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
   // Form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLocalApiRateLimited()) {
+      setStatusMessage({
+        text: 'ระบบกำลังจำกัดอัตราการส่งข้อมูลชั่วคราว (Rate Limited 429) กรุณารอสักครู่',
+        type: 'error',
+      });
+      return;
+    }
     setIsSubmitting(true);
     setStatusMessage({
       text: isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังส่งข้อมูลและอัปโหลดรูปภาพ...',
@@ -929,7 +956,7 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.99 }}
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isRateLimited}
           className={cn(
             'flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-base font-bold tracking-normal leading-normal text-slate-950 shadow-lg transition-all disabled:opacity-60 cursor-pointer',
             isEditMode
@@ -941,6 +968,11 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
               <span>{isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังบันทึกข้อมูล...'}</span>
+            </>
+          ) : isRateLimited ? (
+            <>
+              <AlertCircle className="h-5 w-5 text-amber-950" />
+              <span>รอสักครู่ (ระบบจำกัดอัตราการส่งข้อมูลชั่วคราว)...</span>
             </>
           ) : isEditMode ? (
             <>

@@ -5,15 +5,16 @@
  * Scope rules (Pre_PM2 repo policy):
  *  - ห้าม cache request ข้าม origin (api.github.com, raw.githubusercontent.com), non-GET, blob:/data:
  *  - เฉพาะ GET /api/dashboard และ /api/database เท่านั้นที่เป็น network-first + cache fallback
- *  - CACHE_NAME ผูกกับ APP_VERSION ผ่าน register('/sw.js?v=' + APP_VERSION)
+ *  - Navigation requests: Network-First + fallback to /index.html
+ *  - NOTE FOR P1: Bump CACHE_NAME version when publishing new release
  */
 
 const SCRIPT_URL = new URL(self.location.href);
 const VERSION = SCRIPT_URL.searchParams.get('v') || 'dev';
 const CACHE_NAME = `pre-pm-nbtc-${VERSION}`;
 
+// Task C4: ตัด '/' ออกเพื่อแก้ปัญหา 404 pre-cache error บน r2.dev static storage (ใช้ '/index.html' แทน)
 const CORE_ASSETS = [
-  '/',
   '/index.html',
   '/manifest.json',
   '/favicon.png',
@@ -23,13 +24,22 @@ const CORE_ASSETS = [
 // Endpoints ที่ยอมให้ใช้ cache สำรองตอน offline ได้ (network-first)
 const OFFLINE_CACHEABLE_PATHS = new Set(['/api/dashboard', '/api/database', '/database', '/dashboard']);
 
-// Install: pre-cache application shell
+// Install: pre-cache application shell ทีละไฟล์เพื่อบันทึก log รายไฟล์ที่ล้มเหลวโดยไม่ throw aggregate error
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(CORE_ASSETS).catch((err) => {
-        console.warn('[SW] Core assets pre-cache partial error:', err);
-      });
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const asset of CORE_ASSETS) {
+        try {
+          const res = await fetch(asset);
+          if (res && res.ok) {
+            await cache.put(asset, res);
+          } else {
+            console.warn(`[SW] Pre-cache failed for ${asset}: HTTP ${res ? res.status : 'network_error'}`);
+          }
+        } catch (err) {
+          console.warn(`[SW] Pre-cache network exception for ${asset}:`, err);
+        }
+      }
     }).then(() => self.skipWaiting())
   );
 });
@@ -79,14 +89,33 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Local API endpoints (server-only features) -> network only, never cache.
+  // 5. Navigation requests (HTML page requests): Network-First, fallback to /index.html
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then((response) => {
+          if (response && response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match('/index.html');
+          return cached || caches.match(req);
+        })
+    );
+    return;
+  }
+
+  // 6. Local API endpoints (server-only features) -> network only, never cache.
   //    /api/export-pdf, /api/sync-config, /api/github-status, ... ทำงานได้เฉพาะ local server
   const isApiPath = url.pathname.startsWith('/api/') || url.pathname === '/database' || url.pathname === '/dashboard';
   if (isApiPath && !OFFLINE_CACHEABLE_PATHS.has(url.pathname)) {
     return;
   }
 
-  // 6. Cacheable snapshots (/api/dashboard, /api/database): Network-first, fallback to cache
+  // 7. Cacheable snapshots (/api/dashboard, /api/database): Network-first, fallback to cache
   if (isApiPath) {
     event.respondWith(
       fetch(req)
@@ -102,7 +131,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 7. Static Assets (fonts, CSS, JS, images): Stale-While-Revalidate / Cache-First
+  // 8. Static Assets (fonts, CSS, JS, images): Stale-While-Revalidate / Cache-First
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req)

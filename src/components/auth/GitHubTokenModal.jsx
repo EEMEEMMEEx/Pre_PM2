@@ -38,15 +38,48 @@ export function GitHubTokenModal({ isOpen, onClose, onUpdated }) {
       });
       if (res.ok) {
         const u = await res.json();
+        // Check repository access & write permissions for Thaidimaru/Pre_PM2
+        const repoRes = await fetch('https://api.github.com/repos/Thaidimaru/Pre_PM2', {
+          headers: {
+            Authorization: `Bearer ${t}`,
+            Accept: 'application/vnd.github+json',
+          },
+        }).catch(() => null);
+
+        if (repoRes && repoRes.ok) {
+          const repoData = await repoRes.json().catch(() => ({}));
+          const canPush = repoData.permissions?.push || repoData.permissions?.admin;
+          if (!canPush) {
+            setTestResult({
+              ok: false,
+              message: `Token ใช้งานได้ (${u.login}) แต่ยังไม่มีสิทธิ์เขียน Repository Thaidimaru/Pre_PM2 — กรุณาตั้งค่า Permissions: "Contents: Read and write"`,
+              user: u.login,
+            });
+            return;
+          }
+        } else if (repoRes && repoRes.status === 403) {
+          setTestResult({
+            ok: false,
+            message: `Token สิทธิ์ไม่เพียงพอ (HTTP 403) — กรุณาตั้งค่า Fine-grained PAT ให้เข้าถึง Repository "Thaidimaru/Pre_PM2" และเปิดสิทธิ์ "Contents: Read and write"`,
+            user: u.login,
+          });
+          return;
+        }
+
         setTestResult({
           ok: true,
-          message: `เชื่อมต่อสำเร็จ! ผู้ใช้งาน: ${u.login} (${u.name || 'ไม่มีชื่อแสดง'})`,
+          message: `เชื่อมต่อสำเร็จ! ผู้ใช้งาน: ${u.login} (${u.name || 'ไม่มีชื่อแสดง'}) — มีสิทธิ์บันทึกข้อมูลเข้า Thaidimaru/Pre_PM2`,
           user: u.login,
         });
       } else if (res.status === 401) {
         setTestResult({
           ok: false,
           message: 'Token ไม่ถูกต้อง หรือหมดอายุแล้ว (401 Bad credentials)',
+        });
+      } else if (res.status === 403) {
+        setTestResult({
+          ok: false,
+          message: 'สิทธิ์ไม่เพียงพอ (HTTP 403) — กรุณาเลือก Repository "Thaidimaru/Pre_PM2" และเปิดสิทธิ์ "Contents: Read and write"',
         });
       } else {
         setTestResult({

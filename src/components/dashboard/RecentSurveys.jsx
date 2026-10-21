@@ -34,7 +34,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { SurveyPreviewModal } from '@/components/dashboard/SurveyPreviewModal';
 import { exportSurveysToExcel } from '@/lib/excelExport';
-import { deleteSurveys, getDeletedSurveyIds, githubErrorText } from '@/lib/api';
+import { deleteSurveys, getDeletedSurveyIds, githubErrorText, isLocalApiRateLimited } from '@/lib/api';
 import { toast } from '@/components/ui/toast';
 import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
@@ -377,6 +377,10 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
 
   const handleExecuteDelete = async () => {
     if (!deleteTarget) return;
+    if (isLocalApiRateLimited()) {
+      toast.error('ระบบกำลังจำกัดอัตราการส่งข้อมูลชั่วคราว กรุณารอสักครู่ (Rate Limited)');
+      return;
+    }
     setIsDeleting(true);
     try {
       const idsToDelete = deleteTarget.isBatch
@@ -424,13 +428,23 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
     }
   };
 
-  // Clean phone number helper (strips newlines, normalizes spaces and commas)
+  // Helper to sanitize PII (returns fallback if scrubbed or empty)
+  const sanitizePii = (val, fallback = '-') => {
+    if (!val) return fallback;
+    const str = String(val).trim();
+    if (!str || str === '-' || str === '***' || /^[*]+$/.test(str)) return fallback;
+    return str;
+  };
+
+  // Clean phone number helper (strips newlines, normalizes spaces and commas, ignores scrubbed ***)
   const formatPhone = (phone) => {
     if (!phone) return '';
-    return String(phone)
+    const clean = String(phone)
       .replace(/[\r\n]+/g, ' ')
       .replace(/\s*,\s*/g, ', ')
       .trim();
+    if (!clean || clean === '-' || clean === '***' || /^[*]+$/.test(clean)) return '';
+    return clean;
   };
 
   // Safe Thai Date formatter (guarantees date never awkwardly line-breaks on hyphens)
@@ -1383,9 +1397,11 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
                   const isSelected = selectedIds.has(item.recordId);
                   const f = item.fields || {};
                   const stationName = item.station?.trim() || f.stationName?.trim() || f.station?.trim() || item.stationName?.trim() || 'สถานีไม่ระบุชื่อ';
-                  const contactPerson = f.contactName?.trim() || f.informantName?.trim() || '-';
-                  const phoneText = formatPhone(f.contactPhone || f.contact_phone);
-                  const operator = f.operatorName?.trim() || f.surveyorName?.trim();
+                  const contactNameClean = sanitizePii(f.contactName, '');
+                  const informantNameClean = sanitizePii(f.informantName, '');
+                  const contactPerson = contactNameClean || informantNameClean || '-';
+                  const phoneText = formatPhone(f.contactPhone || f.contact_phone || f.phone || f.tel);
+                  const operator = sanitizePii(f.operatorName || f.surveyorName, '');
                   const provinceName = item.province?.trim() || f.province?.trim() || '-';
                   const districtName = f.district?.trim() || '';
 
@@ -1876,7 +1892,7 @@ export function RecentSurveys({ recent = [], onNavigate, onEditSurvey, onRefresh
               </button>
               <button
                 type="button"
-                disabled={isDeleting}
+                disabled={isDeleting || isLocalApiRateLimited()}
                 onClick={handleExecuteDelete}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:from-rose-500 hover:to-red-500 transition-all cursor-pointer disabled:opacity-50"
               >

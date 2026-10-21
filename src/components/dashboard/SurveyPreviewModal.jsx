@@ -197,11 +197,19 @@ export function SurveyPreviewModal({
       ? new Date(fields.savedAt || surveyData.savedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.'
       : '-');
 
-  // Contact Info
-  const contactName = fields.contactName || fields.contact_name || stationLookup?.contact_name || fields.informantName || fields.informant_name || '-';
-  const contactPosition = fields.contactPosition || fields.contact_position || stationLookup?.contact_position || 'เจ้าของพื้นที่ / ผู้ดูแลสถานี';
-  const contactVillage = fields.contactVillage || fields.contact_village || (subdistrict ? `ต.${subdistrict.replace(/^ต\./, '')}` : '-');
-  const contactPhone = fields.contactPhone || fields.contact_phone || fields.phone || fields.tel || stationLookup?.contact_phone || stationLookup?.contactPhone || '-';
+  // Helper to sanitize PII (returns fallback if scrubbed or empty)
+  const sanitizePii = (val, fallback = '-') => {
+    if (!val) return fallback;
+    const str = String(val).trim();
+    if (!str || str === '-' || str === '***' || /^[*]+$/.test(str)) return fallback;
+    return str;
+  };
+
+  // Contact Info (defensive against scrubbed PII)
+  const contactName = sanitizePii(fields.contactName || fields.contact_name || stationLookup?.contact_name || fields.informantName || fields.informant_name, '-');
+  const contactPosition = sanitizePii(fields.contactPosition || fields.contact_position || stationLookup?.contact_position, 'เจ้าของพื้นที่ / ผู้ดูแลสถานี');
+  const contactVillage = sanitizePii(fields.contactVillage || fields.contact_village || (subdistrict ? `ต.${subdistrict.replace(/^ต\./, '')}` : ''), '-');
+  const contactPhone = sanitizePii(fields.contactPhone || fields.contact_phone || fields.phone || fields.tel || stationLookup?.contact_phone || stationLookup?.contactPhone, '-');
 
   // Permission
   const permit = fields.permit || surveyData.permit || 'อนุญาต';
@@ -233,8 +241,8 @@ export function SurveyPreviewModal({
   const antennaCondition = fields.antennaCondition || fields.antenna_condition || 'สภาพเสาและสายอากาศอยู่ในเกณฑ์ปกติ';
   const workObstacle = fields.workObstacle || fields.work_obstacle || 'ไม่มีอุปสรรคในการปฏิบัติงาน';
   const summary = fields.summary || fields.userSummary || 'เจ้าของพื้นที่ให้ความร่วมมือในการเข้าตรวจเยี่ยมและตรวจสอบสภาพระบบอุปกรณ์เป็นอย่างดี';
-  const informantName = fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : '');
-  const operatorName = fields.operatorName || fields.operator_name || 'วิศวกรผู้ควบคุมงาน';
+  const informantName = sanitizePii(fields.informantName || fields.informant_name || (contactName !== '-' ? contactName : ''), '-');
+  const operatorName = sanitizePii(fields.operatorName || fields.operator_name || fields.surveyorName, 'วิศวกรผู้ควบคุมงาน');
 
 
 
@@ -499,7 +507,7 @@ export function SurveyPreviewModal({
                 <span className={cn('block mb-0.5', labelClass)}>เบอร์โทรศัพท์</span>
                 {contactPhone && contactPhone !== '-' ? (
                   <a
-                    href={`tel:${contactPhone}`}
+                    href={`tel:${contactPhone.replace(/\s+/g, '')}`}
                     className={cn('font-mono hover:underline flex items-center gap-1', isDark ? 'text-cyan-400' : 'text-sky-600')}
                   >
                     <Phone className="h-3.5 w-3.5" />
@@ -624,7 +632,7 @@ export function SurveyPreviewModal({
               </div>
               <div>
                 <span className={cn('block mb-0.5', labelClass)}>ผู้ให้ข้อมูล / เจ้าของพื้นที่</span>
-                <span className={cn('font-semibold', valBoldClass)}>{informantName || contactName}</span>
+                <span className={cn('font-semibold', valBoldClass)}>{informantName !== '-' ? informantName : contactName}</span>
               </div>
               <div>
                 <span className={cn('block mb-0.5', labelClass)}>เจ้าหน้าที่ผู้ตรวจเยี่ยม</span>
