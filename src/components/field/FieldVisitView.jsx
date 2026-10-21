@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText, isLocalApiRateLimited } from '@/lib/api';
+import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText, isLocalApiRateLimited, isStaticHost } from '@/lib/api';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { Printer, FileText, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -106,7 +106,13 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
         );
       })
       .catch((err) => {
-        console.error('Failed to fetch station directory:', err);
+        // บน static host ที่ไม่มี snapshot (GitHub Pages) เป็นสภาพที่คาดไว้แล้ว
+        // ไม่ควรขึ้น console.error ให้ผู้ใช้ตกใจ — ยังกรอกสถานีเองได้ตามปกติ
+        if (isStaticHost()) {
+          console.warn('Station directory unavailable on this host (manual entry only):', err?.message || err);
+        } else {
+          console.error('Failed to fetch station directory:', err);
+        }
       });
   }, []);
 
