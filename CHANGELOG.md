@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.10.0] - 2026-10-21
+
+### Security
+- ต่อ `AuthService` เข้า request path จริง (เดิม `is_authorized()` ไม่เคยถูกเรียก): `database.py` ผูก `127.0.0.1` เป็น default (`HOST` ตั้ง override ได้) และ path ที่มีข้อมูลภาคสนาม/รูป/PDF (`/api/*`, `/database`, `/photos/*`) ต้องมี `Authorization: Bearer <token>` เมื่อคำขอมาจากนอกเครื่อง — คืน `401 unauthorized` พร้อมข้อความไทย (`database.py`)
+- `POST /api/login` / `POST /login` ตรวจรหัสผ่านจริงแล้ว (เดิมตอบ `{"token": "public", "ok": true}` โดยไม่ตรวจอะไรเลย) → ผ่าน = token สุ่ม 32 bytes อายุ 8 ชม., ผิด/ว่าง = `401 invalid_password`
+- ตัดรหัสผ่าน default `"admin"`: ถ้าไม่ได้ตั้ง `FORM_PASSWORD` หรือ `access-password.txt` ระบบสุ่มรหัสผ่านต่อ process และเตือนตอนสตาร์ต ทำให้การ login จากเครื่องอื่นถูกปิดไว้โดยดีฟอลต์ (`database.py` `AuthService`)
+- CORS ไม่ใช้ `Access-Control-Allow-Origin: *` อีก (ทั้ง preflight, JSON, รูป, PDF) → สะท้อนเฉพาะ origin ใน `ALLOWED_ORIGINS`, origin อื่นได้ `403 origin_not_allowed`; ปิดช่อง CSRF/DNS-rebinding จากเว็บอื่นมายิง loopback
+- ทุก path เขียน (`/api/save`, `/api/update`, `/api/delete`, `DELETE /api/survey/<id>`) และ `do_DELETE` ต้องผ่าน origin check + auth check ก่อนประมวลผล
+
+### Fixed
+- `delete_surveys` รายงาน `githubDeleted` ตามผลจริงของ GitHub Contents API (เดิมตรึงเป็น `true`Always ทั้งที่เซิร์ฟเวอร์ที่ไม่มี token ลบไม่สำเร็จ) พร้อมฟิลด์ `githubFailed[]` — ทำให้ client ที่ถือ PAT เห็นว่ายังต้องลบไฟล์บน GitHub เอง แทนที่จะเชื่อแล้วล้างแคชทิ้ง (`database.py`)
+- `loginUser()` เป็น stub ที่คืน `token: 'public'` เสมอ → เรียก `POST /api/login` จริง คืน `{token, ok, error}` และคืน `ok: false, publicAccess: true` บน static host (`src/lib/api.js`)
+- `LoginView` เก็บ `sessionStorage.surveyToken` แม้ login ไม่สำเร็จ → ตรวจ `data.ok && data.token` ก่อน และแสดงข้อความผิดพลาด (`src/components/auth/LoginView.jsx`)
+
+### Added
+- Env flags สำหรับ local server: `HOST`, `REQUIRE_TOKEN=1` (บังคับ token แม้แต่ loopback ใช้ทดสอบเส้นทาง 401), `ALLOWED_ORIGINS` — documented ใน `GEMINI.md` §4.3
+- Startup notice บอกสถานะ bind/auth/password เมื่อรัน `python database.py` เพื่อให้เห็นว่าเซิร์ฟเวอร์กำลังเปิดถึงวง LAN หรือไม่
+- อัปเดตเอกสาร contract: `GEMINI.md` §4.3 (auth, endpoints ที่ guard, response shape ของ delete), `AGENTS.md` (Stack & Data Flow + Security debt checklist ที่แยกสถานะ [x]/[ ] ชัดเจน)
+
 ## [2.9.0] - 2026-10-20
 
 ### Security

@@ -600,7 +600,27 @@ export async function fetchStations(token = '') {
 }
 
 export async function loginUser(password = '') {
-  return { token: 'public', ok: true };
+  // v2.10.0: ต่อรอง bearer token กับเซิร์ฟเวอร์จริง (database.py) — เดิมเป็น stub ที่คืน 'public' ตลอด
+  // บน static host (r2.dev) ไม่มี backend: คืน ok=false เพื่อให้ UI บอกผู้ใช้ว่าไม่ต้อง login ก็ใช้งานได้
+  if (isStaticHost()) {
+    return { token: null, ok: false, error: 'no_backend', publicAccess: true };
+  }
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }).catch(() => null);
+    if (!res) return { token: null, ok: false, error: 'network_error' };
+    const data = await res.json().catch(() => ({}));
+    return {
+      token: data.token || null,
+      ok: Boolean(res.ok && data.ok && data.token),
+      error: res.ok ? null : (data.error || data.message || `HTTP ${res.status}`),
+    };
+  } catch (e) {
+    return { token: null, ok: false, error: e.message };
+  }
 }
 
 export async function submitSurvey(arg1, arg2, arg3) {

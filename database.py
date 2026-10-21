@@ -49,8 +49,21 @@ class AppConfig:
     ASSETS_DIR = ROOT / "assets"
     GITHUB_TOKEN_PATH = ROOT / "github-token.txt"
     
-    HOST = "0.0.0.0"
+    # v2.10.0: default ผูกเฉพาะ loopback — เครื่อง field เข้าผ่าน r2.dev (GitHub PAT) ไม่ใช่เซิร์ฟเวอร์นี้
+    # ตั้ง HOST=0.0.0.0 เองเมื่อจงใจเปิดทั้งวง LAN (ตอนนั้นทุก path ข้อมูล/เขียน ต้องมี Bearer token)
+    HOST = os.environ.get("HOST", "127.0.0.1")
     PORT = int(os.environ.get("PORT", 8765))
+    # REQUIRE_TOKEN=1 บังคับ bearer token แม้แต่ loopback (ใช้ทดสอบเส้นทาง 401 และล็อกดาวน์เครื่อง)
+    REQUIRE_TOKEN = os.environ.get("REQUIRE_TOKEN", "").strip().lower() in ("1", "true", "yes", "on")
+    _DEFAULT_ALLOWED_ORIGINS = (
+        f"http://localhost:{PORT},http://127.0.0.1:{PORT},"
+        "http://localhost:5173,http://127.0.0.1:5173"
+    )
+    ALLOWED_ORIGINS = {
+        o.strip().rstrip("/")
+        for o in (os.environ.get("ALLOWED_ORIGINS") or _DEFAULT_ALLOWED_ORIGINS).split(",")
+        if o.strip()
+    }
     TOKEN_LIFETIME_HOURS = 8
     SURVEY_RESET_DATE = "2026-10-05T00:00:00"
     XML_NAMESPACES = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -64,15 +77,39 @@ class AuthService:
     def __init__(self):
         self._tokens = {}
         self._lock = threading.Lock()
+        self._generated_password = None
+
+    def has_configured_password(self) -> bool:
+        """มีรหัสผ่านที่ตั้งไว้จริง ๆ หรือไม่ (env หรือไฟล์) — ใช้แจ้งเตือนตอนสตาร์ต"""
+        if (os.environ.get("FORM_PASSWORD") or "").strip():
+            return True
+        try:
+            if AppConfig.PASSWORD_PATH.exists() and AppConfig.PASSWORD_PATH.read_text(encoding="utf-8-sig").strip():
+                return True
+        except Exception:
+            pass
+        return False
 
     def get_configured_password(self) -> str:
-        """Get password from environment variable or access-password.txt."""
+        """Get password from environment variable or access-password.txt.
+
+        v2.10.0: ไม่มีค่า default แบบ "admin" อีกต่อไป — ถ้าไม่ได้ตั้งรหัสไว้ให้สุ่มต่อ process
+        เพื่อให้ login จากนอกเครื่องถูกปิดไว้โดยดีฟอลต์ (loopback ยังใช้งานได้ตามนโยบาย)
+        """
         env_pass = os.environ.get("FORM_PASSWORD")
         if env_pass:
             return env_pass.strip()
         if AppConfig.PASSWORD_PATH.exists():
-            return AppConfig.PASSWORD_PATH.read_text(encoding="utf-8-sig").strip()
-        return "admin"
+            try:
+                stored = AppConfig.PASSWORD_PATH.read_text(encoding="utf-8-sig").strip()
+                if stored:
+                    return stored
+            except Exception:
+                pass
+        with self._lock:
+            if self._generated_password is None:
+                self._generated_password = secrets.token_urlsafe(18)
+            return self._generated_password
 
     def verify_password(self, attempt: str) -> bool:
         """Verify the user-provided password."""
@@ -984,6 +1021,8 @@ class DatabaseService:
             return {"deleted": False, "count": 0}
 
         deleted_count = 0
+        github_deleted = True
+        github_failed = []
         with cls.connect() as conn:
             for rec_id in record_ids:
                 s_row = conn.execute("SELECT id FROM surveys WHERE record_id = ?", (rec_id,)).fetchone()
@@ -1011,8 +1050,18 @@ class DatabaseService:
                     pass
 
             try:
-                cls.delete_survey_from_github(rec_id)
+                gh_res = cls.delete_survey_from_github(rec_id)
+                if not gh_res.get("success"):
+                    github_deleted = False
+                    github_failed.append(
+                        {
+                            "id": rec_id,
+                            "reason": gh_res.get("reason") or gh_res.get("message") or "github_delete_failed",
+                        }
+                    )
             except Exception as e:
+                github_deleted = False
+                github_failed.append({"id": rec_id, "reason": str(e)})
                 print(f"Warning: Failed to delete {rec_id} from GitHub: {e}")
 
         try:
@@ -1021,7 +1070,14 @@ class DatabaseService:
         except Exception:
             pass
 
-        return {"deleted": True, "count": deleted_count, "deletedIds": record_ids, "githubDeleted": True}
+        return {
+            "deleted": True,
+            "count": deleted_count,
+            "deletedIds": record_ids,
+            # v2.10.0: บอกตามจริง — ถ้าเซิร์ฟเวอร์ไม่มี GitHub token client จะได้ไปลบเอง (เดิมตรึงเป็น True)
+            "githubDeleted": github_deleted,
+            "githubFailed": github_failed,
+        }
 
 
 # Initialize Singletons
@@ -1040,6 +1096,7 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -1057,14 +1114,82 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_cors_headers()
         self.end_headers()
         self.wfile.write(data)
+
+    # --------------------------------------------------------------------------
+    # v2.10.0 — Authorization helpers (AuthService ถูก wiring เข้า request path จริงแล้ว)
+    # นโยบาย: loopback = เครื่องผู้ดูแลเอง ใช้งานได้ตามเดิม;
+    #           client ที่มานอกเครื่องต้องมี Bearer token จาก POST /login เท่านั้น
+    # --------------------------------------------------------------------------
+    LOOPBACK_PEERS = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
+
+    def peer_is_loopback(self) -> bool:
+        peer = (self.client_address[0] if self.client_address else "") or ""
+        return peer in self.LOOPBACK_PEERS or peer.startswith("::ffff:127.0.0.1")
+
+    def cors_origin(self) -> str:
+        """คืน Origin ที่อยู่ใน allowlist เท่านั้น (เดิมแจก Access-Control-Allow-Origin: * ตลอด)"""
+        origin = (self.headers.get("Origin") or "").strip().rstrip("/")
+        if not origin:
+            return ""
+        return origin if origin in AppConfig.ALLOWED_ORIGINS else ""
+
+    def send_cors_headers(self):
+        origin = self.cors_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def origin_allowed(self) -> bool:
+        """ตรวจ Origin ของ browser; ไม่มี header = non-browser client ถือว่าผ่าน"""
+        requested = (self.headers.get("Origin") or "").strip().rstrip("/")
+        if not requested or requested in AppConfig.ALLOWED_ORIGINS:
+            return True
+        self.send_json_response(403, {"error": "origin_not_allowed", "message": "Origin ไม่ได้รับอนุญาตให้เรียก API นี้"})
+        return False
+
+    def bearer_authorized(self) -> bool:
+        return auth_service.is_authorized(self.headers.get("Authorization", ""))
+
+    def require_local_or_authorized(self) -> bool:
+        """ผ่านเมื่อมี bearer token ที่ยังอายุอยู่ หรือเป็นผู้เรียกจาก loopback (ขณะไม่ตั้ง REQUIRE_TOKEN)"""
+        if self.bearer_authorized():
+            return True
+        if self.peer_is_loopback() and not AppConfig.REQUIRE_TOKEN:
+            return True
+        self.send_json_response(
+            401,
+            {
+                "error": "unauthorized",
+                "message": "ต้องใช้ Bearer token จาก POST /login สำหรับคำขอจากนอกเครื่องนี้",
+                "hint": "ตั้ง FORM_PASSWORD แล้ว POST {\"password\": ...} ไปที่ /api/login เพื่อรับ token อายุ 8 ชั่วโมง",
+            },
+        )
+        return False
+
+    def is_protected_data_path(self, parsed_path: str) -> bool:
+        """path ที่มีข้อมูลภาคสนาม/รูป/รายงาน — ไม่ใช่ static shell ของแอป"""
+        return (
+            parsed_path.startswith("/api/")
+            or parsed_path == "/database"
+            or parsed_path == "/photos"
+            or parsed_path.startswith("/photos/")
+        )
 
     def do_GET(self):
         """Handle GET requests for static assets, pages, and API endpoints."""
         parsed_path = unquote(self.path).split("?", 1)[0].rstrip("/")
         if parsed_path == "":
             parsed_path = "/"
+
+        # 0. ข้อมูลสำรวจ/รายชื่อสถานี/รูป/PDF = มีข้อมูลส่วนบุคคล -> ต้อง loopback หรือ bearer token
+        if self.is_protected_data_path(parsed_path):
+            if not self.origin_allowed():
+                return
+            if not self.require_local_or_authorized():
+                return
 
         # 1. Main Application Pages (SPA)
         if parsed_path in ("/", "/html", "/dashboard", "/login", "/field"):
@@ -1156,7 +1281,7 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                     safe_name = quote(name)
                     self.send_header("Content-Disposition", f"{disp}; filename*=UTF-8''{safe_name}")
                     self.send_header("Cache-Control", "public, max-age=86400")
-                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_cors_headers()
                     self.end_headers()
                     self.wfile.write(data)
                     return
@@ -1222,7 +1347,7 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                         self.send_header("Content-Length", str(len(data)))
                         self.send_header("Content-Disposition", f'attachment; filename="SURVEY_SELECTED_{len(selected_ids)}_STATIONS.pdf"')
                         self.send_header("Cache-Control", "no-cache")
-                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_cors_headers()
                         self.end_headers()
                         self.wfile.write(data)
                         return
@@ -1250,7 +1375,7 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(data)))
                 self.send_header("Content-Disposition", f'attachment; filename="{pdf_file.name}"')
                 self.send_header("Cache-Control", "no-cache")
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(data)
                 return
@@ -1262,25 +1387,43 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
         self.send_json_response(404, {"error": "Not found"})
 
     def do_OPTIONS(self):
-        """Handle CORS preflight requests."""
+        """Handle CORS preflight requests — อนุญาตเฉพาะ origin ใน ALLOWED_ORIGINS."""
+        requested = (self.headers.get("Origin") or "").strip().rstrip("/")
+        if requested and requested not in AppConfig.ALLOWED_ORIGINS:
+            self.send_json_response(403, {"error": "origin_not_allowed"})
+            return
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_cors_headers()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
     def do_POST(self):
         """Handle POST requests for login, survey submission, editing, and deletion."""
         path = self.path.rstrip("/")
         content_length = int(self.headers.get("Content-Length", 0))
+        # อ่าน body ก่อนตอบ 401/403 เสมอ เพื่อไม่ให้ connection ที่ reuse เหลือ bytes ค้างใน stream
+        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
+
+        if not self.origin_allowed():
+            return
+        if path not in ("/login", "/api/login") and not self.require_local_or_authorized():
+            return
 
         try:
-            body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
             payload = json.loads(body_bytes.decode("utf-8") or "{}")
 
-            # 1. Login Endpoint
+            # 1. Login Endpoint — v2.10.0: ตรวจรหัสผ่านจริงและออก bearer token (เดิมนิ่งตอบ token="public")
             if path in ("/login", "/api/login"):
-                self.send_json_response(200, {"token": "public", "ok": True})
+                attempt = str(payload.get("password", "") or "")
+                if auth_service.verify_password(attempt):
+                    self.send_json_response(200, {"token": auth_service.create_token(), "ok": True})
+                else:
+                    self.send_json_response(
+                        401,
+                        {"token": None, "ok": False, "error": "invalid_password", "message": "รหัสผ่านไม่ถูกต้อง"},
+                    )
                 return
 
             # 2. Save Survey Endpoint (Auto-detects update if recordId present or isUpdate flag)
@@ -1355,6 +1498,14 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         """Handle DELETE requests for single or batch surveys."""
         parsed_path = unquote(self.path).split("?", 1)[0].rstrip("/")
+        content_length = int(self.headers.get("Content-Length", 0))
+        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
+
+        if not self.origin_allowed():
+            return
+        if not self.require_local_or_authorized():
+            return
+
         if parsed_path.startswith("/api/survey/"):
             rec_id = parsed_path[12:].split("/")[0].strip()
             if rec_id:
@@ -1363,8 +1514,6 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
                 return
 
         if parsed_path in ("/api/delete", "/delete"):
-            content_length = int(self.headers.get("Content-Length", 0))
-            body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
             try:
                 payload = json.loads(body_bytes.decode("utf-8") or "{}")
                 record_ids = payload.get("recordIds") or ([payload.get("recordId")] if payload.get("recordId") else [])
@@ -1391,9 +1540,16 @@ def run_server():
     server = ThreadingHTTPServer((AppConfig.HOST, AppConfig.PORT), SurveyRequestHandler)
     print("=" * 60)
     print(" NBTC Microwave — Survey Control Room Server")
-    print(f" Address : http://localhost:{AppConfig.PORT}")
+    print(f" Address : http://{AppConfig.HOST}:{AppConfig.PORT}")
     print(f" Pages   : http://localhost:{AppConfig.PORT}/ (Dashboard & Field Form)")
     print(f" Storage : {AppConfig.DATA_DIR}")
+    print(f" Auth    : {'บังคับ bearer token ทุกคำขอ' if AppConfig.REQUIRE_TOKEN else 'วางใจ loopback / ต้องมี bearer token จากนอกเครื่อง'}")
+    if AppConfig.HOST not in ("127.0.0.1", "localhost", "::1"):
+        print(" [!] กำลังเปิดให้เครื่องอื่นในวง LAN เข้าถึง — client ต้อง POST /api/login ด้วย FORM_PASSWORD เพื่อรับ token 8 ชม.")
+        print(f" [ ] ถ้าใช้เบราว์เซอร์จาก IP อื่น ให้เพิ่ม origin นั้นใน ALLOWED_ORIGINS (ปัจจุบัน: {', '.join(sorted(AppConfig.ALLOWED_ORIGINS))})")
+    if not auth_service.has_configured_password():
+        print(" [!] ยังไม่ได้ตั้ง FORM_PASSWORD หรือ access-password.txt — ระบบสุ่มรหัสผ่านชั่วคราวของรอบนี้")
+        print("     เครื่องอื่นจะ login ไม่สำเร็จจนกว่าจะตั้งรหัสผ่านถาวร (loopback ยังใช้ได้ปกติ)")
     print("=" * 60)
     server.serve_forever()
 

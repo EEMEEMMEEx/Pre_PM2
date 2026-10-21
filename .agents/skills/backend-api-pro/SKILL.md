@@ -25,18 +25,26 @@ license: Internal project skill (no external redistribution terms)
 
 | Endpoint | Method | Purpose | Payload / Response |
 |---|---|---|---|
-| `/api/login`, `/login` | `POST` | ตรวจสอบรหัสผ่านระบบ | `{"token": "public", "ok": true}` |
+| `/api/login`, `/login` | `POST` | ตรวจสอบรหัสผ่านจริง (`FORM_PASSWORD` หรือ `access-password.txt`) แล้วออก bearer token อายุ 8 ชม. | `{password}` → `200 {"token": "<43 chars>", "ok": true}` / `401 {"token": null, "ok": false, "error": "invalid_password"}` |
 | `/api/dashboard` | `GET` | ดึงสถิติและรายการสำรวจทั้งหมด | `{stats, provinces, recent: [...]}` |
 | `/api/database`, `/database` | `GET` | ดึงข้อมูล Master Stations จาก `DATABASE.xlsx` | `[{"station": "...", "province": "..."}, ...]` |
 | `/api/save`, `/save` | `POST` | บันทึกแบบสำรวจใหม่/แก้ไข | `{"fields": {...}, "photos": [...]}` → `{"saved": true, "recordId": "..."}` |
 | `/api/update`, `/api/update` | `POST` | แก้ไขแบบสำรวจตาม `recordId` | `{"recordId": "...", "fields": {...}}` → `{"saved": true, "updated": true}` |
-| `/api/delete`, `/delete` | `POST` / `DELETE` | ลบแบบสำรวจ (เดี่ยวหรือ batch) | `{"recordIds": ["PM-..."]}` → `{"deleted": true, "count": N}` |
+| `/api/delete`, `/delete` | `POST` / `DELETE` | ลบแบบสำรวจ (เดี่ยวหรือ batch) | `{"recordIds": ["PM-..."]}` → `{"deleted": true, "count": N, "deletedIds": [...], "githubDeleted": bool, "githubFailed": [{id, reason}]}` |
 | `/api/export-pdf` | `GET` | ส่งออก PDF รวม (มีเฉพาะเครื่อง local) | Query: `?ids=PM-1,PM-2` → Content-Type: `application/pdf` |
 | `/photos/<filename>` | `GET` | อ่านไฟล์รูปถ่ายจากโฟลเดอร์ `photos/` | Image binary |
 
+### 1.1 Authorization Model (v2.10.0)
+- Default bind `HOST=127.0.0.1`; คำขอจาก **loopback** ผ่านได้โดยไม่ต้องมี token (รองรับ `npm run dev` proxy และเครื่องที่รันเซิร์ฟเวอร์เอง)
+- คำขอจาก **นอกเครื่อง** บน path ข้อมูล (`/api/*`, `/database`, `/photos/*`) ต้องมี `Authorization: Bearer <token>` จาก `POST /api/login` → ไม่ผ่านได้ `401 {"error": "unauthorized"}`
+- `POST /api/save|/update|/delete` และ `do_DELETE` ตรวจ Origin ก่อน (ไม่อยู่ใน allowlist → `403 origin_not_allowed`) แล้วจึงตรวจ token
+- CORS สะท้อนเฉพาะ `ALLOWED_ORIGINS` (ไม่ใช้ `*`); env: `HOST`, `PORT`, `REQUIRE_TOKEN=1` (บังคับ token แม้ loopback), `ALLOWED_ORIGINS`, `FORM_PASSWORD`
+- ถ้าไม่ได้ตั้ง `FORM_PASSWORD`/ไฟล์รหัสผ่าน ระบบสุ่มรหัสต่อ process → login จากเครื่องอื่นใช้ไม่ได้จนกว่าจะตั้งรหัสถาวร (loopback ยังทำงานปกติ)
+- `githubDeleted` ในผลลบข้อมูลบอกตามจริงว่าเซิร์ฟเวอร์ลบไฟล์บน GitHub สำเร็จหรือไม่ — client ที่ถือ PAT ต้องไปลบเองเมื่อค่าเป็น `false`
+
 ### 2. Client-Side GitHub API Layer (`src/lib/api.js`)
 
-ใช้สำหรับ Production (Cloudflare R2) ที่ไม่มี Python Server ทำงาน:
+ใช้สำหรับ Production (Cloudflare R2) ที่ไม่มี Python Server ทำงาน (GitHub token **ไม่ถูกฝังใน bundle อีกแล้ว (v2.9.0) — ใช้ Fine-grained PAT ที่ผู้ใช้ใส่ใน `GitHubTokenModal` และเก็บใน `localStorage` เท่านั้น):
 - **Write**: `commitSurveyToGitHubClient(survey, token)` → `PUT https://api.github.com/repos/Thaidimaru/Pre_PM2/contents/data/surveys/<recordId>.json`
 - **Delete**: `deleteSurveyFromGitHubClient(recordId, token)` → `DELETE https://api.github.com/repos/Thaidimaru/Pre_PM2/contents/data/surveys/<recordId>.json`
 - **Read & Polling**: `fetchSurveysFromGitHubClient()` ใช้ ETag commit polling เพื่อประหยัด rate limit

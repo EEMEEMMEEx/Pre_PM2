@@ -96,7 +96,7 @@ Pre-PM2/
 - **Preview Build**: `npm run preview`
 
 ### Backend (Local Python)
-- **Start Local Server**: `python database.py` (Runs on port 8765, initializes tables in `survey.db` automatically)
+- **Start Local Server**: `python database.py` (ผูก `127.0.0.1:8765` เป็น default, สร้าง/seed ตารางใน `survey.db` อัตโนมัติ; ตั้ง `HOST=0.0.0.0` เมื่อจงใจเปิดทั้งวง LAN — ตอนนั้นทุก path ข้อมูลต้องมี Bearer token)
 - **Export Photos**: `python export_photos.py`
 - **Generate PDF Reports**: `python export_pdf.py`
 
@@ -119,11 +119,18 @@ Pre-PM2/
 - ให้ใช้ **Lucide React** หรือ **Scalable Inline SVG** เท่านั้น
 
 ### 3. API Contract & Security
-- **Authentication**: Token-based Authentication (Bearer token, HMAC SHA-256, 8-hour lifetime)
-- **Endpoints**:
-  - `POST /api/login` / `POST /login`
-  - `GET /api/dashboard`
-  - `GET /api/database` / `GET /database`
-  - `POST /api/save` / `POST /save`
-  - `GET /photos/<filename>` (Local) / Blobs (Cloud)
-- **Sensitive File Protection**: ป้องกันการดาวน์โหลดโดยตรงผ่าน Web สำหรับ `access-password.txt`, `DATABASE.xlsx`, `survey.db`, `SURVEY_DATA.xlsx` ผ่าน Proxy rules ใน `vite.config.mjs` และการแยกเก็บข้อมูลออฟไลน์บน OneDrive
+- **Authentication (v2.10.0 เป็นจริงแล้วใน `database.py`)**:
+  - `POST /api/login` { `password` } → ตรวจกับ `FORM_PASSWORD` หรือ `access-password.txt` (ไม่มีค่า default อีกต่อไป; ถ้าไม่ได้ตั้ง ระบบสุ่มรหัสต่อ process)
+  - ผ่าน → `{ token, ok: true }` โดย token เป็นค่าสุ่ม 32 bytes อายุ 8 ชั่วโมง เก็บในหน่วยความจำ (`AuthService`, ไม่ใช่ HMAC signature)
+  - ผิด → `401 { token: null, ok: false, error: "invalid_password" }`
+- **Policy การเข้าถึง**: เซิร์ฟเวอร์ผูก `127.0.0.1` เป็น default (`HOST` env ตั้งได้) — คำขอจาก **loopback** ผ่านได้ตามเดิม (รองรับ `npm run dev` proxy + เปิดแอปจากเครื่องที่รันเซิร์ฟเวอร์); คำขอจาก **นอกเครื่อง** ต้องมี header `Authorization: Bearer <token>` มิฉะนั้นได้ `401 unauthorized`
+- **Env flags**: `HOST`, `PORT`, `REQUIRE_TOKEN=1` (บังคับ token แม้แต่ loopback), `ALLOWED_ORIGINS` (comma-separated; default `localhost/127.0.0.1` ที่พอร์ต 8765 และ 5173)
+- **CORS**: ไม่ใช้ `Access-Control-Allow-Origin: *` อีก — สะท้อนเฉพาะ origin ใน `ALLOWED_ORIGINS` (preflight จาก origin อื่นได้ `403 origin_not_allowed`)
+- **Endpoints** (path ที่ถูก guard = มีข้อมูลภาคสนาม/รูป/รายงาน):
+  - `POST /api/login` / `POST /login` (เปิด ไม่ต้องมี token)
+  - `GET /api/dashboard` · `GET /api/database` / `GET /database` · `GET /api/survey/<id>` · `GET /api/photos/<id>` / `GET /photos/<filename>` · `GET /api/export-pdf`
+  - `POST /api/save` / `POST /save` · `POST /api/update` · `POST /api/delete` · `DELETE /api/survey/<id>` · `DELETE /api/delete`
+  - `GET /`, `/dashboard`, `/field`, `/assets/*` (SPA shell + static) = ไม่ต้องมี token
+- **`POST /api/save` เดิมพึ่ง token ที่ฝังใน bundle**: ถอดออกแล้ว (v2.9.0) — client ต้องมี Fine-grained PAT ของตัวเองใน `GitHubTokenModal` เพื่อเขียนขึ้น GitHub
+- **Response ของ `POST /api/delete`**: `{ deleted, count, deletedIds, githubDeleted, githubFailed[] }` — `githubDeleted` บอกตามจริงว่าเซิร์ฟเวอร์ลบไฟล์บน GitHub สำเร็จหรือไม่ (client ใช้ตัดสินว่าต้องยิง GitHub DELETE เองไหม)
+- **Sensitive File Protection**: ห้าม serve `access-password.txt`, `DATABASE.xlsx`, `survey.db`, `SURVEY_DATA.xlsx` ผ่าน web/R2; proxy rules อยู่ใน `vite.config.mjs`; ข้อมูลออฟไลน์แยกเก็บบน OneDrive
