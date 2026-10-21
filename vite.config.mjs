@@ -21,7 +21,12 @@ const proxyErrorHandler = (proxy) => {
   });
 };
 
+// GitHub Pages เสิร์ฟโปรเจกต์ใต้ subpath /<repo>/ — override ด้วย PAGES_BASE_PATH
+// ค่า default คือ '/' เพื่อไม่กระทบ deploy เดิมบน Cloudflare R2 (root domain)
+const basePath = process.env.PAGES_BASE_PATH || '/';
+
 export default defineConfig({
+  base: basePath,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

@@ -1,0 +1,94 @@
+name: Deploy to GitHub Pages
+
+# Deploy แยกจาก R2 โดยสิ้นเชิง:
+# - ไม่แตะ deploy-r2.yml / deploy_r2.py / bucket R2
+# - ทำงานเฉพาะ push ไปยัง branch นี้ หรือสั่งมือ (workflow_dispatch)
+# - ใช้ GitHub Pages project site ใต้ subpath /<repo>/ (vite base = PAGES_BASE_PATH)
+
+on:
+  push:
+    branches:
+      - track-pages/deploy-github-pages
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.mjs'
+      - 'package.json'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# ไม่ยกเลิก deploy ที่กำลังรัน เพื่อไม่ให้ Pages เหลือ asset ค้าง (บทเรียนจาก B9)
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # ---- Quality gate (แก้ I-04 จาก audit: CI ต้องรันเทสต์ก่อน deploy) ----
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Syntax Check Python
+        run: python -m py_compile database.py deploy_r2.py export_pdf.py export_photos.py
+
+      - name: Run Python Tests
+        run: npm run test:py
+
+      # ---- Build for GitHub Pages subpath ----
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build Web Application (Pages base path)
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          # configure-pages ให้ base_path มาแล้ว (เช่น /Pre_PM2) — เติม '/' ปิดท้ายให้ Vite
+          export PAGES_BASE_PATH="${PAGES_BASE_PATH%/}/"
+          echo "Building with base: $PAGES_BASE_PATH"
+          npm run build
+
+      # SPA fallback: GitHub Pages ไม่มี rewrite rule -> ใช้ 404.html ส่ง shell กลับ
+      - name: Add SPA fallback (404.html)
+        run: cp dist/index.html dist/404.html
+
+      - name: Disable Jekyll processing
+        run: touch dist/.nojekyll
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
