@@ -23,6 +23,9 @@ export function LoginView({ onLoginSuccess }) {
 
     try {
       const data = await loginUser(password);
+      if (!data?.ok || !data?.token) {
+        throw new Error(data?.error === 'invalid_password' ? 'รหัสผ่านไม่ถูกต้อง' : (data?.error || 'ไม่สามารถเข้าสู่ระบบได้'));
+      }
       sessionStorage.setItem('surveyToken', data.token);
       onLoginSuccess(data.token);
     } catch (err) {

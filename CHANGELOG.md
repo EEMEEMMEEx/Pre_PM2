@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.11.1] - 2026-10-21
+
+### Fixed
+- `deploy_r2.py` เรียก `DatabaseService.get_stations()` โดยไม่เคยสร้างตารางก่อน ทำให้ GitHub Actions (which checkout โดยไม่มี `survey.db`) ล้มด้วย `sqlite3.OperationalError: no such table: stations` ทั้งบล็อกรวม → ** snapshot `/api/dashboard` และ `/api/database` ไม่เคยถูกอัปเดตจาก CI เลย** (หลักฐาน: ค่าที่เผยแพร่อยู่บน R2 ยังมี `updatedAt` เดิม 2026-10-16 และยังมี `contactName`/`contactPhone` ค้าง) — เพิ่ม `DatabaseService.initialize()` ก่อนสร้าง snapshot ซึ่งสร้างตาราง sync สถานีจาก `DATABASE.xlsx`/`AGWBS.xlsx` และ seed จาก `data/surveys/` ตามกลไกปกติของเซิร์ฟเวอร์ (`deploy_r2.py`)
+- ย้าย `purge_legacy_secret_keys()` ออกนอก `try` ของบล็อกรวม → object ที่เคยแจก GitHub token (`/api/sync-config`, `/sync-config`) จะถูกลบ **แม้การสร้าง snapshot ล้มเหลว** (เดิมวางไว้ท้าย `try` จึงถูก skip ไปพร้อมข้อผิดพลาดข้างบน ซึ่งเป็นสาเหตุที่ token ยัง live บน bucket สาธารณะ) (`deploy_r2.py`)
+- สรุปผล deploy บอกสถานะรวมชัด (`Snapshots : อัปโหลดแล้ว + sanitize PII` / `ไม่สำเร็จ…`) และ `--dry-run` พิมพ์ข้อเท็จจริงทั้งสองข้อ (`snapshot_ok`, `will purge … (รันเสมอ)`) — ตรวจสอบได้ด้วย `python deploy_r2.py --dry-run` โดยไม่ต้องมี credentials
+
+### Changed
+- ซิงก์ upstream `main` เข้า branch นี้ (merge commit) — รับการลบไฟล์สำรวจ 4 รายการที่ลบไปแล้วบน GitHub และ `.gitignore` ที่ถอดบรรทัด `survey-*.json` ออก
+
+## [2.11.0] - 2026-10-21
+
+### Security
+- `deploy_r2.py` **ไม่อัปโหลด GitHub token ขึ้น bucket สาธารณะอีก** (เดิมเขียน `{token, repo, branch}` ลง `/api/sync-config` + `/sync-config` ซึ่งใครก็ดาวน์โหลดได้) และเพิ่ม `LEGACY_SECRET_KEYS` เพื่อ **purge object ทั้งสองทุกรอบ deploy** (idempotent, ล้มเหลวได้โดยไม่ทำให้ deploy crash) (`deploy_r2.py`)
+- API snapshot ที่ขึ้น Cloudflare R2 ถูก sanitize ก่อนอัปโหลด: `sanitize_dashboard_payload()` ตัด `contactName` / `contactPosition` / `contactPhone` / `informantName` ออกจาก `recent[]` ทั้งระดับ root และ `fields` (ค่า实测บนข้อมูลจริง: 695 ค่าจาก 184 รายการ; `operatorName` และข้อมูลงานสำรวจอื่นคงเดิม, ไม่แก้ข้อมูลต้นทางใน SQLite/GitHub)
+- เพิ่มโหมดตรวจสอบก่อนแตะ production: `--dry-run` (ไม่ใช้ credentials, ไม่เขียน/ลบ object, รายงานจำนวน PII ที่ถูกตัดและ key ที่ค้าง) และ `--purge-secrets-only` (ล้างเฉพาะ object ที่เคยแจก token) — ลดความจำเป็นในการ deploy จริงเพื่อพิสูจน์ว่าโค้ดถูก
+
+### Added
+- opt-in `--strip-station-contacts` (หรือ env `R2_STRIP_STATION_CONTACTS=1`) เพื่อตัด `contact_name`/`contact_position`/`contact_phone`/`house_no` จาก snapshot `/api/database` ด้วย — ตั้งเป็น opt-in เพราะฟอร์มภาคสนามบน r2.dev ใช้ข้อมูลนี้เติมอัตโนมัติ (FieldVisitView.jsx:81-84, 124-127); ค่าเริ่มต้นคงพฤติกรรมเดิม (63.3 KB → 197 stations)
+- `deploy_r2.py` import boto3 แบบยอมให้ขาดได้ (`require_boto3()`) เพื่อให้ `--dry-run` รันบนเครื่องที่ยังไม่ติดตั้ง library โดยไม่เปลี่ยนพฤติกรรมของโหมด deploy จริง
+
+### Changed
+- เอกสาร: `AGENTS.md` (Security debt checklist แยกสถานะโค้ดเสร็จ/R2 ยังไม่ล้าง), `.agents/skills/backend-api-pro/SKILL.md` (นโยบาย snapshot ห้ามอัปโหลด secret + คำสั่งใหม่)
+- ข้อจำกัดที่ยังเหลือ (ทราบและจงใจยังไม่แก้ในรอบนี้): ข้อมูลติดต่อชาวบ้านยังอยู่ใน `data/surveys/*.json` และ `DATABASE.xlsx` บน GitHub repo สาธารณะ — การปิดจริงต้องทำ repo/data เป็น private หรือใช้ server proxy
+
+## [2.10.0] - 2026-10-21
+
+### Security
+- ต่อ `AuthService` เข้า request path จริง (เดิม `is_authorized()` ไม่เคยถูกเรียก): `database.py` ผูก `127.0.0.1` เป็น default (`HOST` ตั้ง override ได้) และ path ที่มีข้อมูลภาคสนาม/รูป/PDF (`/api/*`, `/database`, `/photos/*`) ต้องมี `Authorization: Bearer <token>` เมื่อคำขอมาจากนอกเครื่อง — คืน `401 unauthorized` พร้อมข้อความไทย (`database.py`)
+- `POST /api/login` / `POST /login` ตรวจรหัสผ่านจริงแล้ว (เดิมตอบ `{"token": "public", "ok": true}` โดยไม่ตรวจอะไรเลย) → ผ่าน = token สุ่ม 32 bytes อายุ 8 ชม., ผิด/ว่าง = `401 invalid_password`
+- ตัดรหัสผ่าน default `"admin"`: ถ้าไม่ได้ตั้ง `FORM_PASSWORD` หรือ `access-password.txt` ระบบสุ่มรหัสผ่านต่อ process และเตือนตอนสตาร์ต ทำให้การ login จากเครื่องอื่นถูกปิดไว้โดยดีฟอลต์ (`database.py` `AuthService`)
+- CORS ไม่ใช้ `Access-Control-Allow-Origin: *` อีก (ทั้ง preflight, JSON, รูป, PDF) → สะท้อนเฉพาะ origin ใน `ALLOWED_ORIGINS`, origin อื่นได้ `403 origin_not_allowed`; ปิดช่อง CSRF/DNS-rebinding จากเว็บอื่นมายิง loopback
+- ทุก path เขียน (`/api/save`, `/api/update`, `/api/delete`, `DELETE /api/survey/<id>`) และ `do_DELETE` ต้องผ่าน origin check + auth check ก่อนประมวลผล
+
+### Fixed
+- `delete_surveys` รายงาน `githubDeleted` ตามผลจริงของ GitHub Contents API (เดิมตรึงเป็น `true`Always ทั้งที่เซิร์ฟเวอร์ที่ไม่มี token ลบไม่สำเร็จ) พร้อมฟิลด์ `githubFailed[]` — ทำให้ client ที่ถือ PAT เห็นว่ายังต้องลบไฟล์บน GitHub เอง แทนที่จะเชื่อแล้วล้างแคชทิ้ง (`database.py`)
+- `loginUser()` เป็น stub ที่คืน `token: 'public'` เสมอ → เรียก `POST /api/login` จริง คืน `{token, ok, error}` และคืน `ok: false, publicAccess: true` บน static host (`src/lib/api.js`)
+- `LoginView` เก็บ `sessionStorage.surveyToken` แม้ login ไม่สำเร็จ → ตรวจ `data.ok && data.token` ก่อน และแสดงข้อความผิดพลาด (`src/components/auth/LoginView.jsx`)
+
+### Added
+- Env flags สำหรับ local server: `HOST`, `REQUIRE_TOKEN=1` (บังคับ token แม้แต่ loopback ใช้ทดสอบเส้นทาง 401), `ALLOWED_ORIGINS` — documented ใน `GEMINI.md` §4.3
+- Startup notice บอกสถานะ bind/auth/password เมื่อรัน `python database.py` เพื่อให้เห็นว่าเซิร์ฟเวอร์กำลังเปิดถึงวง LAN หรือไม่
+- อัปเดตเอกสาร contract: `GEMINI.md` §4.3 (auth, endpoints ที่ guard, response shape ของ delete), `AGENTS.md` (Stack & Data Flow + Security debt checklist ที่แยกสถานะ [x]/[ ] ชัดเจน)
+
+## [2.9.0] - 2026-10-20
+
+### Security
+- ถอด GitHub token ที่ฝังอยู่ใน bundle ออกจาก `src/lib/api.js` และเลิกนอนาเข้าจาก `/api/sync-config` (เดิมเป็นไฟล์สาธารณะบน R2 ที่ใครก็ดาวน์โหลดได้) — การเขียนขึ้น GitHub ต้องใช้ Fine-grained PAT ที่ผู้ใช้ใส่เองผ่าน `GitHubTokenModal` เท่านั้น (`src/lib/api.js`, `src/components/auth/GitHubTokenModal.jsx`)
+- กัน record ที่ไม่ใช่ข้อมูลภาคสนามหลุดขึ้น repo ข้อมูล: เพิ่ม `isCommittableRecordId()` ยอมรับเฉพาะรูปแบบ `PM-<15ตัวเลข>-<hex4>` (client) และ `PM-<YYYYmmdd>-<HHMMSS>-<hex4>` (server) ใน `syncPendingLocalSurveys` พร้อม `console.warn` เมื่อข้าม (`src/lib/api.js`)
+- หยุดพฤติกรรม fail เงียบเมื่อถูก GitHub จำกัดโควตาคำขอ (unauthenticated = 60 req/hr/IP และแอปไม่มี token สาธารณะแล้ว): ตรวจ 429 หรือ 403 + `x-ratelimit-remaining: 0` แล้ว backoff 5 นาที คืน cache ล่าสุดพร้อมแจ้งผู้ใช้ (`src/lib/api.js`)
+
+### Added
+- `promptGitHubToken(reason, cooldownMs)` throttle ต่อ reason (กัน modal/toast เด้งรัวจากการ poll ทุก 10 วินาที), `githubErrorText(code)` map error code → ภาษาไทย, และ error code `no_token`/`rate_limited` ในผลลัพธ์ `submitSurvey`/`updateSurvey`/`deleteSurveys` (`src/lib/api.js`)
+
+### Changed
+- ลบ `initSystemToken()` (ไม่มี caller ใดนอกไฟล์นี้) — client ไม่เรียก `/api/sync-config` อีก
+- UI แสดงข้อความภาษาไทยแทน raw error code และแยกข้อความตามสาเหตุ no_token / bad_token / rate_limited (`src/components/Navbar.jsx`, `src/components/field/FieldVisitView.jsx`, `src/components/dashboard/RecentSurveys.jsx`)
+- ข้อจำกัดที่ทราบ: ข้อมูลสำรวจและผู้ติดต่อใน `data/surveys/*.json` ยังอยู่ใน GitHub repo สาธารณะ — การปิดช่องนี้ต้องทำ repo เป็น private หรือเพิ่ม server proxy เป็นงานแยก
 
 ## [2.8.9] - 2026-10-20
 

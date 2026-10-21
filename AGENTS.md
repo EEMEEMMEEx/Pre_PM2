@@ -36,7 +36,9 @@
 
 ## Stack & Data Flow (สรุป)
 - **Frontend**: React 18 + Vite 5 + Tailwind CSS v4 (`src/index.css`) + Radix UI + Framer Motion + `lucide-react`; alias `@` → `src/`
-- **Production hosting**: Cloudflare R2 public bucket (`pub-*.r2.dev`) = **static เท่านั้น** — ไม่มี server code; `/api/dashboard`, `/api/database`, `/api/github-status`, `/api/sync-config` เป็นไฟล์ snapshot ที่ `deploy_r2.py` อัปโหลด, `POST /api/*` บน r2.dev ได้ 401/404 เสมอ
+- **Production hosting**: Cloudflare R2 public bucket (`pub-*.r2.dev`) = **static เท่านั้น** — ไม่มี server code; `/api/dashboard`, `/api/database`, `/api/github-status`, `/api/onedrive-status` เป็นไฟล์ snapshot ที่ `deploy_r2.py` อัปโหลด, `POST /api/*` บน r2.dev ได้ 401/404 เสมอ
+- **GitHub credential ฝั่ง client (v2.9.0)**: ไม่มีการฝัง token ใน bundle อีกต่อไป — การเขียนขึ้น GitHub ต้องใช้ Fine-grained PAT (scope `Thaidimaru/Pre_PM2`, `Contents: Read and write`) ที่ผู้ใช้ใส่ใน `GitHubTokenModal` และเก็บใน `localStorage`; เครื่องที่ไม่มี PAT = อ่านได้อย่างเดียว (ข้อมูลเข้าคิวใน localStorage จนกว่าจะใส่ PAT)
+- **Local server auth (v2.10.0)**: `database.py` ผูก `127.0.0.1` เป็น default, path ข้อมูล/เขียนต้องมี `Bearer token` เมื่อมาจากนอกเครื่อง (token จาก `POST /api/login`, อายุ 8 ชม.), CORS สะท้อนเฉพาะ `ALLOWED_ORIGINS` — env: `HOST`, `PORT`, `REQUIRE_TOKEN`, `ALLOWED_ORIGINS`, `FORM_PASSWORD`
 - **Data source of truth (production)**: GitHub `Thaidimaru/Pre_PM2` → `data/surveys/<recordId>.json` เขียน/ลบผ่าน GitHub Contents API ใน [`src/lib/api.js`](src/lib/api.js) + localStorage (`nbtc_pre_pm_saved_surveys`) เป็น offline cache
 - **Local server**: `python database.py` (port 8765, SQLite `survey.db`, `/api/export-pdf`, `/photos/*`) — มีเฉพาะเครื่อง local; dev proxy อยู่ใน `vite.config.mjs`
 - **PWA**: `public/sw.js` (register ใน `src/main.jsx`, ปิดบน localhost)
@@ -50,7 +52,12 @@
 - **Sensitive files**: `access-password.txt`, `DATABASE.xlsx`, `survey.db`, `SURVEY_DATA.xlsx` ห้ามถูก serve ผ่าน web/R2
 
 > [!CAUTION]
-> **Known security debt (ยังไม่แก้)**: [`src/lib/api.js:11`](src/lib/api.js) มี GitHub token hardcode ใน bundle และ [`deploy_r2.py:185-197`](deploy_r2.py) อัปโหลด token ขึ้น `/api/sync-config` สาธารณะ → ห้ามเพิ่มรูปแบบนี้, งานที่แตะส่วนนี้ต้อง revoke/rotate token และย้ายไป proxy ฝั่ง server (ต้องได้รับอนุญาตก่อน)
+> **Security debt — สถานะล่าสุด**:
+> - [x] `src/lib/api.js` ไม่มี GitHub token ฝังใน bundle อีกแล้ว และ client ไม่เรียก `/api/sync-config` (v2.9.0)
+> - [ ] **ต้อง revoke/rotate GitHub token เก่า** — ค่าเดิมยังอยู่ใน git history สาธารณะและเคยถูกเผยแพร่ผ่าน R2; ต้องเพิกถอนที่ต้นทาง (GitHub → Settings → Developer settings) โดยผู้ดูแล
+> - [x] [`deploy_r2.py`](deploy_r2.py) ไม่อัปโหลด token ขึ้น bucket อีกแล้ว (v2.11.0) และ purge `/api/sync-config` + `/sync-config` ทุกรอบ deploy — **object เดิมยัง live บน R2 จนกว่าจะ deploy จริง** (ตรวจแล้ว: HTTP 200 พร้อมคีย์ `token`); รัน `python deploy_r2.py --purge-secrets-only` หรือ `--dry-run` เพื่อตรวจสอบก่อนได้ (ต้องได้รับอนุญาตก่อน)
+> - [ ] `access-password.txt` ยังถูก track ใน git (เปิดเผยสาธารณะ) → `git rm --cached` + เพิ่ม `.gitignore` + ตั้ง `FORM_PASSWORD` ค่าใหม่
+> - [ ] `data/surveys/*.json` และ `DATABASE.xlsx` มีข้อมูลติดต่อผู้ให้ข้อมูลอยู่ใน repo สาธารณะ → ต้องทำ repo/data เป็น private หรือใช้ server proxy (ยังไม่อยู่ในขอบเขตงานที่อนุมัติ)
 
 ---
 

@@ -165,7 +165,7 @@ export function GitHubTokenModal({ isOpen, onClose, onUpdated }) {
                   GitHub Personal Access Token (PAT)
                 </span>
                 <a
-                  href="https://github.com/settings/tokens/new?description=NBTC-PrePM-Sync&scopes=repo"
+                  href="https://github.com/settings/personal-access-tokens/new"
                   target="_blank"
                   rel="noreferrer"
                   className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
@@ -189,8 +189,10 @@ export function GitHubTokenModal({ isOpen, onClose, onUpdated }) {
                     : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:ring-sky-500/20'
                 )}
               />
-              <p className="mt-1 text-[11px] text-slate-400">
-                สิทธิ์ที่ต้องการ: <code>repo</code> หรือ <code>contents: write</code> (สำหรับส่งผลสำรวจเข้าโฟลเดอร์ <code>data/surveys</code>)
+              <p className="mt-1 text-[11px] text-slate-400 leading-relaxed">
+                ใช้ <strong>Fine-grained PAT</strong> เท่านั้น: Limit access to repository <code>Thaidimaru/Pre_PM2</code> และตั้ง
+                Permissions → <code>Contents: Read and write</code> (ส่งผลสำรวจเข้าโฟลเดอร์ <code>data/surveys</code>)
+                ตั้งอายุใช้งานให้สั้นที่สุดที่รับได้ — แอปไม่ฝัง Token สาธารณะอีกต่อไป จึงต้องใส่ Token บนทุกเครื่องที่ต้องการซิงค์
               </p>
             </div>
 

@@ -7,7 +7,6 @@ const LOCAL_SURVEYS_KEY = 'nbtc_pre_pm_saved_surveys';
 const DELETED_SURVEYS_KEY = 'nbtc_pre_pm_deleted_surveys';
 const GITHUB_TOKEN_KEY = 'nbtc_github_token';
 const SURVEY_RESET_DATE = '2026-10-05T00:00:00.000Z';
-
 export function getDeletedSurveyIds() {
   try {
     if (typeof window === 'undefined') return new Set();
@@ -42,26 +41,9 @@ export function removeDeletedSurveyIds(ids) {
   } catch (e) {}
 }
 
-// Dynamic token resolution from /api/sync-config or fallback
-let cachedSystemToken = ['gh', 'o_', 'jII8mkLO', 'xC9h6gyN0n', '9XqKOxxNw', 'VlT2vQToB'].join('');
-
-export async function initSystemToken() {
-  try {
-    const res = await fetch(`/api/sync-config?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
-    if (res && res.ok) {
-      const data = await res.json();
-      if (data?.token) {
-        cachedSystemToken = data.token;
-        return cachedSystemToken;
-      }
-    }
-  } catch (e) {}
-  return cachedSystemToken;
-}
-
-if (typeof window !== 'undefined') {
-  initSystemToken();
-}
+// v2.9.0: ไม่ฝัง GitHub token ใน bundle และไม่นอนาเข้าจาก /api/sync-config (เคยเป็นไฟล์สาธารณะบน R2)
+// ทุกการเขียนขึ้น GitHub ต้องใช้ fine-grained PAT ที่ผู้ใช้ใส่เองใน GitHubTokenModal เท่านั้น
+let cachedSystemToken = '';
 
 export function getStoredGitHubToken() {
   try {
@@ -132,6 +114,41 @@ export function notifyGitHubTokenRequired(reason = 'bad_token') {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nbtc-github-token-required', { detail: { reason } }));
   }
+}
+
+/**
+ * v2.9.0: แจ้งให้ตั้งค่า token แบบมี cooldown ต่อ reason
+ * (Dashboard poll ทุก 10 วิ — ไม่งั้น modal/toast เด้งรัวเมื่อเครื่องยังไม่มี PAT)
+ */
+const lastTokenPromptAt = new Map();
+function promptGitHubToken(reason = 'no_token', cooldownMs = 15000) {
+  const now = Date.now();
+  if (now - (lastTokenPromptAt.get(reason) || 0) < cooldownMs) return false;
+  lastTokenPromptAt.set(reason, now);
+  notifyGitHubTokenRequired(reason);
+  return true;
+}
+
+/**
+ * recordId ที่ยอมให้ commit ขึ้น GitHub ได้ — รองรับทั้งรูปแบบฝั่ง client
+ * PM-<15 หลัก>-<hex4> และฝั่งเซิร์ฟเวอร์ PM-<YYYYmmdd>-<HHMMSS>-<hex4>
+ * ใช้กัน record ทดสอบ/legacy id ไม่ให้หลุดขึ้น repo ข้อมูล
+ */
+const COMMITTABLE_RECORD_ID = /^PM-(?:\d{15}|\d{8}-\d{6})-[0-9a-f]{4}$/;
+export function isCommittableRecordId(recordId) {
+  return COMMITTABLE_RECORD_ID.test(String(recordId || ''));
+}
+
+/** แปลง error code จาก GitHub sync เป็นข้อความที่ผู้ใช้เข้าใจได้ (UI ห้ามโชว์ raw code) */
+export function githubErrorText(code) {
+  const raw = String(code || '');
+  if (raw === 'no_token') return 'ยังไม่ได้ตั้งค่า GitHub Token บนเครื่องนี้';
+  if (raw === 'bad_token') return 'GitHub Token ไม่ถูกต้องหรือหมดอายุ';
+  if (raw === 'rate_limited') return 'GitHub จำกัดจำนวนคำขอชั่วคราว (rate limit)';
+  if (raw === 'file_not_found_on_github') return 'ไม่พบไฟล์บน GitHub';
+  if (raw === 'github_write_failed') return 'เขียนขึ้น GitHub ไม่สำเร็จ';
+  if (raw === 'github_delete_failed') return 'ลบบน GitHub ไม่สำเร็จ';
+  return raw || 'ไม่ทราบสาเหตุ';
 }
 
 // ---------------------------------------------------------------------------
@@ -380,14 +397,25 @@ export async function syncPendingLocalSurveys() {
   const deletedIds = getDeletedSurveyIds();
   const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
   if (!Array.isArray(localSurveys) || localSurveys.length === 0) return;
+  const pending = localSurveys.filter(
+    (s) => s && s.recordId && !s.githubSynced && isCommittableRecordId(s.recordId)
+  );
   const token = getStoredGitHubToken();
-  if (!token) return;
+  if (!token) {
+    // v2.9.0: bundle ไม่มี tokenฝังในแอปแล้ว — ต้องให้ผู้ใช้ใส่ PAT จึงจะซิงค์ขึ้น GitHub ได้
+    if (pending.length > 0) promptGitHubToken('no_token', 60000);
+    return;
+  }
 
   isSyncingPending = true;
   try {
     for (const survey of localSurveys) {
       if (!survey || !survey.recordId) continue;
       if (survey.githubSynced) continue;
+      if (!isCommittableRecordId(survey.recordId)) {
+        console.warn('[sync] ข้าม record ที่ recordId ไม่เข้ารูปแบบ (กัน test/legacy id หลุดขึ้น GitHub):', survey.recordId);
+        continue;
+      }
       // ข้าม record ที่กำลังถูกเขียนอยู่ หรือเพิ่งเริ่มเขียน (กัน commit ซ้ำจากหลาย code path)
       if (isGitHubWritePending(survey.recordId) || isSurveySyncing(survey)) continue;
       try {
@@ -572,7 +600,27 @@ export async function fetchStations(token = '') {
 }
 
 export async function loginUser(password = '') {
-  return { token: 'public', ok: true };
+  // v2.10.0: ต่อรอง bearer token กับเซิร์ฟเวอร์จริง (database.py) — เดิมเป็น stub ที่คืน 'public' ตลอด
+  // บน static host (r2.dev) ไม่มี backend: คืน ok=false เพื่อให้ UI บอกผู้ใช้ว่าไม่ต้อง login ก็ใช้งานได้
+  if (isStaticHost()) {
+    return { token: null, ok: false, error: 'no_backend', publicAccess: true };
+  }
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }).catch(() => null);
+    if (!res) return { token: null, ok: false, error: 'network_error' };
+    const data = await res.json().catch(() => ({}));
+    return {
+      token: data.token || null,
+      ok: Boolean(res.ok && data.ok && data.token),
+      error: res.ok ? null : (data.error || data.message || `HTTP ${res.status}`),
+    };
+  } catch (e) {
+    return { token: null, ok: false, error: e.message };
+  }
 }
 
 export async function submitSurvey(arg1, arg2, arg3) {
@@ -695,6 +743,9 @@ export async function submitSurvey(arg1, arg2, arg3) {
         console.warn('GitHub client commit failed:', e);
         finalResult.githubError = e.message;
       }
+    } else {
+      finalResult.githubError = 'no_token';
+      promptGitHubToken('no_token');
     }
   }
 
@@ -823,6 +874,9 @@ export async function updateSurvey(arg1, arg2, arg3) {
         console.warn('GitHub client update commit failed:', e);
         finalResult.githubError = e.message;
       }
+    } else {
+      finalResult.githubError = 'no_token';
+      promptGitHubToken('no_token');
     }
   }
 
@@ -894,7 +948,8 @@ export async function deleteSurveys(recordIds) {
     }
     if (!ghToken) {
       deletedIds.push(id);
-      failed.push({ id, reason: 'no_token_saved_locally' });
+      failed.push({ id, reason: 'no_token' });
+      promptGitHubToken('no_token');
       continue;
     }
     const ghRes = await deleteSurveyFromGitHubClient(id, ghToken);
@@ -1032,10 +1087,30 @@ function formatRemoteSurveyItem(s, sha = null) {
   };
 }
 
+// v2.9.0: backoff เมื่อ GitHub จำกัดโควตาคำขอ — โควตา unauthenticated คือ 60 req/hr/IP
+// และแอปไม่มี token สาธารณะให้อาศัยอีกต่อไป จึงต้องหยุดยิงซ้ำแทนที่จะ fail เงียบทุก 10 วินาที
+const GH_RATE_LIMIT_BACKOFF_MS = 300000;
+let ghRateLimitedUntil = 0;
+
+function isGitHubRateLimited(res) {
+  if (!res) return false;
+  if (res.status === 429) return true;
+  if (res.status !== 403) return false;
+  return res.headers.get('x-ratelimit-remaining') === '0';
+}
+
+function noteGitHubRateLimited() {
+  ghRateLimitedUntil = Date.now() + GH_RATE_LIMIT_BACKOFF_MS;
+  console.warn('[github] rate limited — หยุด poll ชั่วคราว', GH_RATE_LIMIT_BACKOFF_MS / 1000, 'วินาที');
+  promptGitHubToken('rate_limited', GH_RATE_LIMIT_BACKOFF_MS);
+}
+
 export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
   const now = Date.now();
   const ghAuthToken = getStoredGitHubToken();
   const authHeaders = ghAuthToken ? { Authorization: `Bearer ${ghAuthToken}` } : {};
+
+  if (now < ghRateLimitedUntil) return clientGhSurveysCache || [];
 
   try {
     // 1. Lightweight commit check with ETag to save API rate limits & bandwidth
@@ -1048,6 +1123,11 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
       `https://api.github.com/repos/${GITHUB_REPO}/commits?path=data/surveys&per_page=1&_t=${now}`,
       { headers: commitHeaders, cache: 'no-store' }
     ).catch(() => null);
+
+    if (isGitHubRateLimited(commitRes)) {
+      noteGitHubRateLimited();
+      return clientGhSurveysCache || [];
+    }
 
     // If 304 Not Modified, nothing has changed on GitHub!
     if (commitRes && commitRes.status === 304 && clientGhSurveysMap.size > 0 && !force) {
@@ -1075,6 +1155,11 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
       headers: { Accept: 'application/vnd.github+json', ...authHeaders },
       cache: 'no-store',
     });
+    if (isGitHubRateLimited(res)) {
+      noteGitHubRateLimited();
+      clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
+      return clientGhSurveysCache;
+    }
     if (!res.ok) {
       clientGhSurveysCache = Array.from(clientGhSurveysMap.values());
       return clientGhSurveysCache;
