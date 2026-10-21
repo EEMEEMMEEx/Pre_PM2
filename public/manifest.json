@@ -2,8 +2,8 @@
   "name": "Survey Control Room — NBTC Microwave",
   "short_name": "Pre-PM",
   "description": "ระบบศูนย์ควบคุมและบันทึกข้อมูลการตรวจเยี่ยมเจ้าของพื้นที่สำหรับงาน Pre-PM สถานีวิทยุคมนาคม NBTC Microwave",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#020b1b",
@@ -11,18 +11,18 @@
   "categories": ["business", "utilities", "productivity"],
   "icons": [
     {
-      "src": "/favicon.png",
+      "src": "./favicon.png",
       "sizes": "64x64",
       "type": "image/png"
     },
     {
-      "src": "/nbtc-logo-dashboard.png",
+      "src": "./nbtc-logo-dashboard.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/nbtc-logo-dashboard.png",
+      "src": "./nbtc-logo-dashboard.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

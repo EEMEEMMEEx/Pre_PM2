@@ -67,13 +67,20 @@ export function exportPhotosFromJson(byFolder = false) {
       }
 
       photos.forEach((photo, idx) => {
-        const rawName = photo.name || `photo_${idx + 1}.jpg`;
-        const base64Str = photo.base64Data || (photo.url && photo.url.includes('base64,') ? photo.url.split('base64,')[1] : null) || (photo.dataUrl && photo.dataUrl.includes('base64,') ? photo.dataUrl.split('base64,')[1] : null);
+        const cleanName = (photo.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
+        let base64Str = photo.base64Data || photo.data || '';
+        if (!base64Str) {
+          if (photo.url && photo.url.includes('base64,')) {
+            base64Str = photo.url.split('base64,')[1];
+          } else if (photo.dataUrl && photo.dataUrl.includes('base64,')) {
+            base64Str = photo.dataUrl.split('base64,')[1];
+          }
+        }
 
         if (!base64Str) return;
 
         const buffer = Buffer.from(base64Str, 'base64');
-        const filename = byFolder ? rawName : `${recordId}_${rawName}`;
+        const filename = byFolder ? cleanName : `${recordId}_${cleanName}`;
         const destPath = path.join(targetSubdir, filename);
 
         fs.writeFileSync(destPath, buffer);

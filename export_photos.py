@@ -40,8 +40,13 @@ def export_photos_from_json(by_folder: bool = False):
             if not isinstance(photos, list):
                 continue
             for idx, photo in enumerate(photos):
-                raw_name = photo.get("name") or f"photo_{idx+1}.jpg"
-                b64 = photo.get("base64Data") or (photo.get("url", "").split("base64,")[1] if "base64," in photo.get("url", "") else None) or (photo.get("dataUrl", "").split("base64,")[1] if "base64," in photo.get("dataUrl", "") else None)
+                raw_name = (photo.get("name") or f"photo_{idx+1}.jpg").replace("/", "_").replace("\\", "_").replace(":", "_")
+                b64 = photo.get("base64Data") or photo.get("data") or None
+                if not b64:
+                    if "base64," in photo.get("url", ""):
+                        b64 = photo.get("url", "").split("base64,")[1]
+                    elif "base64," in photo.get("dataUrl", ""):
+                        b64 = photo.get("dataUrl", "").split("base64,")[1]
                 if not b64:
                     continue
                 photo_bytes = base64.b64decode(b64)

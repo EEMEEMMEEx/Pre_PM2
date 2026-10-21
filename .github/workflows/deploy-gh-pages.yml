@@ -45,6 +45,9 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
       - name: Install Node Dependencies
         run: npm ci
 
@@ -52,9 +55,6 @@ jobs:
         env:
           VITE_BASE_PATH: '/Pre_PM2/'
         run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
