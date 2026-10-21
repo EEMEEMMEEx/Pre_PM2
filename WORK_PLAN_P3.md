@@ -16,15 +16,15 @@
 
 | id | งาน | P | สถานะ | ผลลัพธ์ที่คาดหวัง (วัดได้) | พึงพา/ส่งผลถึง |
 |---|---|---|---|---|---|
-| D1 | ประสาน + ยืนยันผล revoke OAuth grant ของบัญชี Thaidimaru | P0 | BLOCKED (ต้องเจ้าของบัญชีลงมือ) | GET /user ด้วยค่าเดิม → 401 Bad credentials + บันทึกหลักฐาน | เปิดทาง D2 · ปิดรอยรั่วร่วมกับ B2/D3 |
-| D2 | ออก Fine-grained PAT รายเครื่อง + ทะเบียน | P0 | READY | ทุกเครื่อง sync ได้จริง มีทะเบียน + คิว rotate ไม่เกิน 90 วัน | ลดงานช่วยของ P2 (C3) |
-| D3 | จัดหา R2 credentials + รัน purge (ร่วมกับ B2) | P0 | BLOCKED (ยังไม่มี r2-credentials.json) | bundle เก่าที่เก็บ token → 404 ทั้ง 2 คีย์ + หลักฐาน before/after | ต้อง P1 ทำ B2 ก่อน |
+| D1 | ประสาน + ยืนยันผล revoke OAuth grant ของบัญชี Thaidimaru | P0 | **DONE** (2026-10-21) | ตรวจ 3 แหล่ง → 401 ทุกแหล่ง · `docs/qa-evidence/2026-10-21-revoke-verification.md` | เปิดทาง D2 · เหลือ B2/D3 เป็นงาน hygiene |
+| D2 | ออก Fine-grained PAT รายเครื่อง + ทะเบียน | P0 | **READY (เร่งด่วนสุด)** | ทุกเครื่อง sync ได้จริง · ทะเบียนพร้อมที่ `docs/pat-register.md` | ต้องสร้าง PAT ใน UI บัญชีเจ้าของข้อมูล (ทีมทำแทนไม่ได้) |
+| D3 | จัดหา R2 credentials + รัน purge (ร่วมกับ B2) | **P1** (ลดจาก P0 — ค่าที่ค้างถูก revoke แล้ว) | BLOCKED (ยังไม่มี r2-credentials.json) | bundle เก่า 2 ไฟล์ → 404 + หลักฐาน before/after | ต้อง P1 ทำ B2 ก่อน และได้รับอนุญาต |
 | B4-1 | ตั้ง FORM_PASSWORD ใหม่ + ทดสอบ login (ขั้นแรกของ B4) | P0 | READY | login ผ่านด้วยรหัสใหม่, ค่าเดิมใช้ไม่ได้ | P1 ทำขั้น git rm --cached ต่อ |
-| D4 | PII inventory ทั้งระบบ + ทางเลือกสถาปัตยกรรม | P1 | READY | เอกสาร docs/pii-inventory.md พร้อมข้อเสนอ 1 อัน (รวมผลถึง B8) | P1/P2 ใช้ประกอบการตัดสินใจ |
-| D5 | Data reconciliation 3 แหล่ง (ไฟล์ ↔ SQLite ↔ GitHub) | P1 | READY | ตัวเลขเท่ากันต่อ release + ตรวจเจอ record ที่ฟื้นคืนกลับมาแสดง | ใช้เป็น QA gate ใน D7 |
-| D6 | Runbook docs/ops-*.md + เติม SECURITY.md + อัปเดต debt checklist | P1 | READY | คนใหม่รับช่วงได้โดยไม่ต้องถาม | ทุก track อ้างอิง |
-| D7 | QA gate ต่อ release (build/preview/headless/offline/multi-tab) | P1 | READY | ทุก PR มีหลักฐาน PASS/FAIL/NOT RUN ต่อเช็กลิสต์ | gate ก่อน merge |
-| V1 | ตรวจรับ production หลัง deploy รอบใหม่ | P0 | BLOCKED (รอ deploy รอบใหม่) | endpoint สาธารณะไม่มี token/PII ต้องห้าม, shell ใหม่ทำงาน | นับเป็นส่วนของ D7 |
+| D4 | PII inventory ทั้งระบบ + ทางเลือกสถาปัตยกรรม | P1 | **DONE** (2026-10-21) | `docs/pii-inventory.md` + `scripts/pii_scan.py` (ตัวเลขจริง: 180/180 ไฟล์มี PII) | P1/P2 ใช้ตัดสินใจ B8 |
+| D5 | Data reconciliation 3 แหล่ง (ไฟล์ ↔ SQLite ↔ GitHub) | P1 | **DONE** (2026-10-21) | รัน `scripts/audit_data.py` → **180 = 180 = 180** ไม่มี drift ทิศทางใด | ใช้เป็น QA gate ใน D7 |
+| D6 | Runbook docs/ops-*.md + เติม SECURITY.md + อัปเดต debt checklist | P1 | **DONE (บางส่วน)** | มีแล้ว: `docs/ops-credentials.md`, `docs/pat-register.md`, `SECURITY.md` ฉบับจริง · ยังเหลือ `docs/ops-local-server.md` + อัปเดต `AGENTS.md` debt | ทุก track อ้างอิง |
+| D7 | QA gate ต่อ release (build/preview/headless/offline/multi-tab) | P1 | **DOING** | เริ่มเก็บหลักฐานต่อ release แล้ว: `docs/qa-evidence/` 2 ฉบับ | gate ก่อน merge |
+| V1 | ตรวจรับ production หลัง deploy รอบใหม่ | P0 | **PASS (bundle 2.11.4)** | ตรวจ 11 รายการผ่าน · `docs/qa-evidence/2026-10-21-v1-acceptance-2-11-4.md` | ตรวจซ้ำทุกครั้งที่ deploy |
 | D8 | ทดสอบ PAT หมดอายุ → แอปแจ้งเตือน ไม่ fail เงียบ | P2 | READY | modal เด้ง + ข้อมูลค้างในคิวไม่หาย + toast ไม่รัว | ร่วมกับ P2 (C3) |
 
 ## รายละเอียดงาน
@@ -106,6 +106,12 @@
 | 2026-10-21 | D1 | BLOCKED | fingerprint e505cad6f4cf5ae5 · /api/sync-config = 404 แต่ bundle เก่า = 200 | ต้องให้ Thaidimaru ลงมือ |
 | 2026-10-21 | D3 | BLOCKED | ไม่มี r2-credentials.json บนเครื่องนี้ | รอ P1 ทำ B2 + ขอ credentials |
 | | B4-1 | READY | | ต้องทำก่อน P1 เสมอ |
+| 2026-10-21 | D1 | **DONE** | `python scripts/verify_revoked_token.py` → 3 แหล่ง = 401 Bad credentials (fp `e505cad6f4cf5ae5`) · `docs/qa-evidence/2026-10-21-revoke-verification.md` | เจ้าของบัญชี revoke เองแล้ว; ทีมยืนยันผลได้ |
+| 2026-10-21 | D4 | **DONE** | `scripts/pii_scan.py` : surveys 180/180 มี PII (contactPosition/Village 180, Name/Phone 179, informantName 154) · DATABASE.xlsx 183 แถว มีคอลัมน์ติดต่อ 181 · snapshot dashboard = ไม่มี PII แล้ว · `docs/pii-inventory.md` | แก้บั๊กอ่าน header XLSX ของสคริปต์ตัวเองแล้ว |
+| 2026-10-21 | D5 | **DONE** | `scripts/audit_data.py` : files=180, db_rows=180, github_files=180, drift=0 ทุกทิศทาง | ตัวเลขตรงกันหลัง deploy 2.11.4 |
+| 2026-10-21 | D6 | **DONE (บางส่วน)** | สร้าง `docs/ops-credentials.md`, `docs/pat-register.md` · เติม `SECURITY.md` (31 บรรทัด แทน template) | เหลือ `docs/ops-local-server.md` + `AGENTS.md` |
+| 2026-10-21 | V1 | **PASS** | bundle `assets/index-BJ46wgZr.js` = 2.11.4 · `/api/sync-config` 404 · dashboard ไม่มี PII keys (รวม `contactVillage`) · onedrive/github status scrub แล้ว · `docs/qa-evidence/2026-10-21-v1-acceptance-2-11-4.md` | ยืนยันงาน B3 ของ P1 สำเร็จบน production |
+| 2026-10-21 | D7 | **DOING** | มี `docs/qa-evidence/` 2 ฉบับ (revoke + V1) และสคริปต์ตรวจ 3 ตัวใน `scripts/` | รอ B5 (`npm run test:py`) จาก P1 เพื่อใช้เป็น gate เต็มรูป |
 
 ## จุดประสานงาน (กันทำงานซ้ำและกันแก้ไฟล์ทับกัน)
 

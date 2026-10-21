@@ -62,11 +62,11 @@
 
 | id | งาน | คน | P | สถานะ | หมายเหตุ / บล็อกเกอร์ |
 | --- | --- | --- | --- | --- | --- |
-| D1 | revoke OAuth grant + triage บัญชี | P3 | P0 | BLOCKED (ต้องใช้บัญชี `Thaidimaru`) | fingerprint `e505cad6f4cf5ae5` |
-| D2 | ออก Fine-grained PAT ต่อเครื่อง + ทะเบียน | P3 | P0 | READY | ทำควบคู่กับ D1 |
-| D3 | จัดหา R2 credentials + รัน purge stale assets | P3 | P0 | BLOCKED (ไม่มี `r2-credentials.json` บนเครื่องนี้) | ร่วมกับ B2 |
+| D1 | revoke OAuth grant + triage บัญชี | P3 | P0 | **DONE 2026-10-21** | ยืนยัน 401 ทั้ง 3 แหล่งด้วย `scripts/verify_revoked_token.py` · `docs/qa-evidence/2026-10-21-revoke-verification.md` · เหลือ account hardening ฝั่งเจ้าของบัญชี |
+| D2 | ออก Fine-grained PAT ต่อเครื่อง + ทะเบียน | P3 | P0 | **READY (เร่งด่วนสุด)** | ทะเบียนพร้อมที่ `docs/pat-register.md` · ต้องสร้าง PAT ใน UI บัญชีเจ้าของข้อมูล — เครื่องที่ยังไม่มี PAT เขียน GitHub ไม่ได้ |
+| D3 | จัดหา R2 credentials + รัน purge stale assets | P3 | **P1** (ลดความเร่งด่วน: ค่าที่ค้างถูก revoke แล้ว) | BLOCKED (ไม่มี `r2-credentials.json` บนเครื่องนี้) | ร่วมกับ B2 · ต้องได้รับอนุญาตก่อนเขียน bucket |
 | B2 | `--purge-stale-assets` ใน `deploy_r2.py` | P1 | P0 | READY | upload ก่อน delete เสมอ |
-| B3 | ปิด PII ที่เหลือใน snapshot (`contactVillage`, `onedrive-status`, `github-status.user`) | P1 | P0 | READY | ประสาน C5 (รายงานยังต้องใช้ข้อมูล) |
+| B3 | ปิด PII ที่เหลือใน snapshot (`contactVillage`, `onedrive-status`, `github-status.user`) | P1 | P0 | **DONE — ตรวจรับแล้ว (V1, bundle 2.11.4)** | ยืนยันสด: dashboard ไม่มี PII keys, onedrive ไม่มีอีเมล/พาธ, github-status ไม่มี `user` |
 | C1 | แนบ `Authorization` ฝั่ง client ใน `/api/save`, `/api/update`, `/api/delete` | P2 | P0 | READY | v2.10.0 บังคับ bearer → **ตอนนี้ LAN client เขียนไม่ได้** |
 | C2 | จัดการ login gate/UI (`LoginView.jsx` เป็น dead code) | P2 | P0 | READY | ต้องคุยก่อนว่าจะเปิด LAN หรือไม่ |
 | B4 | เลิก track `access-password.txt` + `.gitignore` + ตั้ง `FORM_PASSWORD` ใหม่ | P1+P3 | P0 | GATED | ห้ามทำก่อนตั้งรหัสใหม่ |
@@ -76,16 +76,19 @@
 | C5 | ตรวจ dashboard + รายงาน A4 หลัง snapshot ไม่มี contact | P2 | P1 | READY | on r2.dev ยังแสดงเบอร์จาก GitHub |
 | B5 | `tests/test_database.py` (stdlib unittest) คลุม auth/guard/CORS/delete | P1 | P1 | READY | repo ยังไม่มี test script |
 | B6 | กัน backup `survey-*.json` ร่วงเข้า git | P1 | P1 | READY | upstream ถอด ignore line ออกแล้ว |
-| D4 | PII inventory ทั้งระบบ + ข้อเสนอ (private repo/proxy) | P3 | P1 | READY | ผลลัพธ์เป็นเอกสาร + งานต่อยอด (B8) |
-| D5 | Data reconciliation `data/surveys` ↔ SQLite ↔ GitHub listing | P3 | P1 | READY | สคริปต์ read-only |
-| D6 | เขียน runbook `docs/ops-*.md`, เติม `SECURITY.md`, อัปเดต debt checklist | P3 | P1 | READY | `SECURITY.md` upstream ยังเป็น template ว่าง |
-| D7 | QA matrix ต่อ release (build/preview/headless/offline/multi-tab) | P3 | P1 | READY | เป็น gate ก่อน merge |
+| D4 | PII inventory ทั้งระบบ + ข้อเสนอ (private repo/proxy) | P3 | P1 | **DONE 2026-10-21** | `docs/pii-inventory.md` + `scripts/pii_scan.py` · ตัวเลขจริง 180/180 ไฟล์มี PII · เป็น input ของ B8 |
+| D5 | Data reconciliation `data/surveys` ↔ SQLite ↔ GitHub listing | P3 | P1 | **DONE 2026-10-21** | `scripts/audit_data.py` → 180 = 180 = 180, drift 0 ทุกทิศทาง |
+| D6 | เขียน runbook `docs/ops-*.md`, เติม `SECURITY.md`, อัปเดต debt checklist | P3 | P1 | **DONE (บางส่วน)** | มี `docs/ops-credentials.md`, `docs/pat-register.md`, `SECURITY.md` ฉบับจริง · เหลือ `docs/ops-local-server.md` + `AGENTS.md` debt |
+| D7 | QA matrix ต่อ release (build/preview/headless/offline/multi-tab) | P3 | P1 | **DOING** | เก็บหลักฐานต่อ release ใน `docs/qa-evidence/` (2 ฉบับแล้ว) · รอ `npm run test:py` จาก B5 |
+| V1 | ตรวจรับ production หลัง deploy รอบใหม่ | P3 | P0 | **PASS (bundle 2.11.4)** | `docs/qa-evidence/2026-10-21-v1-acceptance-2-11-4.md` — ตรวจ 11 รายการผ่าน |
 | B7 | Prune audit 4 แถว + วิธี restore จาก history | P1 | P2 | READY | `PM-202610070225252-d5df` ฯลฯ |
 | C6 | คุม quota localStorage (base64 photos) | P2 | P2 | READY | ตาม AGENTS DoD |
 | C7 | Accessibility/DoD audit ฟอร์ม 7 ขั้น + dark/light contrast | P2 | P2 | READY | |
 | D8 | ตรวจ PAT หมดอายุแล้วแอปแจ้งเตือน ไม่ fail เงียบ | P3 | P2 | READY | สรุปร่วมกับ C3 |
 | B9 | สลับลำดับอัปโหลดให้ `index.html`/SPA fallback เป็นรายการสุดท้าย (กัน deploy ถูก cancel แล้ว r2.dev พัง) | P1 | P0 | READY | หลักฐาน: run `39533128570` อัปโหลด index.html เป็นไฟล์ที่ 2/28 · workflow ตั้ง `cancel-in-progress: true` |
-| B8 | Cloudflare Worker proxy สำหรับ read/write (แทน GitHub API ตรง) | P1+P2 | P2 | BLOCKED (ต้องตัดสินใจสถาปัตยกรรม + สิทธิ์ Cloudflare) | ทางออกถาวรของ PII |
+| B8 | Cloudflare Worker proxy สำหรับ read/write (แทน GitHub API ตรง) | P1+P2 | P2 | BLOCKED (ต้องตัดสินใจสถาปัตยกรรม + สิทธิ์ Cloudflare) | ทางออกถาวรของ PII · มี input จาก D4 แล้ว (`docs/pii-inventory.md` ข้อ 4) |
+
+> หมายเหตุจาก P3 (2026-10-21): เพิ่มสคริปต์ใหม่ใน `scripts/` 3 ตัว (`verify_revoked_token.py`, `audit_data.py`, `pii_scan.py`) ซึ่งเป็น `*.py` → ตามกฎ version management ให้ **P1 รวม version bump + `CHANGELOG.md`** ในรอบถัดไป (P3 ไม่แตะไฟล์ของ P1)
 
 ---
 
