@@ -181,9 +181,21 @@ export function isStaticHost() {
  * เต็มไปด้วย error โดยไม่ได้ข้อมูลอะไร -> ข้ามไปเลยเมื่ออยู่บน static host
  */
 function snapshotUrl(path) {
-  if (isStaticHost()) return null;
+  if (!hasStaticSnapshots()) return null;
   const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
   return `${base}${path}`;
+}
+
+/**
+ * R2 เป็น static host ที่ "มี" snapshot (deploy_r2.py อัปโหลด /api/* ขึ้น bucket)
+ * ส่วน GitHub Pages ไม่มี backend และ workflow ไม่ได้รัน deploy_r2.py -> ไม่มี snapshot
+ * แยกสองกรณีนี้เพื่อให้ R2 ยังได้ข้อมูล และ Pages ไม่ต้องยิง 404 ทิ้ง
+ */
+function hasStaticSnapshots() {
+  if (!isStaticHost()) return true;
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return !host.includes('github.io');
 }
 
 /** แจ้ง UI (Navbar) ให้เปิด GitHubTokenModal เมื่อ token หมดอายุ/ไม่มีสิทธิ์ */
@@ -658,10 +670,16 @@ export async function fetchStations(token = '') {
   const headers = apiAuthHeaders();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  let res = await fetch('/api/database', { headers }).catch(() => null);
+  // snapshot นี้มาจาก deploy_r2.py (R2) — บน GitHub Pages ไม่มีไฟล์นี้
+  // จึงข้ามไปเลยเพื่อไม่ให้เกิด 404 ใน console โดยไม่มีข้อมูลอะไรได้จริง
+  if (isStaticHost() && !hasStaticSnapshots()) {
+    return { stations: [], configured: false, source: 'unavailable_on_static_host' };
+  }
+
+  let res = await fetch(snapshotUrl('/api/database'), { headers }).catch(() => null);
 
   if (!res || res.status === 404) {
-    res = await fetch('/database', { headers });
+    res = await fetch(snapshotUrl('/database'), { headers });
   }
 
   if (!res.ok) {
