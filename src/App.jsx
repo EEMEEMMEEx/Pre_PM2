@@ -10,10 +10,27 @@ import { useTheme } from '@/context/ThemeContext';
 import { isStaticHost, saveLocalApiToken } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+// GitHub Pages เสิร์ฟใต้ subpath (BASE_URL = '/<repo>/') ส่วน R2/local = '/'
+// ตัด base ออกก่อนเทียบ route เพื่อให้ pathname matching ทำงานได้ทั้งสองแบบ
+const BASE = import.meta.env.BASE_URL || '/';
+
+function stripBase(pathname) {
+  if (BASE !== '/' && pathname.startsWith(BASE)) {
+    const rest = pathname.slice(BASE.length);
+    return '/' + rest.replace(/^\/+/, '');
+  }
+  return pathname;
+}
+
+function routeUrl(route) {
+  if (route === '/') return BASE;
+  return BASE.replace(/\/$/, '') + route;
+}
+
 export function App() {
   const { isDark } = useTheme();
   const [currentPage, setCurrentPage] = useState(() => {
-    const path = window.location.pathname;
+    const path = stripBase(window.location.pathname);
     if (path === '/dashboard') return 'dashboard';
     if (path === '/login' && !isStaticHost()) return 'login';
     return 'field';
@@ -31,7 +48,7 @@ export function App() {
       setEditingSurvey(null);
     }
     setCurrentPage(page);
-    const targetUrl = page === 'dashboard' ? '/dashboard' : page === 'login' ? '/login' : '/';
+    const targetUrl = page === 'dashboard' ? routeUrl('/dashboard') : page === 'login' ? routeUrl('/login') : routeUrl('/');
     if (window.location.pathname !== targetUrl) {
       window.history.pushState({}, '', targetUrl);
     }
@@ -42,7 +59,7 @@ export function App() {
     const handlePopState = () => {
       setMobileMenuOpen(false);
       setEditingSurvey(null);
-      const path = window.location.pathname;
+      const path = stripBase(window.location.pathname);
       if (path === '/dashboard') setCurrentPage('dashboard');
       else if (path === '/login' && !isStaticHost()) setCurrentPage('login');
       else setCurrentPage('field');
@@ -53,8 +70,8 @@ export function App() {
 
   // Redirect to home if browsing to /login on static host (no local server backend)
   useEffect(() => {
-    if (window.location.pathname === '/login' && isStaticHost()) {
-      window.history.replaceState({}, '', '/');
+    if (stripBase(window.location.pathname) === '/login' && isStaticHost()) {
+      window.history.replaceState({}, '', routeUrl('/'));
       setEditingSurvey(null);
       setCurrentPage('field');
     }
