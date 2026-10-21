@@ -1,4 +1,4 @@
-"""
+﻿"""
 NBTC Microwave — Survey Control Room (Pre-PM)
 Modular Standalone Backend Server (Python 3 + SQLite)
 """
@@ -614,6 +614,39 @@ class DatabaseService:
             except Exception:
                 pass
         return ""
+
+    @classmethod
+    def save_github_token(cls, token: str) -> dict:
+        """Save GitHub personal access token to persistent storage (github-token.txt)."""
+        clean_token = (token or "").strip()
+        try:
+            if clean_token:
+                AppConfig.GITHUB_TOKEN_PATH.write_text(clean_token, encoding="utf-8")
+            else:
+                if AppConfig.GITHUB_TOKEN_PATH.exists():
+                    AppConfig.GITHUB_TOKEN_PATH.unlink(missing_ok=True)
+
+            cls._cached_auth_status = None
+            cls._last_auth_time = 0
+
+            status = cls.check_github_auth()
+            return {
+                "ok": True,
+                "saved": True,
+                "configured": bool(clean_token),
+                "valid": status.get("valid", False),
+                "user": status.get("user"),
+                "repo": status.get("repo", "Thaidimaru/Pre_PM2"),
+                "branch": status.get("branch", "main"),
+                "message": "บันทึก GitHub Token ลงระบบฐานข้อมูลศูนย์กลางเรียบร้อยแล้ว",
+            }
+        except Exception as e:
+            return {
+                "ok": False,
+                "saved": False,
+                "error": str(e),
+                "message": f"ไม่สามารถบันทึก Token: {e}",
+            }
 
     _cached_auth_status = None
     _last_auth_time = 0
@@ -1322,6 +1355,21 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
             self.send_json_response(200, status)
             return
 
+        # 4.31 API: Get Settings / Token Endpoint (Centralized Storage)
+        if parsed_path in ("/api/settings/token", "/api/settings"):
+            token = DatabaseService.get_github_token()
+            status = DatabaseService.check_github_auth()
+            self.send_json_response(200, {
+                "ok": True,
+                "token": token,
+                "configured": bool(token),
+                "valid": status.get("valid", False),
+                "user": status.get("user"),
+                "repo": status.get("repo", "Thaidimaru/Pre_PM2"),
+                "branch": status.get("branch", "main"),
+            })
+            return
+
         # 4.35 API: OneDrive Sync Status
         if parsed_path in ("/api/onedrive-status", "/onedrive-status"):
             status = DatabaseService.get_onedrive_status()
@@ -1488,6 +1536,13 @@ class SurveyRequestHandler(BaseHTTPRequestHandler):
 
                 res = DatabaseService.delete_surveys(record_ids)
                 self.send_json_response(200, res)
+                return
+
+            # 5. Settings / Token Persistence Endpoint
+            if path in ("/api/settings/token", "/api/settings"):
+                token = str(payload.get("token", "") or "").strip()
+                res = DatabaseService.save_github_token(token)
+                self.send_json_response(200 if res.get("ok") else 400, res)
                 return
 
             self.send_json_response(404, {"error": "Not found"})

@@ -54,24 +54,81 @@ export function getStoredGitHubToken() {
   }
 }
 
-export function saveGitHubToken(token) {
+export async function saveGitHubToken(token) {
+  const clean = (token || '').trim();
+  let serverResult = null;
+
+  // 1. Centralized Persistent Storage Mutation (Backend Server / Database)
+  if (!isStaticHost()) {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...apiAuthHeaders(),
+      };
+      const res = await fetch('/api/settings/token', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ token: clean }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || errJson.error || `เซิร์ฟเวอร์ตอบกลับรหัสข้อผิดพลาด ${res.status}`);
+      }
+
+      serverResult = await res.json().catch(() => ({ ok: true }));
+    } catch (serverErr) {
+      console.error('Failed to persist token to centralized storage:', serverErr);
+      throw serverErr;
+    }
+  }
+
+  // 2. Update local browser cache
   try {
     if (typeof window !== 'undefined') {
-      const clean = (token || '').trim();
       if (clean) {
         localStorage.setItem(GITHUB_TOKEN_KEY, clean);
       } else {
         localStorage.removeItem(GITHUB_TOKEN_KEY);
       }
-      notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED' });
     }
   } catch (e) {
-    console.warn('Failed to save GitHub token:', e);
+    console.warn('Failed to update local token cache:', e);
   }
+
+  // 3. Multi-client / Multi-tab notification
+  notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED', token: clean });
+
+  return serverResult || { ok: true, saved: true, localOnly: isStaticHost() };
 }
 
-export function clearGitHubToken() {
-  saveGitHubToken('');
+export async function clearGitHubToken() {
+  return await saveGitHubToken('');
+}
+
+export async function fetchServerGitHubToken() {
+  if (isStaticHost()) return getStoredGitHubToken();
+  try {
+    const res = await fetch('/api/settings/token', {
+      headers: apiAuthHeaders(),
+      cache: 'no-store',
+    }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && typeof data.token === 'string') {
+        const serverToken = data.token.trim();
+        const local = getStoredGitHubToken();
+        if (serverToken && serverToken !== local) {
+          localStorage.setItem(GITHUB_TOKEN_KEY, serverToken);
+          notifySurveysUpdated({ type: 'GITHUB_TOKEN_CHANGED', token: serverToken });
+        }
+        return serverToken;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to fetch token from centralized server:', e);
+  }
+  return getStoredGitHubToken();
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +197,22 @@ let syncBroadcastChannel = null;
 if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
   try {
     syncBroadcastChannel = new BroadcastChannel('nbtc_pre_pm_sync_channel');
+    syncBroadcastChannel.onmessage = (event) => {
+      const detail = event?.data;
+      if (detail?.type === 'GITHUB_TOKEN_CHANGED') {
+        const newToken = typeof detail.token === 'string' ? detail.token : '';
+        const current = localStorage.getItem(GITHUB_TOKEN_KEY) || '';
+        if (current !== newToken) {
+          if (newToken) {
+            localStorage.setItem(GITHUB_TOKEN_KEY, newToken);
+          } else {
+            localStorage.removeItem(GITHUB_TOKEN_KEY);
+          }
+        }
+        window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail }));
+        window.dispatchEvent(new CustomEvent('nbtc-settings-updated', { detail }));
+      }
+    };
   } catch (e) {}
 }
 

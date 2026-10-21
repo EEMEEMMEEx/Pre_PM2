@@ -32,11 +32,14 @@ import {
   getStoredGitHubToken,
   saveGitHubToken,
   clearGitHubToken,
+  fetchServerGitHubToken,
   fetchGitHubStatus,
   fetchOneDriveStatus,
   fetchDashboardData,
-  getUnsyncedSurveysCount
+  getUnsyncedSurveysCount,
+  syncPendingLocalSurveys
 } from '@/lib/api';
+import { toast } from '@/components/ui/toast';
 
 // Passcode strictly required by system specification
 const REQUIRED_PASSCODE = 'Welcomw@01';
@@ -58,6 +61,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
   const [tokenInput, setTokenInput] = useState('');
   const [showTokenText, setShowTokenText] = useState(false);
   const [isTestingGitHub, setIsTestingGitHub] = useState(false);
+  const [isSavingGitHub, setIsSavingGitHub] = useState(false);
+  const [isRemovingGitHub, setIsRemovingGitHub] = useState(false);
   const [gitHubTestResult, setGitHubTestResult] = useState(null);
   const [gitHubStatus, setGitHubStatus] = useState(null);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
@@ -69,6 +74,26 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
 
   const passcodeInputRef = useRef(null);
 
+  // Real-time synchronization across clients & tabs
+  useEffect(() => {
+    const handleSync = (e) => {
+      if (e?.detail?.type === 'GITHUB_TOKEN_CHANGED') {
+        const t = getStoredGitHubToken();
+        setTokenInput(t || '');
+        fetchGitHubStatus().then((st) => setGitHubStatus(st));
+        setUnsyncedCount(getUnsyncedSurveysCount());
+      }
+    };
+    window.addEventListener('nbtc-settings-updated', handleSync);
+    window.addEventListener('nbtc-surveys-updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('nbtc-settings-updated', handleSync);
+      window.removeEventListener('nbtc-surveys-updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
+
   // Reset all authentication and local form state every time modal closes or opens
   useEffect(() => {
     if (isOpen) {
@@ -79,11 +104,20 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       setIsShaking(false);
       setActiveTab(initialTab || 'github');
 
-      // Hydrate initial status
-      setTokenInput(getStoredGitHubToken() || '');
+      // Hydrate initial status from centralized storage + client cache
+      const localToken = getStoredGitHubToken() || '';
+      setTokenInput(localToken);
       setUnsyncedCount(getUnsyncedSurveysCount());
       fetchGitHubStatus().then((st) => setGitHubStatus(st));
       fetchOneDriveStatus().then((st) => setOneDriveStatus(st));
+
+      // Attempt background fetch from centralized backend if available
+      fetchServerGitHubToken().then((serverToken) => {
+        if (serverToken && serverToken !== localToken) {
+          setTokenInput(serverToken);
+          fetchGitHubStatus().then((st) => setGitHubStatus(st));
+        }
+      });
 
       // Auto-focus passcode input on open
       setTimeout(() => {
@@ -97,6 +131,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       setShowPasscode(false);
       setGitHubTestResult(null);
       setSyncSuccess(false);
+      setIsSavingGitHub(false);
+      setIsRemovingGitHub(false);
     }
   }, [isOpen, initialTab]);
 
@@ -106,6 +142,8 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
     setPasscodeInput('');
     setPasscodeError('');
     setShowPasscode(false);
+    setIsSavingGitHub(false);
+    setIsRemovingGitHub(false);
     onClose?.();
   };
 
@@ -215,25 +253,71 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
 
   const handleSaveGitHubToken = async () => {
     const t = tokenInput.trim();
-    saveGitHubToken(t);
-    const newStatus = await fetchGitHubStatus();
-    setGitHubStatus(newStatus);
-    setUnsyncedCount(getUnsyncedSurveysCount());
-    if (onGitHubUpdated) onGitHubUpdated(newStatus);
-    setGitHubTestResult({
-      ok: true,
-      message: 'บันทึก GitHub Token เรียบร้อยแล้ว ระบบจะซิงค์ข้อมูลไปยัง Repository อัตโนมัติ'
-    });
+    if (!t) {
+      toast.error('กรุณาระบุ GitHub Personal Access Token (PAT) ก่อนบันทึก');
+      setGitHubTestResult({
+        ok: false,
+        message: 'กรุณากรอก GitHub Token ก่อนทำการบันทึก',
+      });
+      return;
+    }
+
+    setIsSavingGitHub(true);
+    setGitHubTestResult(null);
+
+    try {
+      // 1. Send mutation to persistent storage layer and await response
+      await saveGitHubToken(t);
+
+      // 2. Cache invalidation & immediate re-validation across clients
+      const newStatus = await fetchGitHubStatus({ force: true });
+      setGitHubStatus(newStatus);
+      const updatedCount = getUnsyncedSurveysCount();
+      setUnsyncedCount(updatedCount);
+
+      if (onGitHubUpdated) onGitHubUpdated(newStatus);
+
+      // 3. Immediately trigger background queue sync if there are pending surveys
+      if (updatedCount > 0) {
+        syncPendingLocalSurveys().catch(() => {});
+      }
+
+      // 4. Explicit UI feedback
+      toast.success('บันทึกการตั้งค่า GitHub Token สำเร็จเรียบร้อยแล้ว');
+      setGitHubTestResult({
+        ok: true,
+        message: 'บันทึก Token และจัดเก็บลงระบบเรียบร้อยแล้ว ข้อมูลการซิงค์อัปเดตตรงกันทุกไคลเอนต์',
+      });
+    } catch (err) {
+      console.error('Save token failed:', err);
+      const errMsg = err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อกับที่จัดเก็บข้อมูล';
+      toast.error(`ไม่สามารถบันทึก Token ได้: ${errMsg}`);
+      setGitHubTestResult({
+        ok: false,
+        message: `การบันทึกล้มเหลว: ${errMsg}`,
+      });
+    } finally {
+      setIsSavingGitHub(false);
+    }
   };
 
   const handleRemoveGitHubToken = async () => {
-    clearGitHubToken();
-    setTokenInput('');
+    setIsRemovingGitHub(true);
     setGitHubTestResult(null);
-    const newStatus = await fetchGitHubStatus();
-    setGitHubStatus(newStatus);
-    setUnsyncedCount(getUnsyncedSurveysCount());
-    if (onGitHubUpdated) onGitHubUpdated(newStatus);
+    try {
+      await clearGitHubToken();
+      setTokenInput('');
+      const newStatus = await fetchGitHubStatus();
+      setGitHubStatus(newStatus);
+      setUnsyncedCount(getUnsyncedSurveysCount());
+      if (onGitHubUpdated) onGitHubUpdated(newStatus);
+      toast.success('ลบ GitHub Token ออกจากระบบเรียบร้อยแล้ว');
+    } catch (err) {
+      console.error('Failed to remove token:', err);
+      toast.error(`ไม่สามารถลบ Token ได้: ${err.message || 'เกิดข้อผิดพลาด'}`);
+    } finally {
+      setIsRemovingGitHub(false);
+    }
   };
 
   // --- OneDrive Handlers ---
@@ -245,9 +329,11 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       const updatedStatus = await fetchOneDriveStatus();
       setOneDriveStatus(updatedStatus);
       setSyncSuccess(true);
+      toast.success('ซิงค์ข้อมูลกับ OneDrive สำเร็จ');
       setTimeout(() => setSyncSuccess(false), 3000);
     } catch (e) {
       console.warn('Sync error:', e);
+      toast.error('การซิงค์ OneDrive ขัดข้อง: ' + (e.message || ''));
     } finally {
       setIsSyncingOneDrive(false);
     }
@@ -266,8 +352,9 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      toast.success('ดาวน์โหลดไฟล์สำรองข้อมูล JSON เรียบร้อยแล้ว');
     } catch (e) {
-      alert('ไม่สามารถดาวน์โหลดข้อมูลสำรองได้: ' + e.message);
+      toast.error('ไม่สามารถดาวน์โหลดข้อมูลสำรองได้: ' + e.message);
     }
   };
 
@@ -628,14 +715,19 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
                   {/* Actions Bar */}
                   <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/10">
                     <div>
-                      {getStoredGitHubToken() && (
+                      {Boolean(tokenInput.trim() || getStoredGitHubToken()) && (
                         <button
                           type="button"
                           onClick={handleRemoveGitHubToken}
-                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
+                          disabled={isRemovingGitHub || isSavingGitHub}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>ลบ Token ออกจากเครื่อง</span>
+                          {isRemovingGitHub ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                          <span>{isRemovingGitHub ? 'กำลังลบ...' : 'ลบ Token ออกจากระบบ'}</span>
                         </button>
                       )}
                     </div>
@@ -644,7 +736,7 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
                       <button
                         type="button"
                         onClick={handleTestGitHubToken}
-                        disabled={isTestingGitHub || !tokenInput.trim()}
+                        disabled={isTestingGitHub || isSavingGitHub || !tokenInput.trim()}
                         className={cn(
                           'flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer',
                           isDark
@@ -659,11 +751,20 @@ export function SettingsModal({ isOpen, onClose, initialTab = 'github', onGitHub
                       <button
                         type="button"
                         onClick={handleSaveGitHubToken}
-                        disabled={!tokenInput.trim()}
+                        disabled={isSavingGitHub || isTestingGitHub || !tokenInput.trim()}
                         className="flex items-center gap-1.5 rounded-xl border border-sky-400/40 bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:from-sky-400 hover:to-blue-500 transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <Check className="h-4 w-4" />
-                        <span>บันทึก Token</span>
+                        {isSavingGitHub ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>กำลังบันทึก...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>บันทึก Token</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
