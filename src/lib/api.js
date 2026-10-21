@@ -408,9 +408,11 @@ export function deleteLocalSurvey(recordId) {
 
 function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) {
   const deletedIds = getDeletedSurveyIds();
+  // เดิม hardcode stations: 197 ไว้ ทำให้ผู้ใช้เข้าใจผิดว่าข้อมูลโหลดสำเร็จ
+  // ทั้งที่ยังอ่านไม่ได้ (ไม่มี PAT / rate limit) — ใช้ 0 เมื่อไม่มีข้อมูลจริง
   const base = serverData || {
     updatedAt: new Date().toISOString(),
-    stats: { surveys: 0, stations: 197, allowed: 0, denied: 0 },
+    stats: { surveys: 0, stations: 0, allowed: 0, denied: 0 },
     provinces: [],
     recent: [],
   };
@@ -484,7 +486,7 @@ function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) 
     updatedAt: new Date().toISOString(),
     stats: {
       surveys: totalCount,
-      stations: base.stats?.stations || 197,
+      stations: base.stats?.stations || 0,
       allowed: finalAllowed,
       denied: finalDenied,
     },
