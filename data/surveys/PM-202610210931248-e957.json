@@ -1,0 +1,20 @@
+{
+  "recordId": "PM-202610210931248-e957",
+  "savedAt": "2026-10-21T09:31:24.869Z",
+  "station": "Test02",
+  "province": "",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "Test02",
+    "province": "",
+    "photos": []
+  },
+  "photos": []
+}
