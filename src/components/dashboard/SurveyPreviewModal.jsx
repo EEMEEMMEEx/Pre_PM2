@@ -38,7 +38,10 @@ export const getPhotoSrc = (photo) => {
       ? photo.data
       : `data:${photo.type || photo.contentType || 'image/jpeg'};base64,${photo.data}`;
   }
-  return photo.url || '';
+  if (photo.url) return photo.url;
+  if (photo.fileName) return `/photos/${photo.fileName}`;
+  if (photo.name) return `/photos/${photo.name}`;
+  return '';
 };
 
 export function SurveyPreviewModal({

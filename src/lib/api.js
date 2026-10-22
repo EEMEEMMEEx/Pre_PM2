@@ -73,17 +73,19 @@ export async function fetchRemoteWorkerUrl() {
   return '';
 }
 
+export const DEFAULT_WORKER_URL = 'https://pre-pm-api.utai323.workers.dev';
+
 export function getCloudWorkerUrl() {
   try {
-    if (typeof window === 'undefined') return '';
+    if (typeof window === 'undefined') return DEFAULT_WORKER_URL;
     const stored = localStorage.getItem(CLOUD_WORKER_URL_KEY);
     if (stored && stored.trim()) return stored.trim().replace(/\/+$/, '');
     if (remoteWorkerUrl) return remoteWorkerUrl;
     const envUrl = (import.meta.env?.VITE_WORKER_API_URL || '').trim();
     if (envUrl) return envUrl.replace(/\/+$/, '');
-    return '';
+    return DEFAULT_WORKER_URL;
   } catch (e) {
-    return '';
+    return DEFAULT_WORKER_URL;
   }
 }
 
@@ -754,39 +756,23 @@ export async function fetchDashboardData(options = {}) {
   let serverData = null;
   const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
 
-  if (isStaticHost()) {
-    // 1. On static hosting (GitHub Pages / R2), directly query static snapshots first
+  // 1. Try Cloudflare Worker Edge API (D1) first if configured
+  let workerUrl = getCloudWorkerUrl();
+  if (!workerUrl) {
+    workerUrl = await fetchRemoteWorkerUrl().catch(() => '');
+  }
+  if (workerUrl) {
     try {
-      let res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
-      if (!res || !res.ok) {
-        res = await fetch(`${basePath}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
-      }
-      if (res && res.ok) {
-        serverData = await res.json();
-      }
-    } catch (err) {}
-
-    // Fallback to Cloudflare R2 if local snapshot failed
-    if (!serverData) {
-      try {
-        const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
-        const r2Res = await fetch(r2Url, { cache: 'no-store' });
-        if (r2Res.ok) {
-          serverData = await r2Res.json();
-        }
-      } catch (r2Err) {}
-    }
-  } else {
-    // 2. On local server, query Vite dev proxy first
-    try {
-      const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`${workerUrl}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         serverData = await res.json();
       }
     } catch (err) {}
+  }
 
-    // Fallback to static snapshot if local backend is down
-    if (!serverData && basePath) {
+  if (!serverData) {
+    if (isStaticHost()) {
+      // On static hosting (GitHub Pages / R2), directly query static snapshots first
       try {
         let res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
         if (!res || !res.ok) {
@@ -796,6 +782,38 @@ export async function fetchDashboardData(options = {}) {
           serverData = await res.json();
         }
       } catch (err) {}
+
+      // Fallback to Cloudflare R2 if local snapshot failed
+      if (!serverData) {
+        try {
+          const r2Url = `https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/api/dashboard?_t=${Date.now()}`;
+          const r2Res = await fetch(r2Url, { cache: 'no-store' });
+          if (r2Res.ok) {
+            serverData = await r2Res.json();
+          }
+        } catch (r2Err) {}
+      }
+    } else {
+      // On local server, query Vite dev proxy first
+      try {
+        const res = await fetch(`/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          serverData = await res.json();
+        }
+      } catch (err) {}
+
+      // Fallback to static snapshot if local backend is down
+      if (!serverData && basePath) {
+        try {
+          let res = await fetch(`${basePath}/api/dashboard.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+          if (!res || !res.ok) {
+            res = await fetch(`${basePath}/api/dashboard?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+          }
+          if (res && res.ok) {
+            serverData = await res.json();
+          }
+        } catch (err) {}
+      }
     }
   }
 
@@ -924,30 +942,68 @@ export async function fetchStations(token = '') {
   const basePath = (import.meta.env?.BASE_URL || '/').replace(/\/+$/, '');
   let res = null;
 
-  if (isStaticHost()) {
-    // On static hosting (GitHub Pages / R2), directly query static snapshots
-    res = await fetch(`${basePath}/api/database.json`).catch(() => null);
-    if (!res || !res.ok) {
-      res = await fetch(`${basePath}/api/database`).catch(() => null);
-    }
-  } else {
-    // On local server, query Vite dev proxy / database.py
-    res = await fetch('/api/database', { headers }).catch(() => null);
-    if (!res || res.status === 404) {
-      res = await fetch('/database', { headers }).catch(() => null);
-    }
-    if ((!res || !res.ok) && basePath) {
-      res = await fetch(`${basePath}/api/database.json`).catch(() => null);
+  // 1. Try Cloudflare Worker Edge API (D1) first if configured
+  let workerUrl = getCloudWorkerUrl();
+  if (!workerUrl) {
+    workerUrl = await fetchRemoteWorkerUrl().catch(() => '');
+  }
+  if (workerUrl) {
+    try {
+      const wRes = await fetch(`${workerUrl}/api/database?_t=${Date.now()}`, { cache: 'no-store' });
+      if (wRes && wRes.ok) {
+        res = wRes;
+      }
+    } catch (e) {}
+  }
+
+  // 2. Local dev server / database.py proxy or static snapshots
+  if (!res) {
+    if (isStaticHost()) {
+      // On static hosting (GitHub Pages / R2), directly query static snapshots
+      res = await fetch(`${basePath}/api/database.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
       if (!res || !res.ok) {
-        res = await fetch(`${basePath}/api/database`).catch(() => null);
+        res = await fetch(`${basePath}/api/database?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+      }
+    } else {
+      // On local dev server
+      res = await fetch('/api/database', { headers }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch('/database', { headers }).catch(() => null);
+      }
+      if (!res || !res.ok) {
+        res = await fetch(`${basePath}/api/database.json?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(`${basePath}/api/database?_t=${Date.now()}`, { cache: 'no-store' }).catch(() => null);
+        }
       }
     }
   }
 
-  if (!res || !res.ok) {
+  let data = null;
+  if (res && res.ok) {
+    try {
+      data = await res.json();
+      if (data && (Array.isArray(data.stations) || Array.isArray(data))) {
+        try {
+          localStorage.setItem('nbtc_cached_stations', JSON.stringify(data));
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  // 3. Fallback to localStorage offline cache if network fetch failed
+  if (!data) {
+    try {
+      const localCached = localStorage.getItem('nbtc_cached_stations');
+      if (localCached) {
+        data = JSON.parse(localCached);
+      }
+    } catch (e) {}
+  }
+
+  if (!data) {
     throw new Error(`Failed to load station directory (status ${res ? res.status : 'offline'})`);
   }
-  const data = await res.json();
   const stationList = Array.isArray(data.stations) ? data.stations : (Array.isArray(data) ? data : []);
   for (const s of stationList) {
     if (s && s.village) {
@@ -1162,14 +1218,27 @@ export async function submitSurvey(arg1, arg2, arg3) {
   const province = fields.province || '';
   const permit = fields.permit === 'on' ? 'อนุญาต' : fields.permit || 'ยังไม่ระบุ';
 
-  const formattedPhotos = (photos || []).map((p, idx) => ({
-    id: idx + 1,
-    name: p.name || `photo_${idx + 1}.jpg`,
-    contentType: p.type || 'image/jpeg',
-    size: p.data ? Math.round((p.data.length * 3) / 4) : 0,
-    url: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : `/photos/${encodeURIComponent(p.name)}`,
-    dataUrl: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : null,
-  }));
+  const formattedPhotos = (photos || []).map((p, idx) => {
+    const cleanName = (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
+    const fileName = p.fileName || `${recordId}_${cleanName}`;
+    const contentType = p.type || p.contentType || 'image/jpeg';
+    const photoUrl = p.url && !p.url.startsWith('data:') && !p.url.startsWith('blob:')
+      ? p.url
+      : `/photos/${fileName}`;
+    return {
+      id: p.id || idx + 1,
+      name: cleanName,
+      fileName,
+      contentType,
+      size: p.size || 0,
+      url: photoUrl,
+    };
+  });
+
+  const cleanFields = { ...fields };
+  delete cleanFields.data;
+  delete cleanFields.dataUrl;
+  delete cleanFields.base64Data;
 
   const localSurvey = {
     recordId,
@@ -1178,7 +1247,8 @@ export async function submitSurvey(arg1, arg2, arg3) {
     province,
     permit,
     fields: {
-      ...fields,
+      ...cleanFields,
+      recordId,
       station: stationName,
       province,
       permit,
@@ -1281,14 +1351,27 @@ export async function updateSurvey(arg1, arg2, arg3) {
     }
   }
 
-  const formattedPhotos = (photos || []).map((p, idx) => ({
-    id: p.id || idx + 1,
-    name: p.name || `photo_${idx + 1}.jpg`,
-    contentType: p.type || p.contentType || 'image/jpeg',
-    size: p.size || (p.data ? Math.round((p.data.length * 3) / 4) : 0),
-    url: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : (p.url || `/photos/${p.id || encodeURIComponent(p.name)}`),
-    dataUrl: p.data ? `data:${p.type || 'image/jpeg'};base64,${p.data}` : (p.dataUrl || p.url || null),
-  }));
+  const formattedPhotos = (photos || []).map((p, idx) => {
+    const cleanName = (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
+    const fileName = p.fileName || `${recordId}_${cleanName}`;
+    const contentType = p.type || p.contentType || 'image/jpeg';
+    const photoUrl = p.url && !p.url.startsWith('data:') && !p.url.startsWith('blob:')
+      ? p.url
+      : `/photos/${fileName}`;
+    return {
+      id: p.id || idx + 1,
+      name: cleanName,
+      fileName,
+      contentType,
+      size: p.size || 0,
+      url: photoUrl,
+    };
+  });
+
+  const cleanFields = { ...fields };
+  delete cleanFields.data;
+  delete cleanFields.dataUrl;
+  delete cleanFields.base64Data;
 
   const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
   const province = fields.province || '';
@@ -1302,7 +1385,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
     province,
     permit,
     fields: {
-      ...fields,
+      ...cleanFields,
       recordId,
       station: stationName,
       province,

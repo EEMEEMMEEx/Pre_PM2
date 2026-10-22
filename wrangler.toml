@@ -5,3 +5,8 @@ compatibility_date = "2024-01-01"
 [vars]
 GITHUB_REPO = "Thaidimaru/Pre_PM2"
 GITHUB_BRANCH = "main"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pre-pm2-prod"
+database_id = "cc43c09c-a00d-4ead-a9a9-a9267f77eaeb"

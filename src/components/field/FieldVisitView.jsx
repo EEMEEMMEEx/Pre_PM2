@@ -156,68 +156,26 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
     }
   }, [activeStation, isEditMode]);
 
-  // Compress uploaded photo to preserve bandwidth and quota
-  const compressImageFile = (file, maxDimension = 1280, quality = 0.75) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDimension || height > maxDimension) {
-            if (width > height) {
-              height = Math.round((height * maxDimension) / width);
-              width = maxDimension;
-            } else {
-              width = Math.round((width * maxDimension) / height);
-              height = maxDimension;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL('image/jpeg', quality);
-          const base64Data = dataUrl.split(',')[1];
-          resolve({
-            name: file.name.replace(/\.[^.]+$/, '') + '.jpg',
-            size: Math.round((base64Data.length * 3) / 4),
-            type: 'image/jpeg',
-            previewUrl: dataUrl,
-            base64Data
-          });
-        };
-        img.onerror = () => {
-          const base64Data = (e.target.result || '').split(',')[1] || '';
-          resolve({
-            name: file.name,
-            size: file.size,
-            type: file.type || 'image/jpeg',
-            previewUrl: e.target.result,
-            base64Data
-          });
-        };
-        img.src = e.target.result;
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle photo selection & base64 conversion with auto-compression
-  const handlePhotoSelect = async (e) => {
+  // Handle photo selection & instant preview (No Base64 embedding - OneDrive Photo Hub)
+  const handlePhotoSelect = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    for (const file of files) {
-      const photoObj = await compressImageFile(file);
-      if (photoObj) {
-        setSelectedPhotos((prev) => [...prev, photoObj]);
-      }
-    }
+    const newPhotos = files.map((file, idx) => {
+      const cleanName = file.name.replace(/[/\\?%*:|"<>]/g, '_');
+      const previewUrl = URL.createObjectURL(file);
+      return {
+        id: Date.now() + idx,
+        name: cleanName,
+        type: file.type || 'image/jpeg',
+        size: file.size,
+        previewUrl,
+        isNew: true,
+        file,
+      };
+    });
 
+    setSelectedPhotos((prev) => [...prev, ...newPhotos]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -257,15 +215,19 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
       });
 
       const rawPhotos = editingSurvey.photos || rawFields.photos || [];
-      const formatted = rawPhotos.map((p, idx) => ({
-        id: p.id || idx + 1,
-        name: p.name || `photo_${idx + 1}.jpg`,
-        type: p.contentType || p.type || 'image/jpeg',
-        size: p.size || 0,
-        previewUrl: p.url || p.dataUrl || (p.data ? `data:${p.contentType || p.type || 'image/jpeg'};base64,${p.data}` : `/photos/${p.id || encodeURIComponent(p.name)}`),
-        base64Data: p.data || (p.dataUrl ? p.dataUrl.split(',')[1] : ''),
-        isExisting: true,
-      }));
+      const formatted = rawPhotos.map((p, idx) => {
+        const cleanName = (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
+        const photoUrl = p.url || p.dataUrl || (p.fileName ? `/photos/${p.fileName}` : `/photos/${cleanName}`);
+        return {
+          id: p.id || idx + 1,
+          name: cleanName,
+          fileName: p.fileName || `${editingSurvey.recordId}_${cleanName}`,
+          type: p.contentType || p.type || 'image/jpeg',
+          size: p.size || 0,
+          previewUrl: photoUrl,
+          isExisting: true,
+        };
+      });
       setSelectedPhotos(formatted);
       setStatusMessage({
         text: `อยู่ในโหมดแก้ไขข้อมูลสถานี ${editingSurvey.station || rawFields.station || ''} (รหัส: ${editingSurvey.recordId})`,
@@ -295,11 +257,16 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
     });
 
     try {
-      const photosPayload = selectedPhotos.map((p) => ({
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        data: p.base64Data
+      const photosPayload = selectedPhotos.map((p, idx) => ({
+        id: p.id || idx + 1,
+        name: p.name || `photo_${idx + 1}.jpg`,
+        fileName: p.fileName || `${p.name || `photo_${idx + 1}.jpg`}`,
+        type: p.type || 'image/jpeg',
+        contentType: p.type || 'image/jpeg',
+        size: p.size || 0,
+        url: p.previewUrl && !p.previewUrl.startsWith('blob:') && !p.previewUrl.startsWith('data:')
+          ? p.previewUrl
+          : `/photos/${p.fileName || p.name || `photo_${idx + 1}.jpg`}`,
       }));
 
       let result;
@@ -312,9 +279,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
       const reportPhotos = selectedPhotos.map((p, idx) => ({
         id: p.id || idx + 1,
         name: p.name,
+        fileName: p.fileName,
         contentType: p.type,
         url: p.previewUrl,
-        dataUrl: p.base64Data ? `data:${p.type};base64,${p.base64Data}` : p.previewUrl,
+        dataUrl: p.previewUrl,
       }));
 
       // Preserve snapshot of saved report for immediate export
