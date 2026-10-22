@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610210929384-d9c3",
+  "savedAt": "2026-10-22T03:24:15.028Z",
+  "station": "หมู่ 2 หนองเค็ด",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 2 หนองเค็ด",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "หนองนกแก้ว",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นางสาวฉวี โพธิ์หิรัญ",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 2 หนองเค็ด",
+    "contactPhone": "085-701-5890",
+    "photos": [],
+    "recordId": "PM-202610210929384-d9c3"
+  },
+  "photos": []
+}
