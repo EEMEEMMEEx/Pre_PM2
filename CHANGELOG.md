@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.2] - 2026-10-22
+
+### Changed
+- **ปรับปรุงหน้าต่างการตั้งค่าระบบ (SettingsModal) ให้แสดงผลเฉพาะ Microsoft OneDrive**:
+  - ลบแท็บและปุ่มสลับ "GitHub Sync (การซิงค์ข้อมูล)" ออกจากหน้าต่างการตั้งค่าระบบ (`src/components/settings/SettingsModal.jsx`)
+  - ลบแผงการตั้งค่า GitHub Sync ทั้งหมด รวมถึงแถบสถานะ (ยังไม่ได้เชื่อมต่อระบบซิงค์), ส่วน Cloudflare Worker Edge API, และส่วนป้อน Personal Access Token (PAT)
+  - กำหนดให้ "Microsoft OneDrive (ศูนย์ข้อมูล)" เป็นหน้าจอหลักเพียงรายการเดียว พร้อมนำแถบสลับแท็บออกเพื่อความกระชับ
+  - อัปเดตคำบรรยายใต้หัวข้อเป็น "จัดการศูนย์ข้อมูล Microsoft OneDrive"
+  - ล้าง state, handler, และฟังก์ชันทดสอบ/บันทึกเกี่ยวกับ Worker URL และ GitHub PAT ในไคลเอนต์ออกทั้งหมด โดยคงระบบแบ็กเอนด์/ไปป์ไลน์การซิงค์อัตโนมัติตามสภาพแวดล้อมไว้อย่างปลอดภัย
+  - อัปเดตชุดทดสอบ `tests/test_settings_passcode.mjs`, `tests/test_cloudflare_worker_proxy.mjs`, และ `tests/test_settings_persistence.mjs` ให้สอดคล้องกับ UI ใหม่
+
 ## [2.14.1] - 2026-10-22
 
 ### Fixed

@@ -48,14 +48,13 @@ assert(apiContent.includes("${workerUrl}/api/commits"), 'fetchSurveysFromGitHubC
 assert(apiContent.includes("${workerUrl}/api/surveys"), 'fetchSurveysFromGitHubClient must route directory list to worker');
 console.log('  [PASS] Client API Routing: All survey queries & mutations route to Cloudflare Worker API when configured.');
 
-// 3. Verify SettingsModal UI
+// 3. Verify SettingsModal UI Decoupling
 const settingsContent = fs.readFileSync(settingsModalFile, 'utf8');
-assert(settingsContent.includes('workerUrlInput'), 'SettingsModal must have workerUrlInput state');
-assert(settingsContent.includes('handleTestWorker'), 'SettingsModal must have handleTestWorker');
-assert(settingsContent.includes('handleSaveWorkerUrl'), 'SettingsModal must have handleSaveWorkerUrl');
-assert(settingsContent.includes('Cloudflare Worker Edge API'), 'SettingsModal must render Cloudflare Worker section');
-assert(settingsContent.includes('ผู้ใช้ทุกคนซิงค์ได้อัตโนมัติ'), 'SettingsModal must indicate multi-user sync capability');
-console.log('  [PASS] Settings UI: Cloudflare Worker section and status banners integrated seamlessly.');
+assert(!settingsContent.includes('workerUrlInput'), 'SettingsModal must have removed manual workerUrlInput state');
+assert(!settingsContent.includes('handleTestWorker'), 'SettingsModal must have removed handleTestWorker');
+assert(!settingsContent.includes('handleSaveWorkerUrl'), 'SettingsModal must have removed handleSaveWorkerUrl');
+assert(!settingsContent.includes('Cloudflare Worker Edge API'), 'SettingsModal must have removed Cloudflare Worker section');
+console.log('  [PASS] Settings UI: Manual Worker & PAT configuration UI cleanly removed from SettingsModal.');
 
 // 4. Verify Public Config & Documentation
 assert(fs.existsSync(cloudConfigFile), 'public/api/cloud-config.json must exist');

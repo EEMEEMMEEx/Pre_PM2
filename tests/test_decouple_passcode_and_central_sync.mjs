@@ -5,7 +5,7 @@ import path from 'node:path';
 console.log('Testing Passcode Decoupling & Centralized Sync Implementation...');
 
 // 1. Verify Passcode Isolation in Navbar.jsx
-const navbarCode = fs.readFileSync(path.resolve('src/components/Navbar.jsx'), 'utf8');
+const navbarCode = fs.readFileSync(path.resolve('src/components/Navbar.jsx'), 'utf8').replace(/\r\n/g, '\n');
 
 // Ensure handleTokenRequired NEVER opens SettingsModal
 const handleTokenRequiredMatch = navbarCode.match(/handleTokenRequired\s*=\s*\(([\s\S]*?)\n\s*\}\;/);
@@ -26,7 +26,7 @@ assert.equal(
 console.log('  [PASS] Passcode Isolation: SettingsModal & Passcode modal strictly isolated from sync events and general operations.');
 
 // 2. Verify Global Backend Token Integration in src/lib/api.js
-const apiCode = fs.readFileSync(path.resolve('src/lib/api.js'), 'utf8');
+const apiCode = fs.readFileSync(path.resolve('src/lib/api.js'), 'utf8').replace(/\r\n/g, '\n');
 
 assert(
   apiCode.includes('export async function getOrFetchGitHubToken()'),

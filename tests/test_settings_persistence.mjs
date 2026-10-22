@@ -50,38 +50,30 @@ assert(
 );
 console.log('  [PASS] database.py: Centralized persistence endpoints (/api/settings/token) verified.');
 
-// 3. Verify src/components/settings/SettingsModal.jsx UX & feedback
+// 3. Verify src/components/settings/SettingsModal.jsx UI (v2.14.2: Streamlined to OneDrive)
 const modalCode = fs.readFileSync(path.resolve('src/components/settings/SettingsModal.jsx'), 'utf8');
 
 assert(
-  modalCode.includes('const [isSavingGitHub, setIsSavingGitHub] = useState(false)'),
-  'SettingsModal must manage isSavingGitHub state for loading indicator'
+  !modalCode.includes('const [isSavingGitHub, setIsSavingGitHub] = useState(false)'),
+  'SettingsModal must no longer manage isSavingGitHub state'
 );
 assert(
-  modalCode.includes('await saveGitHubToken(t)'),
-  'SettingsModal must await saveGitHubToken mutation'
+  !modalCode.includes('await saveGitHubToken(t)'),
+  'SettingsModal must no longer include saveGitHubToken handler'
 );
 assert(
   modalCode.includes('toast.success('),
-  'SettingsModal must display toast.success on confirmed write'
+  'SettingsModal must display toast.success on confirmed action'
 );
 assert(
   modalCode.includes('toast.error('),
   'SettingsModal must display toast.error on failure'
 );
 assert(
-  modalCode.includes('fetchServerGitHubToken()'),
-  'SettingsModal must hydrate latest token from centralized server on open'
+  modalCode.includes('fetchOneDriveStatus'),
+  'SettingsModal must fetch OneDrive status on open'
 );
-assert(
-  modalCode.includes('กำลังบันทึก...'),
-  'SettingsModal save button must show loading text and spinner'
-);
-assert(
-  modalCode.includes("addEventListener('nbtc-settings-updated'"),
-  'SettingsModal must listen for real-time updates from other clients/tabs'
-);
-console.log('  [PASS] SettingsModal: Loading indicator, toast feedback, and cache re-validation verified.');
+console.log('  [PASS] SettingsModal: GitHub Sync UI cleanly removed, OneDrive feedback verified.');
 
 // 4. Verify src/components/Navbar.jsx centralized hydration
 const navbarCode = fs.readFileSync(path.resolve('src/components/Navbar.jsx'), 'utf8');

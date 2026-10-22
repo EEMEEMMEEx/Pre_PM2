@@ -64,11 +64,11 @@ assert(
   'SettingsModal must reset unlock state and passcodeInput on close/dismiss'
 );
 
-// Check tabs for GitHub and OneDrive
+// Check Microsoft OneDrive settings panel and removal of GitHub Sync tab
 assert(
-  settingsCode.includes("activeTab === 'github'") &&
-  settingsCode.includes("activeTab === 'onedrive'"),
-  'SettingsModal must contain tabs for both GitHub Sync and Microsoft OneDrive'
+  settingsCode.includes('Microsoft OneDrive') &&
+  !settingsCode.includes("activeTab === 'github'"),
+  'SettingsModal must display Microsoft OneDrive settings and remove GitHub Sync tab'
 );
 
 console.log('  [PASS] Security verification & session lifecycle rules strictly verified.');
