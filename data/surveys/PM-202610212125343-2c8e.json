@@ -25,12 +25,16 @@
     "visitDate": "2026-10-20",
     "informantName": "นายเสมอ โนนทิง",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
     "photos": [],
-    "recordId": "PM-202610212125343-2c8e"
+    "recordId": "PM-202610212125343-2c8e",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:00:07.629Z"
 }
