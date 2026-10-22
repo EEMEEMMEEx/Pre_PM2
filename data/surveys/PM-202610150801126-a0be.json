@@ -1,7 +1,6 @@
 {
   "recordId": "PM-202610150801126-a0be",
-  "savedAt": "2026-10-16T03:26:21.985Z",
-  "updatedAt": "2026-10-22T03:52:27.731Z",
+  "savedAt": "2026-10-22T03:52:38.597Z",
   "station": "หมู่ 1 ไทรงาม",
   "province": "ตรัง",
   "permit": "อนุญาต",
@@ -12,9 +11,6 @@
     "province": "ตรัง",
     "installationPlace": "ที่ทำการบ้านผู้ช่วยผู้ใหญ่บ้าน",
     "equipmentPlace": "ที่ทำการบ้านผู้ช่วยผู้ใหญ่บ้าน",
-    "contactName": "",
-    "contactPosition": "",
-    "contactPhone": "",
     "photos": [],
     "permit": "อนุญาต",
     "radioStatus": "ปกติ",
@@ -23,7 +19,6 @@
     "powerStatus": "ปกติ",
     "batteryStatus": "ปกติ",
     "groundStatus": "ปกติ",
-    "contactVillage": "",
     "visitDate": "2026-10-09",
     "visitTime": "10:30",
     "accessLimit": "ประสานงานก่อนเข้าดำเนินการ",
@@ -32,9 +27,13 @@
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
     "summary": "ไม่มี",
-    "informantName": "",
     "operatorName": "นายสมประสงค์  มลฑลจุลเกศ",
-    "recordId": "PM-202610150801126-a0be"
+    "recordId": "PM-202610150801126-a0be",
+    "contactName": "",
+    "contactPosition": "",
+    "contactVillage": "",
+    "contactPhone": "",
+    "informantName": ""
   },
   "photos": []
 }
