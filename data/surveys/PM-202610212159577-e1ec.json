@@ -26,11 +26,15 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "informantName": "นายพงษ์รัตน์ กงนอก",
-    "summary": "การใช้งานปกติดี",
+    "summary": "",
     "operatorName": "นายสมสอาด ถาวร",
     "workObstacle": "ไม่มี",
     "photos": [],
-    "recordId": "PM-202610212159577-e1ec"
+    "recordId": "PM-202610212159577-e1ec",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:13:59.932Z"
 }
