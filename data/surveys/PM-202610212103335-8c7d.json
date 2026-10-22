@@ -25,9 +25,9 @@
     "visitDate": "2026-10-18",
     "accessLimit": "",
     "userProblem": "",
-    "siteCondition": "สภาพปกติ",
-    "antennaCondition": "สภาพปกติ",
-    "workObstacle": "ไม่มี",
+    "siteCondition": "ปกติ",
+    "antennaCondition": "ปกติ",
+    "workObstacle": "",
     "summary": "",
     "informantName": "นายสมคิด เย็นกลาง",
     "operatorName": "นายสมสอาด ถาวร",
@@ -36,5 +36,5 @@
     "visitTime": ""
   },
   "photos": [],
-  "updatedAt": "2026-10-22T03:42:25.444Z"
+  "updatedAt": "2026-10-22T03:52:00.736Z"
 }
