@@ -25,13 +25,16 @@
     "visitDate": "2026-10-16",
     "informantName": "นางมุกดา ศรีคลัง",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "photos": [],
-    "recordId": "PM-202610212113268-a9a9"
+    "recordId": "PM-202610212113268-a9a9",
+    "visitTime": "",
+    "accessLimit": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:53:27.827Z"
 }
