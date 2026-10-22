@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610210932597-565e",
+  "savedAt": "2026-10-22T03:24:13.414Z",
+  "station": "หมู่ 4 หนองจั่น",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 4 หนองจั่น",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "หนองนกแก้ว",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นางสาวจุฑามาศ เวทยานนท์",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 4 หนองจั่น",
+    "contactPhone": "081-942-3643",
+    "photos": [],
+    "recordId": "PM-202610210932597-565e"
+  },
+  "photos": []
+}
