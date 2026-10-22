@@ -123,7 +123,7 @@ export default {
           activeSurveys: recordCount,
           repo,
           branch,
-          version: '2.15.3',
+          version: '2.15.4',
           timestamp: new Date().toISOString(),
         });
       }
@@ -641,4 +641,5 @@ export default {
       500
     );
   }
+  },
 };

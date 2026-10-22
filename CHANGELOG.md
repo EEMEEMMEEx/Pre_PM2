@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.4] - 2026-10-22
+
+### Fixed
+- **แก้ไขไวยากรณ์ Syntax Error วงเล็บปิดไม่ครบใน `worker/index.js` (Unexpected Token `;`)**:
+  - แก้ไขการขาดวงเล็บปิด `  },` ของเมธอด `async fetch(request, env, ctx)` หลังบล็อก `try...catch` ก่อนปิดคลาส `export default { ... }`
+  - ยืนยันการคอมไพล์ผ่านฉลุยทั้ง `node -e "import('./worker/index.js')"` และ `npx wrangler deploy`
+
 ## [2.15.3] - 2026-10-22
 
 ### Fixed
