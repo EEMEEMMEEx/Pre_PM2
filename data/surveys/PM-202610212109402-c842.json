@@ -23,14 +23,18 @@
     "contactVillage": "หมู่ 6 โคกสูง",
     "contactPhone": "086-157-8297",
     "visitDate": "2026-10-16",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "informantName": "นายสาคร สีสอนเหม่น",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212109402-c842"
+    "recordId": "PM-202610212109402-c842",
+    "visitTime": "",
+    "accessLimit": "",
+    "workObstacle": "ไม่มี"
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:48:02.238Z"
 }
