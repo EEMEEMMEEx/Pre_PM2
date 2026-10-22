@@ -27,10 +27,14 @@
     "antennaCondition": "ปกติ",
     "informantName": "นายสมยง ธงพรรษา",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "photos": [],
-    "recordId": "PM-202610212149455-b1dd"
+    "recordId": "PM-202610212149455-b1dd",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:09:10.774Z"
 }
