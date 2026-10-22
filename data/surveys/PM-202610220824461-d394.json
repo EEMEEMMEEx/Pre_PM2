@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610220824461-d394",
+  "savedAt": "2026-10-22T08:26:24.616Z",
+  "station": "หมู่ 3 โนนสวรรค์",
+  "province": "ขอนแก่น",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 3 โนนสวรรค์",
+    "province": "ขอนแก่น",
+    "district": "เขาสวนกวาง",
+    "subdistrict": "นางิ้ว",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายทองเดช วงษาหาร",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 3 โนนสวรรค์",
+    "contactPhone": "065-960-3134",
+    "recordId": "PM-202610220824461-d394",
+    "photos": []
+  },
+  "photos": []
+}
