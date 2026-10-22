@@ -23,7 +23,7 @@
     "contactVillage": "หมู่ 12 นาคำน้อย",
     "contactPhone": "095-646-8520",
     "visitDate": "2026-10-16",
-    "accessLimit": "ไม่มี",
+    "accessLimit": "",
     "userProblem": "",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ ",
@@ -31,7 +31,10 @@
     "informantName": "นางสาวศศิวิมล สว่างทรวง",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212133187-a250"
+    "recordId": "PM-202610212133187-a250",
+    "visitTime": "",
+    "summary": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:03:40.542Z"
 }
