@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.1] - 2026-10-22
+
+### Fixed
+- **ตรวจสอบสายธารข้อมูล (Data Lineage), แหล่งข้อมูลแดชบอร์ด และแก้ไขปัญหาการซิงค์สถานะแบบเรียลไทม์**:
+  - **Audit Dashboard Data Source & Lineage (`worker/index.js`)**:
+    - ตรวจสอบแหล่งข้อมูลหลักที่ขับเคลื่อนหน้าจอ Dashboard (การ์ด KPI รวม, กราฟจัดอันดับจังหวัด, แผนภูมิโดนัทสัดส่วนการอนุญาต, และตารางรายการล่าสุด)
+    - แก้ไข Endpoint `GET /api/dashboard` บน Worker D1 ให้คำนวณและส่งคืนโครงสร้าง `stats: { surveys, stations, allowed, denied }` และ `provinces: [{ name, count }]` ตาม Data Contract ของแดชบอร์ดอย่างสมบูรณ์ ป้องกันการตกหล่นของข้อมูลตัวเลขรวม
+  - **Unify Write-to-Read Pipeline & Local Hydration (`src/lib/api.js`)**:
+    - ใน `fetchDashboardData`: ปรับปรุงเส้นทางประมวลผล Cloudflare D1 ให้ผสานข้อมูลเซิร์ฟเวอร์ร่วมกับ `localSurveys` ผ่าน `mergeDashboardWithLocal` เสมอ เพื่อรับประกันการแสดงผลแบบทันที (0ms) สำหรับรายการที่เพิ่งบันทึก/แก้ไข หรือระหว่างรอเครือข่าย
+    - ใน `getCachedDashboardData`: กรองรหัสที่ถูกลบ (`deletedIds` / Tombstones) ออกจากแคชทันที ป้องกันข้อมูลที่ลบไปแล้วฟื้นคืนชีพขึ้นมาแสดงในจังหวะ SWR Hydration
+    - ใน `deleteSurveys`: ตัดข้อมูลที่ถูกลบออกจากแคชแดชบอร์ดใน `localStorage` ทันทีตั้งแต่ก่อนเริ่มยิงลบไปยังเซิร์ฟเวอร์
+  - **Real-Time UI Updates & Invalidate Stale Cache (`src/lib/api.js`, `DashboardView.jsx`)**:
+    - เพิ่มการกระจายสัญญาณ `notifySurveysUpdated({ action: 'create', recordId })` ใน `submitSurvey` ทันทีหลังบันทึกลงในเครื่อง และส่งสัญญาณ `saved` เมื่อเซิร์ฟเวอร์ยืนยันการบันทึก
+    - ปรับปรุง `updateSurvey` และ `deleteSurveys` ให้เรียกใช้ `notifySurveysUpdated` อย่างเป็นเอกภาพ เพื่อส่งสัญญาณทั้ง `window.dispatchEvent` และ `BroadcastChannel` ข้ามทุกแท็บของเบราว์เซอร์
+    - ใน `DashboardView.jsx`: ปรับปรุงตัวดักฟังอีเวนต์ `nbtc-surveys-updated` และ `BroadcastChannel` ให้สั่ง `loadData(true)` เพื่อบังคับ Invalidate Cache และรีเฟรชข้อมูลสดทันที พร้อมตัวพารามิเตอร์ Cache-Busting `_t=${Date.now()}` และ `cache: 'no-store'`
+
 ## [2.15.0] - 2026-10-22
 
 ### Added

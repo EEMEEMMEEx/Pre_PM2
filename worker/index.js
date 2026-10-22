@@ -218,7 +218,7 @@ export default {
 
           // Query active surveys for dashboard view
           const { results: recentRows = [] } = await env.DB.prepare(
-            'SELECT record_id, station, province, permit, saved_at, updated_at, fields_json, version FROM surveys WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 100'
+            'SELECT record_id, station, province, permit, saved_at, updated_at, fields_json, version FROM surveys WHERE deleted_at IS NULL ORDER BY updated_at DESC'
           ).all();
 
           const countRow = await env.DB.prepare(
@@ -226,17 +226,50 @@ export default {
           ).first();
           const totalSurveys = countRow?.total || recentRows.length;
 
-          const recent = recentRows.map((row) => formatSurveyRow(row));
+          let totalStations = 197;
+          try {
+            const stationsRow = await env.DB.prepare('SELECT COUNT(*) as total FROM stations').first();
+            if (stationsRow?.total) totalStations = stationsRow.total;
+          } catch (e) {}
+
+          let allowed = 0;
+          let denied = 0;
+          const provinceCounts = new Map();
+
+          const recent = recentRows.map((row) => {
+            const permit = row.permit;
+            if (permit === 'อนุญาต' || permit === 'on') allowed++;
+            else if (permit === 'ไม่อนุญาต') denied++;
+
+            const prov = row.province || 'ไม่ระบุจังหวัด';
+            provinceCounts.set(prov, (provinceCounts.get(prov) || 0) + 1);
+
+            return formatSurveyRow(row);
+          });
+
+          const provinces = Array.from(provinceCounts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
+          const stats = {
+            surveys: totalSurveys,
+            stations: totalStations,
+            allowed,
+            denied,
+          };
 
           return jsonResponse(
             {
               ok: true,
+              source: 'd1',
+              stats,
+              provinces,
+              recent,
               surveysCount: totalSurveys,
               totalSurveys,
-              recent,
               changeToken,
               updatedAt: syncMeta?.last_change_timestamp || new Date().toISOString(),
-              source: 'd1',
             },
             200,
             { ETag: `W/"${changeToken}"` }

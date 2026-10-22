@@ -713,6 +713,7 @@ export async function syncPendingLocalSurveys() {
           survey.githubSynced = true;
           survey.d1Synced = true;
           saveLocalSurvey(survey);
+          notifySurveysUpdated({ action: 'synced', recordId: survey.recordId });
           console.log('Synced pending local survey to D1 / storage:', survey.recordId);
         }
       } catch (e) {
@@ -732,7 +733,16 @@ export function getCachedDashboardData() {
     const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      if (data && data.stats && Array.isArray(data.recent)) return data;
+      if (data && data.stats && Array.isArray(data.recent)) {
+        const deletedIds = getDeletedSurveyIds();
+        if (deletedIds && deletedIds.size > 0) {
+          data.recent = data.recent.filter((s) => s && !deletedIds.has(s.recordId));
+          if (data.stats.surveys > data.recent.length) {
+            data.stats.surveys = data.recent.length;
+          }
+        }
+        return data;
+      }
     }
   } catch (e) {}
   return null;
@@ -827,14 +837,20 @@ export async function fetchDashboardData(options = {}) {
     serverData = getCachedDashboardData();
   }
 
-  // If data was fetched directly from Cloudflare D1 Worker API, use it immediately (zero GitHub polling delay)
+  // If data was fetched directly from Cloudflare D1 Worker API, merge with local surveys & use immediately
   if (serverData && (serverData.source === 'd1' || (workerUrl && serverData.ok))) {
     if (serverData && Array.isArray(serverData.recent)) {
       serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
       seedClientGhSurveysFromSnapshot(serverData.recent);
     }
-    setCachedDashboardData(serverData);
-    return serverData;
+    const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
+    const allCombinedSurveys = [
+      ...(serverData?.recent || []),
+      ...localSurveys,
+    ];
+    const mergedResult = mergeDashboardWithLocal(serverData, allCombinedSurveys);
+    setCachedDashboardData(mergedResult);
+    return mergedResult;
   }
 
   // Pre-seed client in-memory cache if serverData has recent entries
@@ -1282,6 +1298,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
 
   saveLocalSurvey(localSurvey);
   registerClientSurvey(localSurvey);
+  notifySurveysUpdated({ action: 'create', recordId });
 
   let finalResult = serverResult || {
     saved: true,
@@ -1326,6 +1343,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
     delete localSurvey.githubSyncing;
     delete localSurvey.githubSyncingAt;
     saveLocalSurvey(localSurvey);
+    notifySurveysUpdated({ action: 'saved', recordId });
   }
 
   if (serverError && !serverResult) {
@@ -1429,7 +1447,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
   saveLocalSurvey(localSurvey);
   registerClientSurvey(localSurvey);
 
-  window.dispatchEvent(new CustomEvent('nbtc-surveys-updated', { detail: { action: 'update', recordId } }));
+  notifySurveysUpdated({ action: 'update', recordId });
 
   let finalResult = serverResult || {
     saved: true,
@@ -1474,6 +1492,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
     delete localSurvey.githubSyncing;
     delete localSurvey.githubSyncingAt;
     saveLocalSurvey(localSurvey);
+    notifySurveysUpdated({ action: 'updated', recordId });
   }
 
   return finalResult;
@@ -1486,12 +1505,19 @@ export async function deleteSurveys(recordIds) {
   // 1. Immediately record tombstone so deleted records NEVER resurrect
   addDeletedSurveyIds(ids);
 
-  // 2. Remove from local survey cache
+  // 2. Remove from local survey cache and dashboard cache
   try {
     const current = getLocalSurveys();
     const deletedSet = new Set(ids);
     const remaining = current.filter((s) => !deletedSet.has(s.recordId));
     localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(remaining));
+
+    const cached = getCachedDashboardData();
+    if (cached && Array.isArray(cached.recent)) {
+      const remainingRecent = cached.recent.filter((s) => !deletedSet.has(s.recordId));
+      const updatedCache = mergeDashboardWithLocal(cached, remainingRecent);
+      setCachedDashboardData(updatedCache);
+    }
   } catch (e) {
     console.warn('Failed to update localStorage after delete:', e);
   }
@@ -1554,11 +1580,11 @@ export async function deleteSurveys(recordIds) {
     }
   }
 
-  window.dispatchEvent(
-    new CustomEvent('nbtc-surveys-updated', {
-      detail: { action: 'delete', recordIds: ids, failedIds: failed.map((f) => f.id) },
-    })
-  );
+  notifySurveysUpdated({
+    action: 'delete',
+    recordIds: ids,
+    failedIds: failed.map((f) => f.id),
+  });
 
   if (failed.length > 0) {
     console.warn('[delete] failed remote records:', failed);

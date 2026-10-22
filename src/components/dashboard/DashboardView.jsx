@@ -180,14 +180,14 @@ export function DashboardView({ onNavigate, onEditSurvey }) {
         bc = new BroadcastChannel('nbtc_pre_pm_sync_channel');
         bc.onmessage = (event) => {
           if (event.data?.type === 'SURVEYS_UPDATED') {
-            loadData(false);
+            loadData(true);
           }
         };
       } catch (e) {}
     }
 
     const handleSurveysUpdated = () => {
-      loadData(false);
+      loadData(true);
     };
     window.addEventListener('nbtc-surveys-updated', handleSurveysUpdated);
     window.addEventListener('storage', handleSurveysUpdated);
