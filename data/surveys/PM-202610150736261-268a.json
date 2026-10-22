@@ -1,7 +1,6 @@
 {
   "recordId": "PM-202610150736261-268a",
-  "savedAt": "2026-10-16T03:24:05.371Z",
-  "updatedAt": "2026-10-22T03:50:51.040Z",
+  "savedAt": "2026-10-22T03:50:54.657Z",
   "station": "หมู่ 1 ช่อง",
   "province": "ตรัง",
   "permit": "อนุญาต",
@@ -12,9 +11,6 @@
     "province": "ตรัง",
     "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
     "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
-    "contactName": "",
-    "contactPosition": "",
-    "contactPhone": "",
     "photos": [],
     "permit": "อนุญาต",
     "radioStatus": "ปกติ",
@@ -23,7 +19,6 @@
     "powerStatus": "ปกติ",
     "batteryStatus": "ปกติ",
     "groundStatus": "ปกติ",
-    "contactVillage": "",
     "visitDate": "2026-10-09",
     "visitTime": "14:50",
     "accessLimit": "ประสานงานก่อนเข้าดำเนินการ",
@@ -32,9 +27,13 @@
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
     "summary": "ไม่มี",
-    "informantName": "",
     "operatorName": "นายสมประสงค์  มลฑลจุลเกศ",
-    "recordId": "PM-202610150736261-268a"
+    "recordId": "PM-202610150736261-268a",
+    "contactName": "",
+    "contactPosition": "",
+    "contactVillage": "",
+    "contactPhone": "",
+    "informantName": ""
   },
   "photos": []
 }
