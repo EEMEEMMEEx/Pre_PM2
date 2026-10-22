@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610210904273-9b73",
+  "savedAt": "2026-10-22T03:24:18.447Z",
+  "station": "หมู่ 6 สี่กั๊ก",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 6 สี่กั๊ก",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "ทุ่งกระบ่ำ",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายสมหวัง บุปผา",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 6 สี่กั๊ก",
+    "contactPhone": "065-337-4196",
+    "photos": [],
+    "recordId": "PM-202610210904273-9b73"
+  },
+  "photos": []
+}
