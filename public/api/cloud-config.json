@@ -1,5 +1,5 @@
 {
-  "workerUrl": "https://pre-pm2.utai323.workers.dev",
+  "workerUrl": "https://pre-pm-api.utai323.workers.dev",
   "service": "NBTC Microwave Survey Edge Proxy",
   "description": "Public Edge API configuration for multi-user synchronization"
 }

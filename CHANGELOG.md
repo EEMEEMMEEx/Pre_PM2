@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-10-22
+
+### Added
+- **สถาปัตยกรรม Cloudflare D1 Database ร่วมกับ OneDrive Photo Hub**:
+  - ตัดการฝัง Base64 ในไฟล์แบบสำรวจออก 100% ส่งผลให้ขนาดข้อมูลรวมทั้งระบบลดลง 99.1% (จาก 32 MB เหลือเพียง 292 KB)
+  - จัดเก็บรูปภาพภาคสนามความละเอียดสูงทั้งหมดเข้าศูนย์กลาง Microsoft OneDrive (`OneDrive/NBTC Microwave/Data/photos/`) ผ่านสคริปต์ `export_photos.mjs` / `export_photos.py`
+  - สร้างโครงสร้าง D1 Target Schema ใน `migrations/0001_initial_schema.sql` (ตาราง `surveys`, `survey_photos`, `stations`, และ `meta_sync`)
+  - พัฒนาสคริปต์ ETL นำเข้าข้อมูล `scripts/d1_etl_export.mjs` (`npm run etl:d1`) สำหรับแปลงไฟล์แบบสำรวจเดิมและ `DATABASE.xlsx` เป็น SQL migration `migrations/0002_seed_data.sql`
+  - เพิ่ม Cloudflare D1 binding (`[[d1_databases]]`) ใน `wrangler.toml`
+
+### Changed
+- ปรับปรุง `FieldVisitView.jsx`: แทนที่การแปลง Base64 ขนาดใหญ่ด้วย `URL.createObjectURL(file)` พรีวิวหน้าจอทันที และส่งเฉพาะ Metadata รูปภาพไปยังฐานข้อมูล
+- ปรับปรุง `src/lib/api.js`: ฟังก์ชัน `submitSurvey` และ `updateSurvey` คลีนฟิลด์ Base64 ออกจากข้อมูลสำรวจและรูปภาพก่อนบันทึกลง D1 และ Local cache
+- ปรับปรุง `worker/index.js`: ยกระดับ Cloudflare Worker ให้รองรับการอ่าน/เขียนฐานข้อมูล Cloudflare D1 ผ่าน `env.DB.batch()`, รองรับ Dashboard Change-Token Polling ด้วย `meta_sync` (ประหยัดโควตา Rows Read), และซิงค์ Git Audit Trail อัตโนมัติ
+- ปรับปรุง `SurveyReportModal.jsx` และ `SurveyPreviewModal.jsx`: ปรับปรุงฟังก์ชัน `getPhotoSrc()` ให้สามารถอ่านรูปภาพจากโฟลเดอร์ `/photos/{fileName}` ได้อย่างสมบูรณ์
+
 ## [2.12.5] - 2026-10-22
 
 ### Fixed
@@ -13,10 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - กำหนดรันไทม์ Node.js เป็น 24 ผ่าน `.nvmrc`, `.node-version`, และ `"engines": { "node": ">=24.0.0" }` ใน `package.json` (#26) ขจัดปัญหา engine warning (EBADENGINE) จาก `html2canvas-pro@2.5.2`
   - ปรับปรุง build environment ใน GitHub Actions workflows ให้ใช้ Node.js 24 สอดคล้องกันทั้งระบบ
 - **แก้ปัญหา GitHub API Rate Limit (403 Forbidden) และข้อมูลไม่ซิงค์บน Dashboard**:
-  - เพิ่ม Read Proxy Endpoints ใน Cloudflare Worker (worker/index.js): /api/commits, /api/surveys, และ /api/surveys/:id รองรับการส่งต่อคำขอด้วย GITHUB_TOKEN กลางบน Worker
-  - อัปเดต etchSurveysFromGitHubClient() ใน src/lib/api.js ให้ตรวจสอบ Commit และดึงรายการไฟล์ผ่าน Cloudflare Worker API Proxy เมื่อมีการตั้งค่า Worker URL ทำให้ Dashboard ซิงค์ข้อมูลล่าสุดได้ต่อเนื่องโดยไม่ต้องใช้ Token บนเครื่องผู้ใช้
+  - เพิ่ม Read Proxy Endpoints ใน Cloudflare Worker (`worker/index.js`): `/api/commits`, `/api/surveys`, และ `/api/surveys/:id` รองรับการส่งต่อคำขอด้วย GITHUB_TOKEN กลางบน Worker
+  - อัปเดต `fetchSurveysFromGitHubClient()` ใน `src/lib/api.js` ให้ตรวจสอบ Commit และดึงรายการไฟล์ผ่าน Cloudflare Worker API Proxy เมื่อมีการตั้งค่า Worker URL ทำให้ Dashboard ซิงค์ข้อมูลล่าสุดได้ต่อเนื่องโดยไม่ต้องใช้ Token บนเครื่องผู้ใช้
   - เพิ่มมาตรการป้องกัน Rate Limit สำหรับ Unauthenticated Client: หากเครื่องยังไม่มีทั้ง Worker URL และ Token บนเครื่อง จะจำกัดการ Poll อัตโนมัติไว้ที่ขั้นต่ำ 60 วินาที ป้องกันโควตา 60 req/hr หมดเร็วผิดปกติ
-  - อัปเดตชุดทดสอบ 	ests/test_cloudflare_worker_proxy.mjs ครอบคลุมทั้งการอ่าน (Read Proxy) และการเขียน (Mutations)
+  - อัปเดตชุดทดสอบ `tests/test_cloudflare_worker_proxy.mjs` ครอบคลุมทั้งการอ่าน (Read Proxy) และการเขียน (Mutations)
 
 ## [2.12.4] - 2026-10-21
 

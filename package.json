@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.12.5",
+  "version": "2.13.0",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
@@ -16,7 +16,8 @@
     "export:photos": "node scripts/export_photos.mjs",
     "export:photos:py": "python export_photos.py",
     "export:pdf": "python export_pdf.py",
-    "export:archive": "python export_pdf.py --archive"
+    "export:archive": "python export_pdf.py --archive",
+    "etl:d1": "node scripts/d1_etl_export.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
