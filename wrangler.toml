@@ -1,4 +1,4 @@
-name = "pre-pm-api"
+name = "pre-pm2"
 main = "worker/index.js"
 compatibility_date = "2024-01-01"
 
