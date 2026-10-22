@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-10-22
+
+### Added
+- **ย้ายระบบการบันทึกข้อมูลหลักสู่ Cloudflare D1 Database และยกเลิกการคอมมิตเข้า GitHub (Zero GitHub Commits)**:
+  - **Decouple Data Operations from GitHub Repositories**: ยกเลิกการยิงคำขอ commit/push ไฟล์แบบสำรวจ JSON เข้า GitHub Repository อัตโนมัติเมื่อมีการบันทึก แก้ไข หรือลบข้อมูล เพื่อแก้ปัญหาคิวการ Build/Deploy ใน GitHub Actions ที่ถูกกระตุ้นบ่อยเกินไป และลดความล่าช้าในการอัปเดตข้อมูล
+  - **Direct Cloudflare D1 CRUD Operations via Workers (`worker/index.js`)**:
+    - ผูก Cloudflare D1 instance (`env.DB` = `pre-pm2-prod`) เข้ากับ Worker API อย่างสมบูรณ์
+    - พัฒนา Prepared SQL Statements ครบวงจร ทั้ง `INSERT OR REPLACE INTO surveys`, `UPDATE surveys SET ...`, `UPDATE surveys SET deleted_at = ...` (Soft Delete), และ `SELECT ... FROM surveys`
+    - แยกและจัดเก็บเฉพาะ Metadata ของรูปภาพลงในตาราง `survey_photos` (อิงไฟล์ใน OneDrive Hub ไร้ Base64)
+    - บันทึกและเพิ่มตัวนับในตาราง `meta_sync` เพื่อรองรับ ETag 304 Caching ทันที
+  - **Update Client Fetch and Hydration Workflow (`src/lib/api.js`)**:
+    - ปรับปรุงฟังก์ชัน `submitSurvey`, `updateSurvey`, และ `deleteSurveys` ให้ยิงคำขอโดยตรงเข้า Cloudflare Worker D1 API และแสดงผลตอบกลับอัปเดตบนหน้า UI แบบเรียลไทม์ทันทีโดยไม่ต้องรอ Repository Build
+    - ใน `fetchDashboardData`: เมื่อเชื่อมต่อ Cloudflare D1 สำเร็จ จะดึงข้อมูลและอัปเดตแดชบอร์ดทันทีโดยไม่ต้องวน Loop เช็ค GitHub Commits ช่วยประหยัดแบนด์วิดท์และลดปัญหา Rate Limit
+  - **Schema Definition Scripts (`schema.sql`)**: สร้างไฟล์ DDL สคริปต์สคีมาฐานข้อมูลและตัวอย่างคิวรี D1 CRUD ครบถ้วนตรงตามโครงสร้าง Survey JSON
+  - **Verification Suite**: สร้างชุดทดสอบ `tests/test_cloudflare_d1_crud.mjs` ยืนยันการทำงานของระบบ D1 CRUD และการตัดขาดจากการคอมมิต GitHub แบบ 100%
+
 ## [2.14.2] - 2026-10-22
 
 ### Changed

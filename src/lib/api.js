@@ -697,7 +697,7 @@ export async function syncPendingLocalSurveys() {
             fields: survey.fields || survey,
             photos: survey.photos || [],
           });
-          if (res.ok && res.data?.saved) {
+          if (res.ok && (res.data?.saved || res.data?.d1Synced || res.data?.ok)) {
             synced = true;
           }
         } else if (token) {
@@ -711,8 +711,9 @@ export async function syncPendingLocalSurveys() {
           delete survey.githubSyncing;
           delete survey.githubSyncingAt;
           survey.githubSynced = true;
+          survey.d1Synced = true;
           saveLocalSurvey(survey);
-          console.log('Synced pending local survey to GitHub:', survey.recordId);
+          console.log('Synced pending local survey to D1 / storage:', survey.recordId);
         }
       } catch (e) {
         console.warn('Failed to sync pending survey:', survey.recordId, e);
@@ -824,6 +825,16 @@ export async function fetchDashboardData(options = {}) {
   // If still no serverData, hydrate from cached storage
   if (!serverData) {
     serverData = getCachedDashboardData();
+  }
+
+  // If data was fetched directly from Cloudflare D1 Worker API, use it immediately (zero GitHub polling delay)
+  if (serverData && (serverData.source === 'd1' || (workerUrl && serverData.ok))) {
+    if (serverData && Array.isArray(serverData.recent)) {
+      serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
+      seedClientGhSurveysFromSnapshot(serverData.recent);
+    }
+    setCachedDashboardData(serverData);
+    return serverData;
   }
 
   // Pre-seed client in-memory cache if serverData has recent entries
@@ -1137,7 +1148,7 @@ async function callLocalMutatingApi(endpoint, fallbackEndpoint, payload, customH
  * ในสถาปัตยกรรม Option 2: ให้ Worker ทำหน้าที่เป็น Secure Proxy ซิงค์เข้า GitHub Repository โดยตรง
  * ทำให้ผู้ใช้งานทุกเครื่องสามารถบันทึก/แก้ไข/ลบ ข้อมูลได้ทันทีโดยไม่ต้องใส่ GitHub Token บนเครื่องของตัวเอง
  */
-export async function callWorkerMutatingApi(workerUrl, endpoint, payload) {
+export async function callWorkerMutatingApi(workerUrl, endpoint, payload = null, method = 'POST') {
   const base = (workerUrl || '').trim().replace(/\/+$/, '');
   if (!base) {
     return { ok: false, error: 'no_worker_url', status: 0, data: null };
@@ -1146,13 +1157,17 @@ export async function callWorkerMutatingApi(workerUrl, endpoint, payload) {
   const targetUrl = `${base}${cleanEndpoint}`;
 
   try {
-    const res = await fetch(targetUrl, {
-      method: 'POST',
+    const options = {
+      method: method.toUpperCase(),
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
-    });
+    };
+    if (payload !== null && payload !== undefined && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
+      options.body = JSON.stringify(payload);
+    }
+
+    const res = await fetch(targetUrl, options);
 
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -1275,7 +1290,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
     githubSynced: false,
   };
 
-  if (!serverResult?.githubSynced) {
+  if (!serverResult?.saved && !serverResult?.d1Synced) {
     if (ghToken) {
       try {
         const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
@@ -1301,6 +1316,16 @@ export async function submitSurvey(arg1, arg2, arg3) {
         promptGitHubToken('no_token');
       }
     }
+  } else {
+    // Cloudflare D1 or centralized server successfully saved! (Zero GitHub commits)
+    finalResult.saved = true;
+    finalResult.d1Synced = true;
+    finalResult.githubSynced = true;
+    localSurvey.d1Synced = true;
+    localSurvey.githubSynced = true;
+    delete localSurvey.githubSyncing;
+    delete localSurvey.githubSyncingAt;
+    saveLocalSurvey(localSurvey);
   }
 
   if (serverError && !serverResult) {
@@ -1413,7 +1438,7 @@ export async function updateSurvey(arg1, arg2, arg3) {
     savedAt: localSurvey.savedAt,
   };
 
-  if (!serverResult?.githubSynced) {
+  if (!serverResult?.saved && !serverResult?.updated && !serverResult?.d1Synced) {
     if (ghToken) {
       try {
         const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
@@ -1439,6 +1464,16 @@ export async function updateSurvey(arg1, arg2, arg3) {
         promptGitHubToken('no_token');
       }
     }
+  } else {
+    // Cloudflare D1 or centralized server successfully updated! (Zero GitHub commits)
+    finalResult.saved = true;
+    finalResult.updated = true;
+    finalResult.d1Synced = true;
+    localSurvey.d1Synced = true;
+    localSurvey.githubSynced = true;
+    delete localSurvey.githubSyncing;
+    delete localSurvey.githubSyncingAt;
+    saveLocalSurvey(localSurvey);
   }
 
   return finalResult;
@@ -1496,8 +1531,8 @@ export async function deleteSurveys(recordIds) {
   const serverDeletedIds = Array.isArray(serverResult?.deletedIds) ? serverResult.deletedIds : null;
 
   for (const id of ids) {
-    // server ยืนยันว่าลบทั้ง SQLite/files และ GitHub แล้ว -> ไม่ต้องยิง GitHub ซ้ำ
-    if (serverHandledGitHub && (!serverDeletedIds || serverDeletedIds.includes(id))) {
+    // หาก Cloudflare D1 หรือเซิร์ฟเวอร์ส่วนกลางลบข้อมูลแล้ว -> ไม่ต้องยิง GitHub commit ซ้ำ (Zero GitHub commits)
+    if ((serverResult?.deleted || serverResult?.d1Deleted || serverHandledGitHub) && (!serverDeletedIds || serverDeletedIds.includes(id))) {
       deletedIds.push(id);
       continue;
     }
