@@ -23,16 +23,18 @@
     "contactVillage": "หมู่ 12 คำแคน",
     "contactPhone": "080-650-3279",
     "visitDate": "2026-10-18",
-    "accessLimit": "สุนัขดุ",
+    "accessLimit": "",
     "userProblem": "ไม่มี",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
-    "workObstacle": "สุนัขดุมาก",
+    "workObstacle": "",
     "informantName": "นายธนากร โมกข์ศิริ",
     "operatorName": "นายสมสอาด ถาวร",
     "summary": "การใช้งานปกติดี",
     "photos": [],
-    "recordId": "PM-202610212106397-343d"
+    "recordId": "PM-202610212106397-343d",
+    "visitTime": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:34:17.168Z"
 }
