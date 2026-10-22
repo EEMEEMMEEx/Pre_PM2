@@ -25,13 +25,16 @@
     "visitDate": "2026-10-18",
     "informantName": "นายทองเดช วงษาหาร",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "photos": [],
-    "recordId": "PM-202610212115209-c24a"
+    "recordId": "PM-202610212115209-c24a",
+    "visitTime": "",
+    "accessLimit": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:54:18.289Z"
 }
