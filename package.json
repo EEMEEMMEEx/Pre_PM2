@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
@@ -17,7 +17,12 @@
     "export:photos:py": "python export_photos.py",
     "export:pdf": "python export_pdf.py",
     "export:archive": "python export_pdf.py --archive",
-    "etl:d1": "node scripts/d1_etl_export.mjs"
+    "etl:d1": "node scripts/d1_etl_export.mjs",
+    "d1:migrate:local": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 migrations apply pre-pm2-prod --local",
+    "d1:migrate:remote": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 migrations apply pre-pm2-prod --remote",
+    "d1:seed:local": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 execute pre-pm2-prod --local --file=./migrations/0002_seed_data.sql",
+    "d1:seed:remote": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 execute pre-pm2-prod --remote --file=./migrations/0002_seed_data.sql",
+    "wrangler": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
@@ -41,7 +46,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^5.2.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "wrangler": "^4.151.3"
   },
   "optionalDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.63.3"

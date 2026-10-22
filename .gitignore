@@ -16,3 +16,4 @@ SURVEY_*.xlsx
 .vercel/
 .netlify/
 Pre_PM2/
+.wrangler/

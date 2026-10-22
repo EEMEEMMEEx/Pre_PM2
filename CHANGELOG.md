@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.0] - 2026-10-22
+
+### Added
+- **เสร็จสิ้นกระบวนการย้ายฐานข้อมูลสู่ Cloudflare D1 และ OneDrive Photo Hub**:
+  - ประมวลผลและสร้างชุดคำสั่ง SQL Seed (`migrations/0002_seed_data.sql`) ครอบคลุมทั้งสิ้น 204 ระเบียน (197 active + 7 soft-deleted tombstones จากประวัติ Git)
+  - นำเข้าสถานีแม่ข่ายครบถ้วนทั้ง 197 สถานี พร้อมจับคู่ความสัมพันธ์ของตาราง `stations` และ `survey_photos` (104 รูปภาพภาคสนามเชื่อมโยง OneDrive Hub)
+  - ติดตั้ง Wrangler CLI devDependency พร้อมสคริปต์ shim `scripts/fix-electron.cjs` รองรับการรันคำสั่ง D1 ในสภาพแวดล้อม terminal ได้อย่างไร้รอยต่อ
+  - เพิ่มคำสั่งลัดใน `package.json`: `npm run d1:migrate:local`, `npm run d1:migrate:remote`, `npm run d1:seed:local`, `npm run d1:seed:remote`, และ `npm run wrangler`
+  - ทดสอบรันและยืนยันสถานะความถูกต้องบน Local D1 Database (`pre-pm2-prod`): มีแบบสำรวจ 204 รายการ (Active 197, Soft-deleted 7), 197 สถานีแม่ข่าย, และ 104 รูปถ่าย ขนาดข้อมูลรวม 323 KB (ลดลง 98.9% จาก 27.8 MB)
+
 ## [2.13.0] - 2026-10-22
 
 ### Added

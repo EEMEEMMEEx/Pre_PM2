@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import XLSX from 'xlsx';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,10 +38,44 @@ function normalizeStationKey(name) {
   return s.split(/\s+/).join(' ');
 }
 
+const DATABASE_JSON = path.resolve(ROOT_DIR, 'public', 'api', 'database.json');
+
 function loadMasterStations() {
   const seen = new Set();
   const stations = [];
 
+  // 1. Try public/api/database.json first (197 stations verified)
+  if (fs.existsSync(DATABASE_JSON)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(DATABASE_JSON, 'utf8'));
+      const rawStations = Array.isArray(data.stations) ? data.stations : [];
+      for (const st of rawStations) {
+        const village = normalizeStationKey(st.village || '');
+        if (!village || seen.has(village)) continue;
+        seen.add(village);
+        stations.push({
+          id: stations.length + 1,
+          village,
+          subdistrict: String(st.subdistrict || '').trim(),
+          district: String(st.district || '').trim(),
+          province: String(st.province || '').trim(),
+          installation_place: String(st.installation_place || st.installationPlace || '').trim(),
+          equipment_place: String(st.equipment_place || st.equipmentPlace || '').trim(),
+          contact_name: String(st.contact_name || st.contactName || '').trim(),
+          contact_position: String(st.contact_position || st.contactPosition || '').trim(),
+          contact_phone: String(st.contact_phone || st.contactPhone || '').trim(),
+          house_no: String(st.house_no || st.houseNo || '').trim(),
+        });
+      }
+      if (stations.length > 0) {
+        return stations;
+      }
+    } catch (e) {
+      console.warn('[ETL] Failed to parse public/api/database.json, falling back to XLSX:', e.message);
+    }
+  }
+
+  // 2. Fallback to DATABASE.xlsx
   if (fs.existsSync(DATABASE_XLSX)) {
     try {
       const wb = XLSX.readFile(DATABASE_XLSX);
@@ -211,6 +246,64 @@ export function runEtl() {
     });
   }
 
+  // Process the 7 Soft-Deleted Tombstones from Git History
+  const DELETED_AUDIT_RECORDS = [
+    { id: 'PM-202610150221060-6e32', rev: '93b4027', deletedAt: '2026-10-16T01:48:42.000Z' },
+    { id: 'PM-202610150226369-6520', rev: '567db7d', deletedAt: '2026-10-16T01:49:24.000Z' },
+    { id: 'PM-202610150648515-a9eb', rev: 'aa607a7', deletedAt: '2026-10-21T07:53:50.000Z' },
+    { id: 'PM-202610150231413-cf0f', rev: '225ea70', deletedAt: '2026-10-16T01:49:23.000Z' },
+    { id: 'PM-202610150222012-0d56', rev: '73c4534', deletedAt: '2026-10-16T01:49:26.000Z' },
+    { id: 'PM-202610150234324-2e2c', rev: 'd136967', deletedAt: '2026-10-16T01:49:22.000Z' },
+    { id: 'PM-202610150222569-646e', rev: 'acb0c9a', deletedAt: '2026-10-16T01:49:26.000Z' },
+  ];
+
+  let deletedProcessedCount = 0;
+  for (const item of DELETED_AUDIT_RECORDS) {
+    let doc = null;
+    try {
+      const jsonStr = execSync(`git show 5cdb5c3b:data/surveys/${item.id}.json`, { encoding: 'utf8' });
+      doc = JSON.parse(jsonStr);
+    } catch (e) {
+      console.warn(`[WARN] Could not retrieve deleted survey ${item.id} from git:`, e.message);
+    }
+
+    if (!doc) continue;
+
+    const recordId = item.id;
+    const fields = doc.fields || {};
+    const station = fields.station || fields.stationSelect || doc.station || 'ไม่ระบุสถานี';
+    const province = fields.province || doc.province || '';
+    const permit = fields.permit === 'on' ? 'อนุญาต' : (fields.permit || doc.permit || 'ยังไม่ระบุ');
+    const savedAt = doc.savedAt || item.deletedAt;
+    const updatedAt = item.deletedAt;
+
+    const cleanFields = { ...fields };
+    cleanFields.recordId = recordId;
+    cleanFields.station = station;
+    cleanFields.province = province;
+    cleanFields.permit = permit;
+    cleanFields.photos = [];
+    delete cleanFields.data;
+    delete cleanFields.dataUrl;
+    delete cleanFields.base64Data;
+
+    const fieldsJson = JSON.stringify(cleanFields);
+    cleanBytesTotal += Buffer.byteLength(fieldsJson, 'utf8') + 200;
+
+    cleanSurveys.push({
+      record_id: recordId,
+      saved_at: savedAt,
+      updated_at: updatedAt,
+      version: doc.version || 1,
+      station,
+      province,
+      permit,
+      fields_json: fieldsJson,
+      deleted_at: item.deletedAt,
+    });
+    deletedProcessedCount++;
+  }
+
   // Load Master Stations
   const stations = loadMasterStations();
 
@@ -254,7 +347,7 @@ export function runEtl() {
   const cleanKb = (cleanBytesTotal / 1024).toFixed(1);
   const reduction = ((1 - cleanBytesTotal / originalBytesTotal) * 100).toFixed(1);
 
-  console.log(` Surveys Processed     : ${cleanSurveys.length} records`);
+  console.log(` Surveys Processed     : ${cleanSurveys.length} records (${cleanSurveys.length - deletedProcessedCount} active + ${deletedProcessedCount} soft-deleted)`);
   console.log(` Photos Processed      : ${cleanPhotos.length} photos`);
   console.log(` Master Stations Loaded: ${stations.length} stations`);
   console.log(` Original JSON Size    : ${origMb} MB`);
