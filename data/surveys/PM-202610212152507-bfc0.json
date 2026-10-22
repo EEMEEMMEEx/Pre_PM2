@@ -26,11 +26,15 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติดี",
+    "summary": "",
     "informantName": "นายสุรพล แก้วมาตร",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212152507-bfc0"
+    "recordId": "PM-202610212152507-bfc0",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:10:27.014Z"
 }
