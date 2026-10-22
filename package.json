@@ -1,6 +1,6 @@
 {
   "name": "survey-control-room",
-  "version": "2.14.0",
+  "version": "2.14.1",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
@@ -18,11 +18,11 @@
     "export:pdf": "python export_pdf.py",
     "export:archive": "python export_pdf.py --archive",
     "etl:d1": "node scripts/d1_etl_export.mjs",
-    "d1:migrate:local": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 migrations apply pre-pm2-prod --local",
-    "d1:migrate:remote": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 migrations apply pre-pm2-prod --remote",
-    "d1:seed:local": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 execute pre-pm2-prod --local --file=./migrations/0002_seed_data.sql",
-    "d1:seed:remote": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js d1 execute pre-pm2-prod --remote --file=./migrations/0002_seed_data.sql",
-    "wrangler": "node -r ./scripts/fix-electron.cjs ./node_modules/wrangler/wrangler-dist/cli.js"
+    "d1:migrate:local": "node ./scripts/run-wrangler.cjs d1 migrations apply pre-pm2-prod --local",
+    "d1:migrate:remote": "node ./scripts/run-wrangler.cjs d1 migrations apply pre-pm2-prod --remote",
+    "d1:seed:local": "node ./scripts/run-wrangler.cjs d1 execute pre-pm2-prod --local --file=./migrations/0002_seed_data.sql",
+    "d1:seed:remote": "node ./scripts/run-wrangler.cjs d1 execute pre-pm2-prod --remote --file=./migrations/0002_seed_data.sql",
+    "wrangler": "node ./scripts/run-wrangler.cjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

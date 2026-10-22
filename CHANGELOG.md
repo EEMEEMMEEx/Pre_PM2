@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.1] - 2026-10-22
+
+### Fixed
+- **แก้ปัญหา MODULE_NOT_FOUND เมื่อรันคำสั่ง D1 บนเครื่องอื่น (`D:\APP\Pre_PM2`)**:
+  - สร้างตัวเรียกใช้งานกลาง `scripts/run-wrangler.cjs` แทนการ hardcode path ไปยัง `./node_modules/wrangler/wrangler-dist/cli.js`
+  - หากเครื่องปลายทางยังไม่ได้รัน `npm install` ตัวรันสคริปต์จะตรวจจับและเรียกใช้งานผ่าน `npx wrangler` แทนโดยอัตโนมัติอย่างราบรื่น
+  - คงการจัดการสภาพแวดล้อม Electron / Antigravity IDE terminal ด้วย `fix-electron.cjs` เพื่อความเข้ากันได้ 100% ทั้งบน Windows, Linux, และ macOS
+  - ปรับปรุงคำสั่งลัดใน `package.json` (`d1:migrate:*`, `d1:seed:*`, `wrangler`) ให้ชี้ผ่าน `scripts/run-wrangler.cjs`
+
 ## [2.14.0] - 2026-10-22
 
 ### Added
