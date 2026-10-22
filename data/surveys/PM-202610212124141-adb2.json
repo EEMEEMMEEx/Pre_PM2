@@ -25,13 +25,16 @@
     "visitDate": "2026-10-19",
     "informantName": "นายจรวัฒน์ กาฬพันธ์",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติดี",
-    "workObstacle": "",
+    "summary": "",
+    "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "photos": [],
-    "recordId": "PM-202610212124141-adb2"
+    "recordId": "PM-202610212124141-adb2",
+    "visitTime": "",
+    "accessLimit": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:59:26.554Z"
 }
