@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610220824223-4daf",
+  "savedAt": "2026-10-22T08:26:26.477Z",
+  "station": "หมู่ 5 ตากฟ้า",
+  "province": "กำแพงเพชร",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 5 ตากฟ้า",
+    "province": "กำแพงเพชร",
+    "district": "ปางศิลาทอง",
+    "subdistrict": "ปางตาไว",
+    "installationPlace": "ที่ทำการบ้านกำนัน",
+    "equipmentPlace": "ที่ทำการบ้านกำนัน",
+    "contactName": "นายสุริยัน หาญเพชร",
+    "contactPosition": "กำนัน",
+    "contactVillage": "หมู่ 5 ตากฟ้า",
+    "contactPhone": "062-163-6031, \r\n080-78496188",
+    "recordId": "PM-202610220824223-4daf",
+    "photos": []
+  },
+  "photos": []
+}
