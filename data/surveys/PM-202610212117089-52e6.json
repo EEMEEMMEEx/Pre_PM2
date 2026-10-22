@@ -20,7 +20,7 @@
     "groundStatus": "ปกติ",
     "visitDate": "2026-10-18",
     "accessLimit": "",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
@@ -35,5 +35,6 @@
     "informantName": "นายอานนท์ แก่นวงค์",
     "visitTime": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:56:34.132Z"
 }
