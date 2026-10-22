@@ -26,11 +26,15 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "informantName": "นายอานนท์ โกมาลย์",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212158116-04ed"
+    "recordId": "PM-202610212158116-04ed",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:04:28.972Z"
 }
