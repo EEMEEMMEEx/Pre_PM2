@@ -26,12 +26,15 @@
     "accessLimit": "โทรนัดกำนัดก่อน",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
-    "workObstacle": "โทรนัดก่อนเข้า",
-    "summary": "การใช้งานปกติดี",
+    "workObstacle": "ไม่มี",
+    "summary": "",
     "informantName": "นายสุรพงษ์ เพ็งพิทักษ์",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212154338-8dd4"
+    "recordId": "PM-202610212154338-8dd4",
+    "visitTime": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:11:32.100Z"
 }
