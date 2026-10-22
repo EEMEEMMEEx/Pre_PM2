@@ -26,11 +26,15 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติดี",
+    "summary": "",
     "informantName": "นายบัญชา ชาวศรี",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212129417-aac5"
+    "recordId": "PM-202610212129417-aac5",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:02:04.498Z"
 }
