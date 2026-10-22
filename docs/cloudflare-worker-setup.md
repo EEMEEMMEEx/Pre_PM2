@@ -42,7 +42,7 @@
    ```bash
    npx wrangler deploy
    ```
-   *เมื่อเสร็จสิ้น ระบบจะแสดง URL ของ Worker เช่น `https://pre-pm-api.<subdomain>.workers.dev`*
+   *เมื่อเสร็จสิ้น ระบบจะแสดง URL ของ Worker เช่น `https://pre-pm2.<subdomain>.workers.dev`*
 
 4. ใส่ GitHub Personal Access Token เข้าสู่ Worker Secret:
    ```bash
@@ -50,7 +50,7 @@
    ```
    *(ระบบจะให้วาง Token ของคุณลงไป แล้วกด Enter)*
 
-5. นำ URL ที่ได้ (เช่น `https://pre-pm-api.<subdomain>.workers.dev`) ไปใส่ในช่อง **Cloudflare Worker API URL** ในหน้าต่างการตั้งค่าระบบ (Settings Modal) และกดปุ่ม **"บันทึก Worker URL"**
+5. นำ URL ที่ได้ (เช่น `https://pre-pm2.<subdomain>.workers.dev`) ไปใส่ในช่อง **Cloudflare Worker API URL** ในหน้าต่างการตั้งค่าระบบ (Settings Modal) และกดปุ่ม **"บันทึก Worker URL"**
 
 ---
 
@@ -59,7 +59,7 @@
 1. เข้าสู่ [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. ในเมนูด้านซ้าย เลือก **Compute (Workers) > Workers & Pages**
 3. คลิกปุ่ม **Create application** ➔ เลือกแท็บ **Workers** ➔ คลิก **Create Worker**
-4. ตั้งชื่อ Worker เช่น `pre-pm-api` ➔ คลิกปุ่ม **Deploy**
+4. ตั้งชื่อ Worker เช่น `pre-pm2` ➔ คลิกปุ่ม **Deploy**
 5. ในหน้าถัดไป คลิกปุ่ม **Edit code** (Quick Editor):
    - ลบโค้ดเริ่มต้นทั้งหมดในโปรแกรมแก้ไขออก
    - เปิดไฟล์ [`worker/index.js`](../worker/index.js) ในโปรเจกต์นี้ คัดลอกโค้ดทั้งหมดมาวาง
@@ -69,7 +69,7 @@
    - Variable name: `GITHUB_TOKEN`
    - Value: วาง Fine-grained PAT ของคุณ (ที่เปิดสิทธิ์ `Contents: Read and write` สำหรับ Repo `Thaidimaru/Pre_PM2`)
    - คลิก **Save and deploy**
-8. คัดลอก URL ของ Worker (เช่น `https://pre-pm-api.your-subdomain.workers.dev`) นำไปวางในหน้าต่างตั้งค่าระบบของเว็บ Pre-PM แล้วกด **"บันทึก Worker URL"**
+8. คัดลอก URL ของ Worker (เช่น `https://pre-pm2.your-subdomain.workers.dev`) นำไปวางในหน้าต่างตั้งค่าระบบของเว็บ Pre-PM แล้วกด **"บันทึก Worker URL"**
 
 ---
 

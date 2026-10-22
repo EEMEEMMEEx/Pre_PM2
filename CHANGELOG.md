@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.3] - 2026-10-22
+
+### Fixed
+- **แก้ปัญหา Worker API CORS Preflight และรวมศูนย์ Worker URL เป็น `pre-pm2.utai323.workers.dev` (Unified Endpoint & Global CORS)**:
+  - **Resolve Worker URL Mismatch Across Environments (`src/lib/api.js`, `public/api/cloud-config.json`, `docs/cloudflare-worker-setup.md`)**:
+    - แก้ไข URL เริ่มต้น `DEFAULT_WORKER_URL` จาก `pre-pm-api.utai323.workers.dev` เป็นเซิร์ฟเวอร์ Worker ฐานข้อมูลจริง `https://pre-pm2.utai323.workers.dev`
+    - ปรับปรุง `public/api/cloud-config.json` ให้ชี้ไปยัง `https://pre-pm2.utai323.workers.dev`
+    - เพิ่มระบบ Auto-Migration ในฟังก์ชัน `getCloudWorkerUrl()` และ `fetchRemoteWorkerUrl()` ในกรณีที่เบราว์เซอร์ของผู้ใช้เคยบันทึก URL เดิมไว้ใน `localStorage` (`nbtc_cloud_worker_url`) ระบบจะทำการ migrate เป็น `pre-pm2` อัตโนมัติทันที
+  - **Fix Preflight OPTIONS & Global CORS Headers on Cloudflare Worker (`worker/index.js`)**:
+    - กำหนดค่า `corsHeaders` ครบถ้วนตามมาตรฐาน (`Access-Control-Allow-Origin: *`, `Methods: GET, POST, PUT, DELETE, OPTIONS`, `Headers: Content-Type, Authorization, X-Requested-With, If-None-Match`, `Max-Age: 86400`)
+    - ดักจับคำขอ `OPTIONS` Preflight check ที่ส่วนต้นของ `fetch(request, env, ctx)` ทันที และส่งคืน HTTP 204 No Content พร้อม `corsHeaders`
+    - ปรับปรุงฟังก์ชัน `jsonResponse` และการตอบกลับ 304 ให้ผสาน `corsHeaders` ในทุก Endpoint (`/api/save`, `/api/update`, `/api/delete`, `/api/dashboard`, `/api/surveys`, `/api/commits`, `/api/database`, `/api/health`, `/api/github-status`)
+    - ครอบการทำงานของ Worker ทั้งหมดด้วย Top-level `try...catch` เพื่อรับประกันว่าหากเกิด Unhandled Exception ใดๆ ระบบจะส่งคืน HTTP 500 JSON พร้อม `corsHeaders` ป้องกันเบราว์เซอร์บล็อกด้วยข้อผิดพลาด CORS
+  - **Verify Route Handlers on Worker (`worker/index.js`)**:
+    - ยืนยันการทำงานของ POST `/api/save` และ POST `/api/surveys` ในการบันทึกข้อมูลแบบสำรวจ พร้อมจัดเก็บ Metadata รูปภาพลง D1 และอัปเดตตัวนับ `meta_sync` อย่างถูกต้อง ป้องกันข้อผิดพลาด `TypeError: Failed to fetch`
+
 ## [2.15.2] - 2026-10-22
 
 ### Fixed

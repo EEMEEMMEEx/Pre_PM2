@@ -66,6 +66,9 @@ export async function fetchRemoteWorkerUrl() {
       const data = await res.json().catch(() => null);
       if (data && data.workerUrl) {
         remoteWorkerUrl = data.workerUrl.trim().replace(/\/+$/, '');
+        if (remoteWorkerUrl.includes('pre-pm-api.utai323.workers.dev')) {
+          remoteWorkerUrl = remoteWorkerUrl.replace('pre-pm-api.utai323.workers.dev', 'pre-pm2.utai323.workers.dev');
+        }
         return remoteWorkerUrl;
       }
     }
@@ -73,16 +76,35 @@ export async function fetchRemoteWorkerUrl() {
   return '';
 }
 
-export const DEFAULT_WORKER_URL = 'https://pre-pm-api.utai323.workers.dev';
+export const DEFAULT_WORKER_URL = 'https://pre-pm2.utai323.workers.dev';
 
 export function getCloudWorkerUrl() {
   try {
     if (typeof window === 'undefined') return DEFAULT_WORKER_URL;
     const stored = localStorage.getItem(CLOUD_WORKER_URL_KEY);
-    if (stored && stored.trim()) return stored.trim().replace(/\/+$/, '');
-    if (remoteWorkerUrl) return remoteWorkerUrl;
+    if (stored && stored.trim()) {
+      const cleanStored = stored.trim().replace(/\/+$/, '');
+      // Auto-migrate legacy pre-pm-api subdomain to pre-pm2
+      if (cleanStored.includes('pre-pm-api.utai323.workers.dev')) {
+        const migrated = cleanStored.replace('pre-pm-api.utai323.workers.dev', 'pre-pm2.utai323.workers.dev');
+        try { localStorage.setItem(CLOUD_WORKER_URL_KEY, migrated); } catch (e) {}
+        return migrated;
+      }
+      return cleanStored;
+    }
+    if (remoteWorkerUrl) {
+      if (remoteWorkerUrl.includes('pre-pm-api.utai323.workers.dev')) {
+        remoteWorkerUrl = remoteWorkerUrl.replace('pre-pm-api.utai323.workers.dev', 'pre-pm2.utai323.workers.dev');
+      }
+      return remoteWorkerUrl;
+    }
     const envUrl = (import.meta.env?.VITE_WORKER_API_URL || '').trim();
-    if (envUrl) return envUrl.replace(/\/+$/, '');
+    if (envUrl) {
+      if (envUrl.includes('pre-pm-api.utai323.workers.dev')) {
+        return envUrl.replace('pre-pm-api.utai323.workers.dev', 'pre-pm2.utai323.workers.dev').replace(/\/+$/, '');
+      }
+      return envUrl.replace(/\/+$/, '');
+    }
     return DEFAULT_WORKER_URL;
   } catch (e) {
     return DEFAULT_WORKER_URL;

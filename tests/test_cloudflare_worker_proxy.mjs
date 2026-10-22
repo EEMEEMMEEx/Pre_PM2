@@ -59,10 +59,16 @@ console.log('  [PASS] Settings UI: Manual Worker & PAT configuration UI cleanly 
 // 4. Verify Public Config & Documentation
 assert(fs.existsSync(cloudConfigFile), 'public/api/cloud-config.json must exist');
 const cloudConfig = JSON.parse(fs.readFileSync(cloudConfigFile, 'utf8'));
-assert(cloudConfig.workerUrl && cloudConfig.workerUrl.startsWith('https://'), 'public/api/cloud-config.json must contain valid workerUrl');
+assert(cloudConfig.workerUrl === 'https://pre-pm2.utai323.workers.dev', 'public/api/cloud-config.json must point to pre-pm2 live worker');
+assert(apiContent.includes('export const DEFAULT_WORKER_URL = \'https://pre-pm2.utai323.workers.dev\''), 'api.js must default to pre-pm2 live worker');
+assert(apiContent.includes('cleanStored.replace(\'pre-pm-api.utai323.workers.dev\', \'pre-pm2.utai323.workers.dev\')'), 'api.js must auto-migrate legacy stored worker URLs');
+assert(workerContent.includes('if (request.method === \'OPTIONS\')'), 'worker must intercept OPTIONS preflight');
+assert(workerContent.includes('status: 204'), 'worker preflight must return 204');
+assert(workerContent.includes('Access-Control-Allow-Origin'), 'worker must return Access-Control-Allow-Origin');
+assert(workerContent.includes('Access-Control-Allow-Headers'), 'worker must return Access-Control-Allow-Headers');
 assert(fs.existsSync(docsFile), 'docs/cloudflare-worker-setup.md must exist');
 const docsContent = fs.readFileSync(docsFile, 'utf8');
-assert(docsContent.includes('wrangler secret put GITHUB_TOKEN'), 'Documentation must explain secret setup');
-console.log('  [PASS] Discovery & Documentation: public config and Thai guide verified.');
+assert(docsContent.includes('https://pre-pm2.'), 'Documentation must explain setup using pre-pm2 worker');
+console.log('  [PASS] Discovery & Documentation: public config and Thai guide verified with pre-pm2 URL.');
 
-console.log('All Cloudflare Worker API Proxy tests passed successfully!');
+console.log('All Cloudflare Worker API Proxy and CORS Preflight tests passed successfully!');

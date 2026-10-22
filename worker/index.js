@@ -10,26 +10,28 @@
  *  - GITHUB_BRANCH: "main" (default)
  */
 
-const CORS_HEADERS = {
+const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-None-Match',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, If-None-Match',
   'Access-Control-Max-Age': '86400',
 };
+const CORS_HEADERS = corsHeaders;
 
-const NO_CACHE_HEADERS = {
+const noCacheHeaders = {
   'Cache-Control': 'no-cache, no-store, must-revalidate',
   'Pragma': 'no-cache',
   'Expires': '0',
 };
+const NO_CACHE_HEADERS = noCacheHeaders;
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      ...CORS_HEADERS,
+      ...corsHeaders,
       'Content-Type': 'application/json; charset=utf-8',
-      ...NO_CACHE_HEADERS,
+      ...noCacheHeaders,
       ...extraHeaders,
     },
   });
@@ -85,45 +87,46 @@ function formatSurveyRow(row, photos = []) {
 
 export default {
   async fetch(request, env, ctx) {
-    // 0. CORS preflight
+    // 0. CORS preflight — immediately intercept and return 204 No Content
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: { ...CORS_HEADERS, ...NO_CACHE_HEADERS } });
+      return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const url = new URL(request.url);
-    const path = url.pathname.replace(/\/+$/, '');
-    const method = request.method.toUpperCase();
-    const repo = env.GITHUB_REPO || 'Thaidimaru/Pre_PM2';
-    const branch = env.GITHUB_BRANCH || 'main';
-    const hasD1 = Boolean(env.DB);
+    try {
+      const url = new URL(request.url);
+      const path = url.pathname.replace(/\/+$/, '');
+      const method = request.method.toUpperCase();
+      const repo = env.GITHUB_REPO || 'Thaidimaru/Pre_PM2';
+      const branch = env.GITHUB_BRANCH || 'main';
+      const hasD1 = Boolean(env.DB);
 
-    // 1. Health check & Service Info
-    if (path === '' || path === '/' || path === '/api' || path === '/api/health') {
-      let d1Status = 'disconnected';
-      let recordCount = 0;
-      if (hasD1) {
-        try {
-          const res = await env.DB.prepare('SELECT COUNT(*) as total FROM surveys WHERE deleted_at IS NULL').first();
-          d1Status = 'connected';
-          recordCount = res?.total || 0;
-        } catch (e) {
-          d1Status = `error: ${e.message}`;
+      // 1. Health check & Service Info
+      if (path === '' || path === '/' || path === '/api' || path === '/api/health') {
+        let d1Status = 'disconnected';
+        let recordCount = 0;
+        if (hasD1) {
+          try {
+            const res = await env.DB.prepare('SELECT COUNT(*) as total FROM surveys WHERE deleted_at IS NULL').first();
+            d1Status = 'connected';
+            recordCount = res?.total || 0;
+          } catch (e) {
+            d1Status = `error: ${e.message}`;
+          }
         }
-      }
 
-      return jsonResponse({
-        ok: true,
-        service: 'NBTC Microwave Survey Cloudflare Worker & D1 API',
-        mode: 'cloudflare_d1_direct',
-        d1Configured: hasD1,
-        d1Status,
-        activeSurveys: recordCount,
-        repo,
-        branch,
-        version: '2.14.3',
-        timestamp: new Date().toISOString(),
-      });
-    }
+        return jsonResponse({
+          ok: true,
+          service: 'NBTC Microwave Survey Cloudflare Worker & D1 API',
+          mode: 'cloudflare_d1_direct',
+          d1Configured: hasD1,
+          d1Status,
+          activeSurveys: recordCount,
+          repo,
+          branch,
+          version: '2.15.3',
+          timestamp: new Date().toISOString(),
+        });
+      }
 
     // 2. System Status Verification
     if (path === '/api/github-status' || path === '/github-status') {
@@ -627,6 +630,15 @@ export default {
       }
     }
 
-    return jsonResponse({ error: 'Endpoint not found' }, 404);
-  },
+    return jsonResponse({ ok: false, error: 'Endpoint not found' }, 404);
+  } catch (fatalError) {
+    console.error('Unhandled Worker error:', fatalError);
+    return jsonResponse(
+      {
+        ok: false,
+        error: fatalError?.message || 'Internal Server Error',
+      },
+      500
+    );
+  }
 };
