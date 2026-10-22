@@ -27,12 +27,14 @@
     "userProblem": "ไม่มี",
     "siteCondition": "สภาพปกติ",
     "antennaCondition": "สภาพปกติ",
-    "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติเสียงชัดเจน",
+    "workObstacle": "",
+    "summary": "",
     "informantName": "นายสมคิด เย็นกลาง",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212103335-8c7d"
+    "recordId": "PM-202610212103335-8c7d",
+    "visitTime": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:26:31.138Z"
 }
