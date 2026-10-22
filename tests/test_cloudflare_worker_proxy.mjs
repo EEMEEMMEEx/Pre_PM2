@@ -27,7 +27,7 @@ console.log('  [PASS] Cloudflare Worker: worker/index.js contains complete edge 
 
 assert(fs.existsSync(wranglerFile), 'wrangler.toml must exist');
 const wranglerContent = fs.readFileSync(wranglerFile, 'utf8');
-assert(wranglerContent.includes('name = "pre-pm-api"'), 'wrangler.toml must define worker name');
+assert(wranglerContent.includes('name = "pre-pm2"') || wranglerContent.includes('name = "pre-pm-api"'), 'wrangler.toml must define worker name');
 assert(wranglerContent.includes('worker/index.js'), 'wrangler.toml must point to worker/index.js');
 console.log('  [PASS] Wrangler configuration: wrangler.toml is valid.');
 
@@ -59,6 +59,8 @@ console.log('  [PASS] Settings UI: Cloudflare Worker section and status banners 
 
 // 4. Verify Public Config & Documentation
 assert(fs.existsSync(cloudConfigFile), 'public/api/cloud-config.json must exist');
+const cloudConfig = JSON.parse(fs.readFileSync(cloudConfigFile, 'utf8'));
+assert(cloudConfig.workerUrl && cloudConfig.workerUrl.startsWith('https://'), 'public/api/cloud-config.json must contain valid workerUrl');
 assert(fs.existsSync(docsFile), 'docs/cloudflare-worker-setup.md must exist');
 const docsContent = fs.readFileSync(docsFile, 'utf8');
 assert(docsContent.includes('wrangler secret put GITHUB_TOKEN'), 'Documentation must explain secret setup');
