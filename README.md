@@ -3,7 +3,7 @@
 ![React](https://img.shields.io/badge/Frontend-React%2018%20%7C%20Tailwind%204-61DAFB?logo=react)
 ![Database](https://img.shields.io/badge/Database-Cloudflare%20D1-F38020?logo=cloudflare)
 ![Edge API](https://img.shields.io/badge/Edge%20API-Cloudflare%20Workers-F38020?logo=cloudflare)
-![Hosting](https://img.shields.io/badge/Hosting-Cloudflare%20R2%20%7C%20GitHub%20Pages-orange?logo=cloudflare)
+![Hosting](https://img.shields.io/badge/Hosting-Cloudflare%20Pages%20%7C%20GitHub%20Pages-F38020?logo=cloudflare)
 ![Backend](https://img.shields.io/badge/Backend-Python%203%20%7C%20Node.js%2024-3776AB?logo=python)
 ![Photo Hub](https://img.shields.io/badge/Media%20Hub-Microsoft%20OneDrive-0078D4?logo=microsoftonedrive)
 ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
@@ -19,12 +19,12 @@
 
 **Pre-PM Survey Control Room** ออกแบบขึ้นเพื่ออำนวยความสะดวกแก่วิศวกรและช่างเทคนิคภาคสนามในการลงพื้นที่สำรวจสถานีวิทยุคมนาคม (NBTC Microwave) ทั่วประเทศ ครอบคลุมการตรวจสอบสิทธิ์การเข้าพื้นที่ บันทึกสภาพอุปกรณ์ ระบบไฟฟ้า เสาและสายอากาศ การจัดเก็บภาพถ่าย และสรุปผลรายงานเข้าสู่ศูนย์กลางแบบเรียลไทม์
 
-ระบบขับเคลื่อนด้วยสถาปัตยกรรม **Modern Edge Data Hub & Tri-Cloud Architecture**:
+ระบบขับเคลื่อนด้วยสถาปัตยกรรม **Modern Edge Data Hub & Serverless Architecture**:
 1. **Cloudflare D1 Relational SQL Database & Workers Edge API (Zero GitHub Commits)**:
    - จัดการข้อมูลแบบสำรวจผ่าน Relational SQL Database (`pre-pm2-prod`) บน Cloudflare Edge Network โดยตรง
    - **Decoupled from Git**: ยกเลิกการคอมมิตไฟล์ JSON เข้า GitHub Repository โดยอัตโนมัติ ช่วยแก้ปัญหาคิว Build/Deploy ของ GitHub Actions และขจัดปัญหา GitHub API Rate Limit (403 Forbidden) โดยสิ้นเชิง
    - รองรับ ETag 304 Caching ผ่านตาราง `meta_sync` ช่วยลดปริมาณการอ่านแถวข้อมูล (Rows Read) และประหยัดแบนด์วิดท์
-2. **Cloudflare R2 & GitHub Pages Edge Hosting**:
+2. **Cloudflare Pages & GitHub Pages (Edge Static Hosting)**:
    - โฮสต์เว็บแอปพลิเคชัน Single Page Application (SPA / PWA) ความเร็วสูงระดับ Edge CDN ทั่วประเทศ
    - รองรับการสร้าง Static Snapshot อัตโนมัติ (`/api/dashboard`, `/api/database`) เพื่อรองรับการทำงานแบบออฟไลน์
 3. **Microsoft OneDrive Photo Hub & On-Premises Engine**:
@@ -66,7 +66,7 @@ graph TD
     Client["📱 Web Client: React 18 SPA / PWA (Mobile & Desktop)"]
 
     subgraph CloudflareEdge["☁️ Cloudflare Global Edge Network"]
-        R2Bucket["Cloudflare R2 Bucket / GitHub Pages<br/>(SPA Assets & Snapshots)"]
+        PagesHosting["Cloudflare Pages / GitHub Pages<br/>(SPA Static Assets & Snapshots)"]
         WorkerProxy["⚡ Cloudflare Worker API<br/>(worker/index.js)"]
         D1DB[("🗄️ Cloudflare D1 Database<br/>pre-pm2-prod")]
     end
@@ -85,11 +85,11 @@ graph TD
 
     subgraph GitHubRepo["🐙 GitHub Repository (Source & CI/CD)"]
         GHSource["Thaidimaru/Pre_PM2<br/>(Codebase Only)"]
-        GHActions["⚙️ GitHub Actions<br/>(deploy-r2.yml)"]
+        GHActions["⚙️ GitHub Actions<br/>(deploy-gh-pages.yml / deploy-pages.yml)"]
     end
 
     %% Client Interactions
-    Client -->|"HTTPS / Edge CDN"| R2Bucket
+    Client -->|"HTTPS / Edge CDN"| PagesHosting
     Client <-->|"Direct CRUD REST API<br/>(/api/surveys, /api/save, /api/update, /api/delete)"| WorkerProxy
     WorkerProxy <-->|"Prepared Statements & Batch"| D1DB
 
@@ -102,7 +102,7 @@ graph TD
 
     %% Git / CI
     GHSource -->|"Push Triggers Deploy"| GHActions
-    GHActions -->|"Deploy dist/"| R2Bucket
+    GHActions -->|"Deploy dist/"| PagesHosting
 ```
 
 ---
@@ -144,7 +144,6 @@ Pre-PM2/
 │   └── test_cloudflare_worker_proxy.mjs # Worker Proxy Verification
 ├── wrangler.toml              # Cloudflare Worker & D1 Binding Configuration
 ├── database.py                # Standalone Python 3 + SQLite Server & Local API Engine
-├── deploy_r2.py               # Cloudflare R2 Frontend Deployment Tool
 ├── export_photos.py           # Photo export utility from SQLite
 ├── export_pdf.py              # Official NBTC A4 PDF Report Generation Utility
 ├── DATABASE.xlsx              # Master Station Records
@@ -205,15 +204,16 @@ python database.py
 ```
 - เปิดเบราว์เซอร์ไปยัง `http://localhost:8765` หรือใช้งานควบคู่กับ `npm run dev` ที่พอร์ต `5173`
 
-### 4. การ Deploy สู่ Cloudflare R2
+### 4. การ Deploy สู่ Cloudflare Pages และ GitHub Pages
 
 ```bash
-# อัปโหลด Bundle และ Assets ขึ้น Cloudflare R2
-npm run deploy
-# หรือ
-python deploy_r2.py
+# บิลด์ระบบสำหรับ Production
+npm run build
+
+# Deploy Cloudflare Pages ผ่าน Wrangler (ทางเลือก manual)
+npx wrangler pages deploy dist --project-name=pre-pm2
 ```
-- หรือเมื่อ push โค้ดขึ้น branch `main` ระบบ GitHub Actions จะทำการ build และ deploy ขึ้น R2 อัตโนมัติ
+- หรือเมื่อ push โค้ดขึ้น branch `main` ระบบ GitHub Actions (`deploy-gh-pages.yml` / `deploy-pages.yml`) จะทำการ build และ deploy สู่ GitHub Pages และ Cloudflare Pages ให้โดยอัตโนมัติ
 
 ---
 
@@ -256,6 +256,6 @@ npm run test:py
 
 ## 🌐 ลิงก์และข้อมูลการเผยแพร่ (Deployments & Repositories)
 
-- **Production Edge (Cloudflare R2)**: [https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/dashboard](https://pub-bc30fda8b7654fa09add325ab0f468e0.r2.dev/dashboard)
 - **GitHub Pages**: [https://Thaidimaru.github.io/Pre_PM2/](https://Thaidimaru.github.io/Pre_PM2/)
-- **Repository**: [https://github.com/Thaidimaru/Pre_PM2](https://github.com/Thaidimaru/Pre_PM2)
+- **Cloudflare Pages**: [https://pre-pm2.pages.dev](https://pre-pm2.pages.dev)
+- **GitHub Repository**: [https://github.com/Thaidimaru/Pre_PM2](https://github.com/Thaidimaru/Pre_PM2)
