@@ -1,0 +1,29 @@
+{
+  "recordId": "PM-202610210928039-4c86",
+  "savedAt": "2026-10-22T03:24:16.840Z",
+  "station": "หมู่ 7 หนองปลิง",
+  "province": "กาญจนบุรี",
+  "permit": "อนุญาต",
+  "fields": {
+    "permit": "อนุญาต",
+    "radioStatus": "ปกติ",
+    "receiveStatus": "ปกติ",
+    "transmitStatus": "ปกติ",
+    "powerStatus": "ปกติ",
+    "batteryStatus": "ปกติ",
+    "groundStatus": "ปกติ",
+    "station": "หมู่ 7 หนองปลิง",
+    "province": "กาญจนบุรี",
+    "district": "เลาขวัญ",
+    "subdistrict": "ทุ่งกระบ่ำ",
+    "installationPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "equipmentPlace": "ที่ทำการบ้านผู้ใหญ่บ้าน",
+    "contactName": "นายเวียง ศรีพุญเพ็ง",
+    "contactPosition": "ผู้ใหญ่บ้าน",
+    "contactVillage": "หมู่ 7 หนองปลิง",
+    "contactPhone": "061-356-6634",
+    "photos": [],
+    "recordId": "PM-202610210928039-4c86"
+  },
+  "photos": []
+}
