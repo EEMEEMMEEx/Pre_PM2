@@ -28,9 +28,13 @@
     "workObstacle": "ไม่มี",
     "informantName": "นายมรกต ชาปัญญา",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "photos": [],
-    "recordId": "PM-202610212140232-d32b"
+    "recordId": "PM-202610212140232-d32b",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:07:33.372Z"
 }
