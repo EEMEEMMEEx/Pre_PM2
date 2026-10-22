@@ -23,11 +23,11 @@
     "contactVillage": "หมู่ 11 คำเจริญ",
     "contactPhone": "080-103-2713",
     "visitDate": "2026-10-18",
-    "accessLimit": "โทรนัดก่อนเข้า ไม่ค่อยอยู่บ้าน",
-    "userProblem": "ไม่มี",
+    "accessLimit": "",
+    "userProblem": "",
     "siteCondition": "สภาพปกติ",
     "antennaCondition": "สภาพปกติ",
-    "workObstacle": "",
+    "workObstacle": "ไม่มี",
     "summary": "",
     "informantName": "นายสมคิด เย็นกลาง",
     "operatorName": "นายสมสอาด ถาวร",
@@ -35,5 +35,6 @@
     "recordId": "PM-202610212103335-8c7d",
     "visitTime": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:42:25.444Z"
 }
