@@ -25,7 +25,7 @@
     "visitDate": "2026-10-15",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
-    "workObstacle": "ปกติ",
+    "workObstacle": "ไม่มี",
     "informantName": "นางสีประภา ชุมแวงวาปี",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
@@ -35,5 +35,6 @@
     "summary": "",
     "recordId": "PM-202610212212519-9120"
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:15:20.380Z"
 }
