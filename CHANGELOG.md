@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.12.5] - 2026-10-22
 
 ### Fixed
+- **แก้ปัญหา Cloudflare Workers Builds ล้มเหลว (ERESOLVE และ EBADENGINE)**:
+  - อัปเกรด `@vitejs/plugin-react` เป็น `^5.2.0` เพื่อรองรับ `vite@^8.3.5` จาก Dependabot (#25) ขจัดปัญหา dependency conflict (ERESOLVE)
+  - กำหนดรันไทม์ Node.js เป็น 24 ผ่าน `.nvmrc`, `.node-version`, และ `"engines": { "node": ">=24.0.0" }` ใน `package.json` (#26) ขจัดปัญหา engine warning (EBADENGINE) จาก `html2canvas-pro@2.5.2`
+  - ปรับปรุง build environment ใน GitHub Actions workflows ให้ใช้ Node.js 24 สอดคล้องกันทั้งระบบ
 - **แก้ปัญหา GitHub API Rate Limit (403 Forbidden) และข้อมูลไม่ซิงค์บน Dashboard**:
   - เพิ่ม Read Proxy Endpoints ใน Cloudflare Worker (worker/index.js): /api/commits, /api/surveys, และ /api/surveys/:id รองรับการส่งต่อคำขอด้วย GITHUB_TOKEN กลางบน Worker
   - อัปเดต etchSurveysFromGitHubClient() ใน src/lib/api.js ให้ตรวจสอบ Commit และดึงรายการไฟล์ผ่าน Cloudflare Worker API Proxy เมื่อมีการตั้งค่า Worker URL ทำให้ Dashboard ซิงค์ข้อมูลล่าสุดได้ต่อเนื่องโดยไม่ต้องใช้ Token บนเครื่องผู้ใช้
