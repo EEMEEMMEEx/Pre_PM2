@@ -682,7 +682,7 @@ export async function syncPendingLocalSurveys() {
   try {
     for (const survey of localSurveys) {
       if (!survey || !survey.recordId) continue;
-      if (survey.githubSynced) continue;
+      if (survey.d1Synced || (survey.githubSynced && !survey._isOfflineDraft)) continue;
       if (!isCommittableRecordId(survey.recordId)) {
         console.warn('[sync] ข้าม record ที่ recordId ไม่เข้ารูปแบบ (กัน test/legacy id หลุดขึ้น GitHub):', survey.recordId);
         continue;
@@ -710,6 +710,8 @@ export async function syncPendingLocalSurveys() {
         if (synced) {
           delete survey.githubSyncing;
           delete survey.githubSyncingAt;
+          delete survey._isOfflineDraft;
+          delete survey.offlineFallback;
           survey.githubSynced = true;
           survey.d1Synced = true;
           saveLocalSurvey(survey);
@@ -723,6 +725,12 @@ export async function syncPendingLocalSurveys() {
   } finally {
     isSyncingPending = false;
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    syncPendingLocalSurveys().catch(() => {});
+  });
 }
 
 export const DASHBOARD_CACHE_KEY = 'nbtc_pre_pm_dashboard_cache';
@@ -843,10 +851,29 @@ export async function fetchDashboardData(options = {}) {
       serverData.recent = serverData.recent.filter((s) => s && !deletedIds.has(s.recordId));
       seedClientGhSurveysFromSnapshot(serverData.recent);
     }
+
+    const d1RecordIds = new Set((serverData.recent || []).map((s) => s.recordId).filter(Boolean));
+
+    // Prune stale/deleted records from local storage if they were previously synced but no longer in D1
+    try {
+      const allLocal = getLocalSurveys();
+      const pruned = allLocal.filter((s) => {
+        if (!s || !s.recordId) return false;
+        if (deletedIds.has(s.recordId)) return false;
+        if (s.d1Synced && !d1RecordIds.has(s.recordId)) return false;
+        return true;
+      });
+      if (pruned.length !== allLocal.length) {
+        localStorage.setItem(LOCAL_SURVEYS_KEY, JSON.stringify(pruned));
+      }
+    } catch (e) {}
+
     const localSurveys = getLocalSurveys().filter((s) => s && !deletedIds.has(s.recordId));
+    const pendingDrafts = localSurveys.filter((s) => !d1RecordIds.has(s.recordId) && (!s.d1Synced || s._isOfflineDraft));
+
     const allCombinedSurveys = [
       ...(serverData?.recent || []),
-      ...localSurveys,
+      ...pendingDrafts,
     ];
     const mergedResult = mergeDashboardWithLocal(serverData, allCombinedSurveys);
     setCachedDashboardData(mergedResult);
@@ -1218,11 +1245,11 @@ export async function submitSurvey(arg1, arg2, arg3) {
 
   let serverResult = null;
   let serverError = null;
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   const workerUrl = getCloudWorkerUrl();
 
-  // Option 2 (Cloudflare Worker Edge API):
-  // หากมีการตั้งค่า Worker API URL ให้บันทึกผ่าน Worker ซึ่งจะใช้ GITHUB_TOKEN กลางคอมมิตเข้า GitHub ทันที
+  // Option 2 (Cloudflare Worker Edge API - Centralized Cloudflare D1 Database):
   if (workerUrl) {
     const res = await callWorkerMutatingApi(workerUrl, '/api/save', { fields, photos });
     if (res.ok && res.data) {
@@ -1240,14 +1267,71 @@ export async function submitSurvey(arg1, arg2, arg3) {
     }
   }
 
-  // Construct local survey snapshot to ensure instant display on Dashboard
-  const recordId =
-    serverResult?.recordId ||
-    `PM-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 15)}-${Math.random().toString(16).slice(2, 6)}`;
-  const savedAt = serverResult?.savedAt || new Date().toISOString();
+  // FORCE CENTRALIZED API WRITE:
+  // หากอุปกรณ์ออนไลน์และบันทึกลง Cloudflare D1 ล้มเหลว -> ห้ามตกไปบันทึก local cache แล้วแสร้งว่าสำเร็จ!
+  // ต้องโยน Error แสดงข้อความจริงให้ผู้ใช้เห็นทันที เพื่อป้องกันข้อมูลไม่ซิงค์ข้ามอุปกรณ์
+  if (!serverResult && isOnline) {
+    const msg = serverError || 'ไม่สามารถเชื่อมต่อหรือบันทึกลงฐานข้อมูลกลาง (Cloudflare D1) ได้ กรุณาตรวจสอบการเชื่อมต่อ';
+    console.error('[submitSurvey] Centralized persistence failed while online:', msg);
+    throw new Error(msg);
+  }
+
+  // กรณีอุปกรณ์ออฟไลน์จริง (Disconnected from internet):
+  // ทำเครื่องหมายเป็น offline draft อย่างชัดเจน และจัดเก็บในเครื่องเพื่อรอซิงค์เมื่อมีสัญญาณ
+  if (!isOnline && !serverResult) {
+    const recordId = `PM-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 15)}-${Math.random().toString(16).slice(2, 6)}`;
+    const savedAt = new Date().toISOString();
+    const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
+    const province = fields.province || '';
+    const permit = fields.permit === 'on' ? 'อนุญาต' : (fields.permit || 'ยังไม่ระบุ');
+
+    const formattedPhotos = (photos || []).map((p, idx) => ({
+      id: p.id || idx + 1,
+      name: (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_'),
+      fileName: p.fileName || `${recordId}_${(p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_')}`,
+      contentType: p.type || p.contentType || 'image/jpeg',
+      size: p.size || 0,
+      url: p.previewUrl || p.url || '',
+    }));
+
+    const cleanFields = { ...fields, recordId, station: stationName, province, permit, photos: formattedPhotos };
+    delete cleanFields.data;
+    delete cleanFields.dataUrl;
+    delete cleanFields.base64Data;
+
+    const localSurvey = {
+      recordId,
+      savedAt,
+      station: stationName,
+      province,
+      permit,
+      fields: cleanFields,
+      photos: formattedPhotos,
+      _isOfflineDraft: true,
+      offlineFallback: true,
+      d1Synced: false,
+    };
+
+    saveLocalSurvey(localSurvey);
+    registerClientSurvey(localSurvey);
+    notifySurveysUpdated({ action: 'create', recordId, offlineDraft: true });
+
+    return {
+      saved: false,
+      offlineDraft: true,
+      offlineFallback: true,
+      recordId,
+      savedAt,
+      message: 'บันทึกเป็นแบบร่างออฟไลน์ในอุปกรณ์นี้แล้ว เนื่องจากไม่มีสัญญาณอินเทอร์เน็ต (จะซิงค์ขึ้นฐานข้อมูลกลางทันทีเมื่อเชื่อมต่ออินเทอร์เน็ต)',
+    };
+  }
+
+  // Centralized write confirmed with 200/201 OK from Cloudflare D1
+  const recordId = serverResult.recordId;
+  const savedAt = serverResult.savedAt || new Date().toISOString();
   const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
   const province = fields.province || '';
-  const permit = fields.permit === 'on' ? 'อนุญาต' : fields.permit || 'ยังไม่ระบุ';
+  const permit = fields.permit === 'on' ? 'อนุญาต' : (fields.permit || 'ยังไม่ระบุ');
 
   const formattedPhotos = (photos || []).map((p, idx) => {
     const cleanName = (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
@@ -1266,7 +1350,7 @@ export async function submitSurvey(arg1, arg2, arg3) {
     };
   });
 
-  const cleanFields = { ...fields };
+  const cleanFields = { ...fields, recordId, station: stationName, province, permit, photos: formattedPhotos };
   delete cleanFields.data;
   delete cleanFields.dataUrl;
   delete cleanFields.base64Data;
@@ -1277,80 +1361,22 @@ export async function submitSurvey(arg1, arg2, arg3) {
     station: stationName,
     province,
     permit,
-    fields: {
-      ...cleanFields,
-      recordId,
-      station: stationName,
-      province,
-      permit,
-      photos: formattedPhotos,
-    },
+    fields: cleanFields,
     photos: formattedPhotos,
+    d1Synced: true,
   };
-
-  // ทำเครื่องหมายก่อน saveLocalSurvey เพื่อให้ syncPendingLocalSurveys ที่ถูก trigger
-  // ทางอ้อม (DashboardView reload) ข้าม record นี้ไป แล้วรอ write ที่กำลังจะเริ่มแทน
-  const ghToken = await getOrFetchGitHubToken();
-  if (ghToken) {
-    localSurvey.githubSyncing = true;
-    localSurvey.githubSyncingAt = Date.now();
-  }
 
   saveLocalSurvey(localSurvey);
   registerClientSurvey(localSurvey);
-  notifySurveysUpdated({ action: 'create', recordId });
+  notifySurveysUpdated({ action: 'create', recordId, d1Synced: true });
 
-  let finalResult = serverResult || {
+  return {
+    ...serverResult,
     saved: true,
+    d1Synced: true,
     recordId,
     savedAt,
-    githubSynced: false,
   };
-
-  if (!serverResult?.saved && !serverResult?.d1Synced) {
-    if (ghToken) {
-      try {
-        const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
-        delete localSurvey.githubSyncing;
-        delete localSurvey.githubSyncingAt;
-        if (ghRes.success) {
-          finalResult.githubSynced = true;
-          localSurvey.githubSynced = true;
-          saveLocalSurvey(localSurvey);
-        } else {
-          finalResult.githubError = ghRes.error || ghRes.reason;
-        }
-      } catch (e) {
-        delete localSurvey.githubSyncing;
-        delete localSurvey.githubSyncingAt;
-        console.warn('GitHub client commit failed:', e);
-        finalResult.githubError = e.message;
-      }
-    } else {
-      finalResult.githubError = 'no_token';
-      // ละเว้นการ prompt เตือน หากเซิร์ฟเวอร์ส่วนกลางบันทึกข้อมูลเรียบร้อยแล้ว
-      if (!serverResult?.saved) {
-        promptGitHubToken('no_token');
-      }
-    }
-  } else {
-    // Cloudflare D1 or centralized server successfully saved! (Zero GitHub commits)
-    finalResult.saved = true;
-    finalResult.d1Synced = true;
-    finalResult.githubSynced = true;
-    localSurvey.d1Synced = true;
-    localSurvey.githubSynced = true;
-    delete localSurvey.githubSyncing;
-    delete localSurvey.githubSyncingAt;
-    saveLocalSurvey(localSurvey);
-    notifySurveysUpdated({ action: 'saved', recordId });
-  }
-
-  if (serverError && !serverResult) {
-    console.warn('Server save had issue, saved to local cache:', serverError);
-  }
-
-  return finalResult;
 }
 
 export async function updateSurvey(arg1, arg2, arg3) {
@@ -1374,10 +1400,11 @@ export async function updateSurvey(arg1, arg2, arg3) {
 
   let serverResult = null;
   let serverError = null;
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
   const workerUrl = getCloudWorkerUrl();
 
-  // Option 2 (Cloudflare Worker Edge API):
+  // Option 2 (Cloudflare Worker Edge API - Centralized Cloudflare D1 Database):
   if (workerUrl) {
     const res = await callWorkerMutatingApi(workerUrl, '/api/update', { recordId, fields, photos, isUpdate: true });
     if (res.ok && res.data) {
@@ -1393,6 +1420,69 @@ export async function updateSurvey(arg1, arg2, arg3) {
       serverError = res.error;
     }
   }
+
+  // FORCE CENTRALIZED API WRITE:
+  // หากอุปกรณ์ออนไลน์และอัปเดตข้อมูลขึ้น Cloudflare D1 ล้มเหลว -> ห้ามตกไปบันทึก local cache แล้วแสร้งว่าสำเร็จ!
+  if (!serverResult && isOnline) {
+    const msg = serverError || 'ไม่สามารถเชื่อมต่อหรืออัปเดตข้อมูลลงฐานข้อมูลกลาง (Cloudflare D1) ได้ กรุณาตรวจสอบการเชื่อมต่อ';
+    console.error('[updateSurvey] Centralized update failed while online:', msg);
+    throw new Error(msg);
+  }
+
+  // กรณีอุปกรณ์ออฟไลน์จริง:
+  if (!isOnline && !serverResult) {
+    const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
+    const province = fields.province || '';
+    const permit = fields.permit === 'on' ? 'อนุญาต' : (fields.permit || 'ยังไม่ระบุ');
+
+    const formattedPhotos = (photos || []).map((p, idx) => ({
+      id: p.id || idx + 1,
+      name: (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_'),
+      fileName: p.fileName || `${recordId}_${(p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_')}`,
+      contentType: p.type || p.contentType || 'image/jpeg',
+      size: p.size || 0,
+      url: p.previewUrl || p.url || '',
+    }));
+
+    const cleanFields = { ...fields, recordId, station: stationName, province, permit, photos: formattedPhotos };
+    delete cleanFields.data;
+    delete cleanFields.dataUrl;
+    delete cleanFields.base64Data;
+
+    const localSurvey = {
+      recordId,
+      savedAt: fields.savedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      station: stationName,
+      province,
+      permit,
+      fields: cleanFields,
+      photos: formattedPhotos,
+      _isOfflineDraft: true,
+      offlineFallback: true,
+      d1Synced: false,
+    };
+
+    saveLocalSurvey(localSurvey);
+    registerClientSurvey(localSurvey);
+    notifySurveysUpdated({ action: 'update', recordId, offlineDraft: true });
+
+    return {
+      saved: false,
+      updated: false,
+      offlineDraft: true,
+      offlineFallback: true,
+      recordId,
+      updatedAt: localSurvey.updatedAt,
+      message: 'บันทึกการแก้ไขเป็นแบบร่างออฟไลน์ในอุปกรณ์นี้แล้ว เนื่องจากไม่มีสัญญาณอินเทอร์เน็ต (จะซิงค์ขึ้นฐานข้อมูลกลางทันทีเมื่อเชื่อมต่ออินเทอร์เน็ต)',
+    };
+  }
+
+  // Centralized update confirmed with 200 OK from Cloudflare D1
+  const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
+  const province = fields.province || '';
+  const permit = fields.permit === 'on' ? 'อนุญาต' : (fields.permit || 'ยังไม่ระบุ');
+  const updatedAt = serverResult.updatedAt || new Date().toISOString();
 
   const formattedPhotos = (photos || []).map((p, idx) => {
     const cleanName = (p.name || `photo_${idx + 1}.jpg`).replace(/[/\\?%*:|"<>]/g, '_');
@@ -1411,91 +1501,35 @@ export async function updateSurvey(arg1, arg2, arg3) {
     };
   });
 
-  const cleanFields = { ...fields };
+  const cleanFields = { ...fields, recordId, station: stationName, province, permit, photos: formattedPhotos };
   delete cleanFields.data;
   delete cleanFields.dataUrl;
   delete cleanFields.base64Data;
 
-  const stationName = fields.station || fields.stationSelect || 'ไม่ระบุสถานี';
-  const province = fields.province || '';
-  const permit = fields.permit === 'on' ? 'อนุญาต' : fields.permit || 'ยังไม่ระบุ';
-
   const localSurvey = {
     recordId,
-    savedAt: serverResult?.savedAt || fields.savedAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    savedAt: serverResult.savedAt || fields.savedAt || new Date().toISOString(),
+    updatedAt,
     station: stationName,
     province,
     permit,
-    fields: {
-      ...cleanFields,
-      recordId,
-      station: stationName,
-      province,
-      permit,
-      photos: formattedPhotos,
-    },
+    fields: cleanFields,
     photos: formattedPhotos,
+    d1Synced: true,
   };
-
-  const ghToken = await getOrFetchGitHubToken();
-  if (ghToken) {
-    localSurvey.githubSyncing = true;
-    localSurvey.githubSyncingAt = Date.now();
-  }
 
   saveLocalSurvey(localSurvey);
   registerClientSurvey(localSurvey);
+  notifySurveysUpdated({ action: 'updated', recordId, d1Synced: true });
 
-  notifySurveysUpdated({ action: 'update', recordId });
-
-  let finalResult = serverResult || {
+  return {
+    ...serverResult,
     saved: true,
     updated: true,
+    d1Synced: true,
     recordId,
-    savedAt: localSurvey.savedAt,
+    updatedAt,
   };
-
-  if (!serverResult?.saved && !serverResult?.updated && !serverResult?.d1Synced) {
-    if (ghToken) {
-      try {
-        const ghRes = await commitSurveyToGitHubClient(localSurvey, ghToken);
-        delete localSurvey.githubSyncing;
-        delete localSurvey.githubSyncingAt;
-        if (ghRes.success) {
-          finalResult.githubSynced = true;
-          localSurvey.githubSynced = true;
-          saveLocalSurvey(localSurvey);
-        } else {
-          finalResult.githubError = ghRes.error || ghRes.reason;
-        }
-      } catch (e) {
-        delete localSurvey.githubSyncing;
-        delete localSurvey.githubSyncingAt;
-        console.warn('GitHub client update commit failed:', e);
-        finalResult.githubError = e.message;
-      }
-    } else {
-      finalResult.githubError = 'no_token';
-      // ละเว้นการ prompt เตือน หากเซิร์ฟเวอร์ส่วนกลางบันทึก/อัปเดตเรียบร้อยแล้ว
-      if (!serverResult?.saved && !serverResult?.updated) {
-        promptGitHubToken('no_token');
-      }
-    }
-  } else {
-    // Cloudflare D1 or centralized server successfully updated! (Zero GitHub commits)
-    finalResult.saved = true;
-    finalResult.updated = true;
-    finalResult.d1Synced = true;
-    localSurvey.d1Synced = true;
-    localSurvey.githubSynced = true;
-    delete localSurvey.githubSyncing;
-    delete localSurvey.githubSyncingAt;
-    saveLocalSurvey(localSurvey);
-    notifySurveysUpdated({ action: 'updated', recordId });
-  }
-
-  return finalResult;
 }
 
 export async function deleteSurveys(recordIds) {

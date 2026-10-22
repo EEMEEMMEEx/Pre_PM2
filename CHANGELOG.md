@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.2] - 2026-10-22
+
+### Fixed
+- **แก้ปัญหาข้อมูลไม่ตรงกันข้ามอุปกรณ์ (Cross-Device Desynchronization) และบังคับบันทึกข้อมูลเข้าฐานข้อมูลกลาง (Force Centralized Persistence)**:
+  - **Eliminate Local Storage Fallback & Force Centralized API Write (`src/lib/api.js`, `worker/index.js`)**:
+    - ยกเลิกการจำลองสถานะบันทึกสำเร็จหลอก (`saved: true`) ในเครื่องเมื่อคำขอ API ล้มเหลวขณะออนไลน์ ป้องกันข้อมูลติดค้างในเบราว์เซอร์ของเครื่องผู้บันทึกโดยที่เครื่องอื่นมองไม่เห็น
+    - บังคับการส่งและบันทึกข้อมูลเข้าสู่ Cloudflare Worker D1 โดยตรง และต้องได้รับ HTTP 200 OK หรือ 201 Created เท่านั้น
+    - จัดการกรณีออฟไลน์ (`!navigator.onLine`): อนุญาตให้บันทึกเป็นแบบร่างชั่วคราวพร้อมติดแฟล็ก `_isOfflineDraft: true`, `offlineFallback: true`, `d1Synced: false` ไว้อย่างชัดเจน และระบบจะซิงค์ขึ้น Cloudflare D1 อัตโนมัติทันทีที่อุปกรณ์กลับมาออนไลน์
+  - **Universal Data Fetching & No-Cache Across All Devices (`worker/index.js`, `src/lib/api.js`)**:
+    - กำหนด HTTP Header `Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, `Expires: 0` ในทุกการตอบกลับของ Cloudflare Worker API และแนบตัวพารามิเตอร์ Cache-Busting `_t=${Date.now()}` ในคำขอฝั่ง Client
+    - ใน `fetchDashboardData`: ปรับปรุงการล้างข้อมูลรายการที่ถูกลบออกจาก `localStorage` ทันทีเมื่อไม่ปรากฏใน D1 (`d1Synced: true` แต่ไม่มีในชุดข้อมูลเซิร์ฟเวอร์) เพื่อป้องกัน Zombie Records ฟื้นคืนชีพข้ามอุปกรณ์
+  - **Immediate Visual Feedback & Error State (`src/components/field/FieldVisitView.jsx`, `toast.jsx`)**:
+    - เพิ่ม Loading Spinner และข้อความระบุสถานะ "กำลังบันทึกข้อมูลลงฐานข้อมูลกลาง Cloudflare D1..." บนปุ่มบันทึก เพื่อป้องกันการกดย้ำ (Duplicate Submissions)
+    - เพิ่มการแจ้งเตือน Blocking Alert/Toast (`toast.error`) พร้อมแสดงข้อความสาเหตุข้อผิดพลาดจริงหากเครือข่ายหรือเซิร์ฟเวอร์ปฏิเสธการบันทึก โดยไม่เคลียร์ข้อมูลที่ผู้ใช้กรอกค้างไว้ในฟอร์ม
+    - เพิ่มการแจ้งเตือนเตือนภัยสีเหลืองอำพัน (`toast.warning`) สำหรับกรณีบันทึกแบบร่างออฟไลน์ และแจ้งเตือนสำเร็จ (`toast.success`) เฉพาะเมื่อ Cloudflare D1 ยืนยันการบันทึกสำเร็จจริงเท่านั้น
+
 ## [2.15.1] - 2026-10-22
 
 ### Fixed

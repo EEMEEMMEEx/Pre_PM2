@@ -17,12 +17,19 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 };
 
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
+
 function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       ...CORS_HEADERS,
       'Content-Type': 'application/json; charset=utf-8',
+      ...NO_CACHE_HEADERS,
       ...extraHeaders,
     },
   });
@@ -34,13 +41,16 @@ function cleanPhotoMetadata(photos, recordId) {
     const fileName = p.fileName || `${recordId}_${cleanName}`;
     const contentType = p.type || p.contentType || 'image/jpeg';
     const size = p.size || 0;
+    const photoUrl = p.url && !p.url.startsWith('data:') && !p.url.startsWith('blob:')
+      ? p.url
+      : `/photos/${fileName}`;
     return {
       id: p.id || idx + 1,
       name: cleanName,
       fileName,
       contentType,
       size,
-      url: `/photos/${fileName}`,
+      url: photoUrl,
     };
   });
 }
@@ -77,7 +87,7 @@ export default {
   async fetch(request, env, ctx) {
     // 0. CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: { ...CORS_HEADERS, ...NO_CACHE_HEADERS } });
     }
 
     const url = new URL(request.url);
@@ -144,6 +154,7 @@ export default {
               status: 304,
               headers: {
                 ...CORS_HEADERS,
+                ...NO_CACHE_HEADERS,
                 ETag: `W/"${changeToken}"`,
               },
             });
@@ -211,6 +222,7 @@ export default {
               status: 304,
               headers: {
                 ...CORS_HEADERS,
+                ...NO_CACHE_HEADERS,
                 ETag: `W/"${changeToken}"`,
               },
             });

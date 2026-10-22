@@ -31,6 +31,9 @@ export const toast = {
   info(message, duration) {
     return toast.show({ type: 'info', message, duration });
   },
+  warning(message, duration) {
+    return toast.show({ type: 'warning', message, duration });
+  },
 };
 
 const VARIANTS = {
@@ -45,6 +48,12 @@ const VARIANTS = {
     iconClass: 'text-rose-500',
     darkIconClass: 'text-rose-400',
     barClass: 'bg-rose-500',
+  },
+  warning: {
+    Icon: AlertTriangle,
+    iconClass: 'text-amber-500',
+    darkIconClass: 'text-amber-400',
+    barClass: 'bg-amber-500',
   },
   info: {
     Icon: Info,

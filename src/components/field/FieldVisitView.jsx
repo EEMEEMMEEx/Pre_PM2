@@ -36,6 +36,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { fetchStations, submitSurvey, updateSurvey, normalizeStationKey, githubErrorText, isLocalApiRateLimited, isStaticHost } from '@/lib/api';
+import { toast } from '@/components/ui/toast';
 import { SurveyReportModal } from '@/components/export/SurveyReportModal';
 import { Printer, FileText, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -252,7 +253,9 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
     }
     setIsSubmitting(true);
     setStatusMessage({
-      text: isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังส่งข้อมูลและอัปโหลดรูปภาพ...',
+      text: isEditMode
+        ? 'กำลังบันทึกการแก้ไขข้อมูลลงฐานข้อมูลกลาง Cloudflare D1...'
+        : 'กำลังส่งข้อมูลและบันทึกลงฐานข้อมูลกลาง Cloudflare D1...',
       type: 'info'
     });
 
@@ -304,42 +307,47 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
         }
       });
 
-      let successText = isEditMode
-        ? `บันทึกการแก้ไขข้อมูลสถานี ${formData.station || ''} (รหัส ${recId}) เรียบร้อยแล้ว`
-        : `บันทึกข้อมูลรหัส ${recId} เรียบร้อยแล้ว`;
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        successText += ' (โหมดออฟไลน์: บันทึกลงในเครื่องเรียบร้อยแล้ว และจะซิงค์เมื่อมีสัญญาณอินเทอร์เน็ต)';
-      } else if (result?.githubSynced) {
-        successText += ' (ซิงค์ขึ้น GitHub ส่วนกลางสำเร็จ)';
-      } else if (result?.githubError) {
-        successText += ` (หมายเหตุ: ยังไม่ซิงค์ขึ้น GitHub — ${githubErrorText(result.githubError)})`;
-      } else {
-        successText += ' (บันทึกลงฐานข้อมูลแล้ว)';
-      }
-
-      setStatusMessage({
-        text: successText,
-        type: 'success'
-      });
-
-      if (!isEditMode) {
-        // Clear form and photo previews for new entries
-        setFormData({
-          permit: 'อนุญาต',
-          radioStatus: 'ปกติ',
-          receiveStatus: 'ปกติ',
-          transmitStatus: 'ปกติ',
-          powerStatus: 'ปกติ',
-          batteryStatus: 'ปกติ',
-          groundStatus: 'ปกติ'
+      if (result?.offlineFallback || result?.offlineDraft) {
+        const warnText = isEditMode
+          ? `⚠️ บันทึกการแก้ไขสถานี ${formData.station || ''} เป็นแบบร่างออฟไลน์ในอุปกรณ์นี้แล้ว (เนื่องจากอุปกรณ์ออฟไลน์ ระบบจะซิงค์ขึ้นฐานข้อมูลกลางทันทีเมื่อเชื่อมต่ออินเทอร์เน็ต)`
+          : `⚠️ บันทึกข้อมูลรหัส ${recId} เป็นแบบร่างออฟไลน์ในอุปกรณ์นี้แล้ว (เนื่องจากอุปกรณ์ออฟไลน์ ระบบจะซิงค์ขึ้นฐานข้อมูลกลางทันทีเมื่อเชื่อมต่ออินเทอร์เน็ต)`;
+        setStatusMessage({
+          text: warnText,
+          type: 'warning'
         });
-        setSelectedPhotos([]);
+        toast.warning(warnText);
+      } else {
+        const successText = isEditMode
+          ? `บันทึกการแก้ไขข้อมูลสถานี ${formData.station || ''} (รหัส ${recId}) ขึ้นฐานข้อมูลกลาง Cloudflare D1 เรียบร้อยแล้ว`
+          : `บันทึกข้อมูลรหัส ${recId} ขึ้นฐานข้อมูลกลาง Cloudflare D1 เรียบร้อยแล้ว (ซิงค์ข้ามอุปกรณ์แบบเรียลไทม์)`;
+        setStatusMessage({
+          text: successText,
+          type: 'success'
+        });
+        toast.success(successText);
+
+        if (!isEditMode) {
+          // Clear form and photo previews for new entries only on true success
+          setFormData({
+            permit: 'อนุญาต',
+            radioStatus: 'ปกติ',
+            receiveStatus: 'ปกติ',
+            transmitStatus: 'ปกติ',
+            powerStatus: 'ปกติ',
+            batteryStatus: 'ปกติ',
+            groundStatus: 'ปกติ'
+          });
+          setSelectedPhotos([]);
+        }
       }
     } catch (err) {
+      console.error('Submission failed:', err);
+      const errMsg = err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์ส่วนกลาง';
       setStatusMessage({
-        text: err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์',
+        text: `บันทึกล้มเหลว: ${errMsg}`,
         type: 'error'
       });
+      toast.error(`การบันทึกล้มเหลว: ${errMsg}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -941,7 +949,7 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
           {isSubmitting ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>{isEditMode ? 'กำลังบันทึกการแก้ไขข้อมูล...' : 'กำลังบันทึกข้อมูล...'}</span>
+              <span>{isEditMode ? 'กำลังส่งข้อมูลแก้ไขไปยัง Cloudflare D1...' : 'กำลังส่งข้อมูลและบันทึกลงฐานข้อมูลกลาง Cloudflare D1...'}</span>
             </>
           ) : isRateLimited ? (
             <>
@@ -970,6 +978,10 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
                 ? isDark
                   ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
                   : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                : statusMessage.type === 'warning'
+                ? isDark
+                  ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
+                  : 'border-amber-300 bg-amber-50 text-amber-900'
                 : statusMessage.type === 'error'
                 ? isDark
                   ? 'border-rose-500/40 bg-rose-950/40 text-rose-300'
@@ -982,6 +994,8 @@ export function FieldVisitView({ onNavigate, editingSurvey, onCancelEdit }) {
             <div className="flex items-center gap-2.5">
               {statusMessage.type === 'success' ? (
                 <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500" />
+              ) : statusMessage.type === 'warning' ? (
+                <AlertCircle className="h-5 w-5 flex-shrink-0 text-amber-500" />
               ) : statusMessage.type === 'error' ? (
                 <AlertCircle className="h-5 w-5 flex-shrink-0 text-rose-500" />
               ) : (
