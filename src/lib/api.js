@@ -1583,9 +1583,19 @@ function noteGitHubRateLimited() {
 export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), force = false) {
   const now = Date.now();
   const ghAuthToken = getStoredGitHubToken();
+  const workerUrl = getCloudWorkerUrl();
   const authHeaders = ghAuthToken ? { Authorization: `Bearer ${ghAuthToken}` } : {};
 
   if (now < ghRateLimitedUntil) return clientGhSurveysCache || [];
+
+  // ป้องกัน Unauthenticated Rate Limit (60 req/hr):
+  // หากเครื่องนี้ยังไม่มี Worker URL และไม่มี GitHub Token ให้จำกัดความถี่การ poll อัตโนมัติ (ขั้นต่ำ 60 วินาที)
+  // เว้นแต่เป็นการสั่งกดอัปเดตเอง (force = true)
+  if (!workerUrl && !ghAuthToken && !force && clientGhSurveysCache && clientGhSurveysCache.length > 0) {
+    if (now - clientGhLastFetchTime < 60000) {
+      return clientGhSurveysCache;
+    }
+  }
 
   try {
     // 1. Lightweight commit check with ETag to save API rate limits & bandwidth
@@ -1594,10 +1604,11 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
       commitHeaders['If-None-Match'] = lastSurveysCommitETag;
     }
 
-    const commitRes = await fetch(
-      `https://api.github.com/repos/${GITHUB_REPO}/commits?path=data/surveys&per_page=1&_t=${now}`,
-      { headers: commitHeaders, cache: 'no-store' }
-    ).catch(() => null);
+    const commitUrl = workerUrl
+      ? `${workerUrl}/api/commits?path=data/surveys&per_page=1&_t=${now}`
+      : `https://api.github.com/repos/${GITHUB_REPO}/commits?path=data/surveys&per_page=1&_t=${now}`;
+
+    const commitRes = await fetch(commitUrl, { headers: commitHeaders, cache: 'no-store' }).catch(() => null);
 
     if (isGitHubRateLimited(commitRes)) {
       noteGitHubRateLimited();
@@ -1626,7 +1637,11 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
     }
 
     // 2. Fetch directory items when commit changed or first run
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys?ref=${GITHUB_BRANCH}&_t=${now}`, {
+    const directoryUrl = workerUrl
+      ? `${workerUrl}/api/surveys?_t=${now}`
+      : `https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys?ref=${GITHUB_BRANCH}&_t=${now}`;
+
+    const res = await fetch(directoryUrl, {
       headers: { Accept: 'application/vnd.github+json', ...authHeaders },
       cache: 'no-store',
     });
@@ -1688,7 +1703,7 @@ export async function fetchSurveysFromGitHubClient(knownRecordIds = new Set(), f
           try {
             const fetchUrl = file.download_url
               ? `${file.download_url}${file.download_url.includes('?') ? '&' : '?'}_t=${now}`
-              : `https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys/${file.name}?ref=${GITHUB_BRANCH}&_t=${now}`;
+              : (workerUrl ? `${workerUrl}/api/surveys/${encodeURIComponent(file.name)}?_t=${now}` : `https://api.github.com/repos/${GITHUB_REPO}/contents/data/surveys/${file.name}?ref=${GITHUB_BRANCH}&_t=${now}`);
             const fileHeaders = {
               Accept: 'application/vnd.github+json',
               ...(ghAuthToken ? { Authorization: `Bearer ${ghAuthToken}` } : {}),

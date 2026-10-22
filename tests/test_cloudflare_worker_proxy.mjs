@@ -17,11 +17,13 @@ assert(fs.existsSync(workerFile), 'worker/index.js must exist');
 const workerContent = fs.readFileSync(workerFile, 'utf8');
 assert(workerContent.includes('/api/health'), 'worker must support /api/health');
 assert(workerContent.includes('/api/github-status'), 'worker must support /api/github-status');
+assert(workerContent.includes('/api/commits'), 'worker must support /api/commits');
+assert(workerContent.includes('/api/surveys'), 'worker must support /api/surveys');
 assert(workerContent.includes('/api/save'), 'worker must support /api/save');
 assert(workerContent.includes('/api/update'), 'worker must support /api/update');
 assert(workerContent.includes('/api/delete'), 'worker must support /api/delete');
 assert(workerContent.includes('CORS_HEADERS'), 'worker must support CORS');
-console.log('  [PASS] Cloudflare Worker: worker/index.js contains complete edge proxy logic.');
+console.log('  [PASS] Cloudflare Worker: worker/index.js contains complete edge proxy logic (both read & write).');
 
 assert(fs.existsSync(wranglerFile), 'wrangler.toml must exist');
 const wranglerContent = fs.readFileSync(wranglerFile, 'utf8');
@@ -37,12 +39,14 @@ assert(apiContent.includes('export async function saveCloudWorkerUrl'), 'api.js 
 assert(apiContent.includes('export async function fetchRemoteWorkerUrl'), 'api.js must export fetchRemoteWorkerUrl');
 assert(apiContent.includes('export async function callWorkerMutatingApi'), 'api.js must export callWorkerMutatingApi');
 
-// Verify mutations route to worker
-assert(apiContent.includes('callWorkerMutatingApi(workerUrl, \'/api/save\''), 'submitSurvey must route to worker');
-assert(apiContent.includes('callWorkerMutatingApi(workerUrl, \'/api/update\''), 'updateSurvey must route to worker');
-assert(apiContent.includes('callWorkerMutatingApi(workerUrl, \'/api/delete\''), 'deleteSurveys must route to worker');
-assert(apiContent.includes('callWorkerMutatingApi(workerUrl, \'/api/save\''), 'syncPendingLocalSurveys must route to worker');
-console.log('  [PASS] Client API Routing: All survey mutations route to Cloudflare Worker API when configured.');
+// Verify mutations & read queries route to worker
+assert(apiContent.includes("callWorkerMutatingApi(workerUrl, '/api/save'"), 'submitSurvey must route to worker');
+assert(apiContent.includes("callWorkerMutatingApi(workerUrl, '/api/update'"), 'updateSurvey must route to worker');
+assert(apiContent.includes("callWorkerMutatingApi(workerUrl, '/api/delete'"), 'deleteSurveys must route to worker');
+assert(apiContent.includes("callWorkerMutatingApi(workerUrl, '/api/save'"), 'syncPendingLocalSurveys must route to worker');
+assert(apiContent.includes("${workerUrl}/api/commits"), 'fetchSurveysFromGitHubClient must route commit check to worker');
+assert(apiContent.includes("${workerUrl}/api/surveys"), 'fetchSurveysFromGitHubClient must route directory list to worker');
+console.log('  [PASS] Client API Routing: All survey queries & mutations route to Cloudflare Worker API when configured.');
 
 // 3. Verify SettingsModal UI
 const settingsContent = fs.readFileSync(settingsModalFile, 'utf8');

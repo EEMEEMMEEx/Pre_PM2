@@ -125,6 +125,106 @@ export default {
       }
     }
 
+    // 2.1 Commit Check Proxy Endpoint (for real-time dashboard sync without client token)
+    if (path === '/api/commits' || path === '/commits') {
+      if (request.method !== 'GET') return jsonResponse({ error: 'Method not allowed' }, 405);
+      const queryPath = url.searchParams.get('path') || 'data/surveys';
+      const perPage = url.searchParams.get('per_page') || '1';
+      const ifNoneMatch = request.headers.get('if-none-match') || request.headers.get('If-None-Match');
+
+      const ghHeaders = {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'NBTC-PrePM-Survey-Cloudflare-Worker',
+      };
+      if (token) ghHeaders['Authorization'] = `Bearer ${token}`;
+      if (ifNoneMatch) ghHeaders['If-None-Match'] = ifNoneMatch;
+
+      try {
+        const ghUrl = `https://api.github.com/repos/${repo}/commits?path=${encodeURIComponent(queryPath)}&per_page=${perPage}&sha=${branch}`;
+        const ghRes = await fetch(ghUrl, { headers: ghHeaders });
+
+        if (ghRes.status === 304) {
+          return new Response(null, {
+            status: 304,
+            headers: {
+              ...CORS_HEADERS,
+              ETag: ghRes.headers.get('ETag') || '',
+            },
+          });
+        }
+
+        const data = await ghRes.json();
+        const etag = ghRes.headers.get('ETag');
+        const respHeaders = {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json; charset=utf-8',
+        };
+        if (etag) respHeaders['ETag'] = etag;
+
+        return new Response(JSON.stringify(data), {
+          status: ghRes.status,
+          headers: respHeaders,
+        });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // 2.2 Survey Directory List Proxy Endpoint
+    if (path === '/api/surveys' || path === '/surveys') {
+      if (request.method !== 'GET') return jsonResponse({ error: 'Method not allowed' }, 405);
+
+      const ghHeaders = {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'NBTC-PrePM-Survey-Cloudflare-Worker',
+      };
+      if (token) ghHeaders['Authorization'] = `Bearer ${token}`;
+
+      try {
+        const ghUrl = `https://api.github.com/repos/${repo}/contents/data/surveys?ref=${branch}`;
+        const ghRes = await fetch(ghUrl, { headers: ghHeaders });
+        const data = await ghRes.json();
+
+        return new Response(JSON.stringify(data), {
+          status: ghRes.status,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
+    // 2.3 Single Survey Item Proxy Endpoint
+    const singleSurveyMatch = path.match(/^\/api\/(?:survey|surveys)\/([^/]+)$/);
+    if (singleSurveyMatch && request.method === 'GET') {
+      const rawId = singleSurveyMatch[1];
+      const filename = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
+      const ghHeaders = {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'NBTC-PrePM-Survey-Cloudflare-Worker',
+      };
+      if (token) ghHeaders['Authorization'] = `Bearer ${token}`;
+
+      try {
+        const ghUrl = `https://api.github.com/repos/${repo}/contents/data/surveys/${filename}?ref=${branch}`;
+        const ghRes = await fetch(ghUrl, { headers: ghHeaders });
+        const data = await ghRes.json();
+
+        return new Response(JSON.stringify(data), {
+          status: ghRes.status,
+          headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        });
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500);
+      }
+    }
+
     // 3. Save Survey Record Endpoint
     if (path === '/api/save' || path === '/save') {
       if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);

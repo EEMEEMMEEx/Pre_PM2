@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.5] - 2026-10-22
+
+### Fixed
+- **แก้ปัญหา GitHub API Rate Limit (403 Forbidden) และข้อมูลไม่ซิงค์บน Dashboard**:
+  - เพิ่ม Read Proxy Endpoints ใน Cloudflare Worker (worker/index.js): /api/commits, /api/surveys, และ /api/surveys/:id รองรับการส่งต่อคำขอด้วย GITHUB_TOKEN กลางบน Worker
+  - อัปเดต etchSurveysFromGitHubClient() ใน src/lib/api.js ให้ตรวจสอบ Commit และดึงรายการไฟล์ผ่าน Cloudflare Worker API Proxy เมื่อมีการตั้งค่า Worker URL ทำให้ Dashboard ซิงค์ข้อมูลล่าสุดได้ต่อเนื่องโดยไม่ต้องใช้ Token บนเครื่องผู้ใช้
+  - เพิ่มมาตรการป้องกัน Rate Limit สำหรับ Unauthenticated Client: หากเครื่องยังไม่มีทั้ง Worker URL และ Token บนเครื่อง จะจำกัดการ Poll อัตโนมัติไว้ที่ขั้นต่ำ 60 วินาที ป้องกันโควตา 60 req/hr หมดเร็วผิดปกติ
+  - อัปเดตชุดทดสอบ 	ests/test_cloudflare_worker_proxy.mjs ครอบคลุมทั้งการอ่าน (Read Proxy) และการเขียน (Mutations)
+
 ## [2.12.4] - 2026-10-21
 
 ### Added
