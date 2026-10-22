@@ -28,9 +28,13 @@
     "workObstacle": "ไม่มี",
     "informantName": "นายสมบัติ คุณแก้ว",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติดี",
+    "summary": "",
     "photos": [],
-    "recordId": "PM-202610212156002-2ece"
+    "recordId": "PM-202610212156002-2ece",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:12:13.220Z"
 }
