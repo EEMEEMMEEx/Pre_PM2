@@ -28,9 +28,13 @@
     "workObstacle": "ไม่มี",
     "informantName": "นายนริน ขุนอาจ",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติดี",
+    "summary": "",
     "photos": [],
-    "recordId": "PM-202610212151245-4c39"
+    "recordId": "PM-202610212151245-4c39",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:09:48.263Z"
 }
