@@ -25,14 +25,16 @@
     "visitDate": "2026-10-19",
     "informantName": "นายปราการ ประโสกัง",
     "operatorName": "นายสมสอาด ถาวร",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "workObstacle": "ไม่มี",
     "antennaCondition": "ปกติ",
     "siteCondition": "ปกติ",
-    "userProblem": "ไม่มี",
-    "accessLimit": "โทรนัดก่อนเข้า",
+    "userProblem": "",
+    "accessLimit": "",
     "photos": [],
-    "recordId": "PM-202610212122150-3a26"
+    "recordId": "PM-202610212122150-3a26",
+    "visitTime": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:58:09.669Z"
 }
