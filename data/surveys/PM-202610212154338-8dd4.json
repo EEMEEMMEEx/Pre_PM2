@@ -19,7 +19,7 @@
     "batteryStatus": "ปกติ",
     "groundStatus": "ปกติ",
     "visitDate": "2026-10-17",
-    "accessLimit": "โทรนัดกำนัดก่อน",
+    "accessLimit": "",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
@@ -35,5 +35,6 @@
     "visitTime": "",
     "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:28:49.967Z"
 }
