@@ -26,11 +26,15 @@
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "informantName": "นายสุทัศน์ กัญญาบัญดิษฐ์",
     "operatorName": "นายสมสอาด ถาวร",
     "photos": [],
-    "recordId": "PM-202610212134520-cc4d"
+    "recordId": "PM-202610212134520-cc4d",
+    "visitTime": "",
+    "accessLimit": "",
+    "userProblem": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T04:05:10.540Z"
 }
