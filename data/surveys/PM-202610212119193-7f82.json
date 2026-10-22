@@ -23,15 +23,18 @@
     "contactVillage": "หมู่ 6 ขามป้อม",
     "contactPhone": "064-042-0135",
     "visitDate": "2026-10-18",
-    "userProblem": "ไม่มี",
+    "userProblem": "",
     "siteCondition": "ปกติ",
     "antennaCondition": "ปกติ",
     "workObstacle": "ไม่มี",
-    "summary": "การใช้งานปกติ",
+    "summary": "",
     "operatorName": "นายสมสอาด ถาวร",
     "informantName": "นายวิเชียร สุระคาย",
     "photos": [],
-    "recordId": "PM-202610212119193-7f82"
+    "recordId": "PM-202610212119193-7f82",
+    "visitTime": "",
+    "accessLimit": ""
   },
-  "photos": []
+  "photos": [],
+  "updatedAt": "2026-10-22T03:57:16.813Z"
 }
