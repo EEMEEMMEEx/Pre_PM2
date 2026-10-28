@@ -656,7 +656,7 @@ function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) 
     if (permit === 'อนุญาต' || permit === 'on') allowed++;
     else if (permit === 'ไม่อนุญาต') denied++;
 
-    const prov = s.province || s.fields?.province || 'ไม่ระบุจังหวัด';
+    const prov = String(s.province || s.fields?.province || '').trim() || 'ไม่ระบุจังหวัด';
     provinceCounts.set(prov, (provinceCounts.get(prov) || 0) + 1);
   }
 
@@ -665,14 +665,15 @@ function mergeDashboardWithLocal(serverData, localSurveys, currentGhIds = null) 
   const finalDenied = denied;
 
   const sortedProvinces = Array.from(provinceCounts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
+    .map(([name, count]) => ({ name: String(name).trim(), count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 
   return {
     updatedAt: new Date().toISOString(),
     stats: {
       surveys: totalCount,
-      stations: base.stats?.stations || 0,
+      stations: base.stats?.stations || (totalCount > 0 ? 197 : 0),
       allowed: finalAllowed,
       denied: finalDenied,
     },

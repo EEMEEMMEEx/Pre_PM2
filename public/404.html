@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Survey Control Room — NBTC Microwave</title>
+  <script type="text/javascript">
+    // Single Page Apps for GitHub Pages
+    // MIT License - https://github.com/rafgraph/spa-github-pages
+    var l = window.location;
+    var isSubpath = l.pathname.startsWith('/Pre_PM2');
+    var pathSegmentsToKeep = isSubpath ? 1 : 0;
+    var repoPath = isSubpath ? '/Pre_PM2' : '';
+    l.replace(
+      l.protocol + '//' + l.host + repoPath + '/?/' +
+      l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  </script>
+</head>
+<body style="background-color:#020b1b;color:#94a3b8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <p>กำลังนำทางไปยังระบบ Survey Control Room...</p>
+</body>
+</html>

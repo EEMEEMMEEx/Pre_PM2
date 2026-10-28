@@ -24,6 +24,10 @@ export function getAppRoute(pathname = typeof window !== 'undefined' ? window.lo
     normalized = normalized.slice(base.length - 1); // keep leading '/'
   } else if (base !== '/' && normalized === base.slice(0, -1)) {
     normalized = '/';
+  } else if (normalized.startsWith('/Pre_PM2/')) {
+    normalized = normalized.slice('/Pre_PM2'.length);
+  } else if (normalized === '/Pre_PM2') {
+    normalized = '/';
   }
   
   const clean = normalized.replace(/\/+$/, '') || '/';

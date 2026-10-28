@@ -244,7 +244,8 @@ function loadSurveysAndBuildDashboard(stations) {
 
     const stationName = String(fields.station || fields.stationSelect || doc.station || '').trim();
     const stationInfo = stationMap.get(stationName) || stationMap.get(normalizeStationKey(stationName)) || {};
-    const province = stationInfo.province || fields.province || doc.province || 'ไม่ระบุจังหวัด';
+    const rawProvince = stationInfo.province || fields.province || doc.province || 'ไม่ระบุจังหวัด';
+    const province = String(rawProvince).trim() || 'ไม่ระบุจังหวัด';
     provinceCounts[province] = (provinceCounts[province] || 0) + 1;
 
     const permitLabel = permit === 'อนุญาต' || permit === 'on' ? 'อนุญาต' : (permit || 'ยังไม่ระบุ');
@@ -276,10 +277,11 @@ function loadSurveysAndBuildDashboard(stations) {
   // Sort recent surveys by savedAt descending
   recent.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
+  // Accurately group and sort surveyed provinces up to top 10 limit (covering all surveyed provinces)
   const topProvinces = Object.entries(provinceCounts)
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]) => ({ name: String(name).trim(), count }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
+    .slice(0, 10);
 
   const rawDashboard = {
     updatedAt: new Date().toISOString(),
@@ -305,16 +307,26 @@ function loadSurveysAndBuildDashboard(stations) {
 
 function writeSnapshotFiles(relPath, payload) {
   const jsonStr = JSON.stringify(payload, null, 2);
-  const targetNoExt = path.resolve(DIST_DIR, relPath);
-  const targetWithExt = `${targetNoExt}.json`;
 
-  const targetDir = path.dirname(targetNoExt);
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
+  // 1. Output to dist/
+  const distNoExt = path.resolve(DIST_DIR, relPath);
+  const distWithExt = `${distNoExt}.json`;
+  const distDir = path.dirname(distNoExt);
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
   }
+  fs.writeFileSync(distNoExt, jsonStr, 'utf8');
+  fs.writeFileSync(distWithExt, jsonStr, 'utf8');
 
-  fs.writeFileSync(targetNoExt, jsonStr, 'utf8');
-  fs.writeFileSync(targetWithExt, jsonStr, 'utf8');
+  // 2. Also output to public/ so git repo & raw GitHub fallback snapshots remain up-to-date
+  const publicNoExt = path.resolve(ROOT_DIR, 'public', relPath);
+  const publicWithExt = `${publicNoExt}.json`;
+  const publicDir = path.dirname(publicNoExt);
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+  fs.writeFileSync(publicNoExt, jsonStr, 'utf8');
+  fs.writeFileSync(publicWithExt, jsonStr, 'utf8');
 }
 
 export function buildStaticSnapshots() {
@@ -366,21 +378,58 @@ export function buildStaticSnapshots() {
   writeSnapshotFiles('api/onedrive-status', onedriveStatus);
   console.log('  [OK] Generated /api/onedrive-status & /api/onedrive-status.json');
 
-  // 5. GitHub Pages 404 Fallback & .nojekyll
+  // 5. Generate physical static route directories in dist/ to prevent 404 on direct hits
   const indexHtml = path.resolve(DIST_DIR, 'index.html');
-  const notFoundHtml = path.resolve(DIST_DIR, '404.html');
-  const noJekyll = path.resolve(DIST_DIR, '.nojekyll');
-
   if (fs.existsSync(indexHtml)) {
-    fs.copyFileSync(indexHtml, notFoundHtml);
-    console.log('  [OK] Generated 404.html SPA route fallback from index.html');
+    const indexContent = fs.readFileSync(indexHtml, 'utf8');
+    const routes = ['dashboard', 'field', 'login'];
+    for (const route of routes) {
+      const routeDir = path.resolve(DIST_DIR, route);
+      if (!fs.existsSync(routeDir)) {
+        fs.mkdirSync(routeDir, { recursive: true });
+      }
+      fs.writeFileSync(path.resolve(routeDir, 'index.html'), indexContent, 'utf8');
+    }
+    console.log('  [OK] Generated physical route directories (dashboard/, field/, login/) in dist/');
   }
 
-  fs.writeFileSync(noJekyll, '', 'utf8');
-  console.log('  [OK] Generated .nojekyll for GitHub Pages');
+  // 6. Generate SPA 404 Fallback redirection script for GitHub Pages
+  const spa404Html = `<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Survey Control Room — NBTC Microwave</title>
+  <script type="text/javascript">
+    // Single Page Apps for GitHub Pages
+    // MIT License - https://github.com/rafgraph/spa-github-pages
+    var l = window.location;
+    var isSubpath = l.pathname.startsWith('/Pre_PM2');
+    var pathSegmentsToKeep = isSubpath ? 1 : 0;
+    var repoPath = isSubpath ? '/Pre_PM2' : '';
+    l.replace(
+      l.protocol + '//' + l.host + repoPath + '/?/' +
+      l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  </script>
+</head>
+<body style="background-color:#020b1b;color:#94a3b8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <p>กำลังนำทางไปยังระบบ Survey Control Room...</p>
+</body>
+</html>`;
+
+  fs.writeFileSync(path.resolve(DIST_DIR, '404.html'), spa404Html, 'utf8');
+  fs.writeFileSync(path.resolve(ROOT_DIR, 'public', '404.html'), spa404Html, 'utf8');
+  console.log('  [OK] Generated 404.html SPA route redirection for GitHub Pages in dist/ & public/');
+
+  // 7. .nojekyll for GitHub Pages
+  fs.writeFileSync(path.resolve(DIST_DIR, '.nojekyll'), '', 'utf8');
+  fs.writeFileSync(path.resolve(ROOT_DIR, 'public', '.nojekyll'), '', 'utf8');
+  console.log('  [OK] Generated .nojekyll for GitHub Pages in dist/ & public/');
 
   console.log('='.repeat(70));
-  console.log(' [SUCCESS] All static snapshots generated cleanly in dist/api/');
+  console.log(' [SUCCESS] All static snapshots generated cleanly in dist/api/ & public/api/');
   console.log('='.repeat(70));
 }
 

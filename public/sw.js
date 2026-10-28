@@ -31,9 +31,9 @@ const OFFLINE_CACHEABLE_PATHS = new Set([
   '/api/dashboard',
   '/api/database',
   '/database',
-  '/dashboard',
   `${BASE_PATH}/api/dashboard`,
   `${BASE_PATH}/api/database`,
+  `${BASE_PATH}/database`,
 ]);
 
 // Install: pre-cache application shell ทีละไฟล์เพื่อบันทึก log รายไฟล์ที่ล้มเหลวโดยไม่ throw aggregate error
@@ -110,8 +110,14 @@ self.addEventListener('fetch', (event) => {
           if (response && response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(SHELL_URL, clone));
+            return response;
           }
-          return response;
+          // If network returns 404 or other error on client route (e.g. direct hit to /dashboard on static host),
+          // fallback to cached SPA shell or fetch index.html instead of throwing 404 to user
+          return caches.match(SHELL_URL).then((cached) => {
+            if (cached) return cached;
+            return fetch(fallbackHtml).catch(() => caches.match(req));
+          });
         })
         .catch(async () => {
           const cached = await caches.match(SHELL_URL);
@@ -126,7 +132,7 @@ self.addEventListener('fetch', (event) => {
   const cleanPath = BASE_PATH && url.pathname.startsWith(BASE_PATH)
     ? url.pathname.slice(BASE_PATH.length)
     : url.pathname;
-  const isApiPath = cleanPath.startsWith('/api/') || cleanPath === '/database' || cleanPath === '/dashboard';
+  const isApiPath = cleanPath.startsWith('/api/') || cleanPath === '/database';
   if (isApiPath && !OFFLINE_CACHEABLE_PATHS.has(url.pathname) && !OFFLINE_CACHEABLE_PATHS.has(cleanPath)) {
     return;
   }

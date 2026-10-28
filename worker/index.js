@@ -245,7 +245,7 @@ export default {
           githubConfigured: Boolean(env?.GITHUB_TOKEN),
           repo,
           branch,
-          version: '2.15.5',
+          version: '2.15.6',
           timestamp: new Date().toISOString(),
         });
       }
@@ -436,7 +436,7 @@ export default {
               if (permit === 'อนุญาต' || permit === 'on') allowed++;
               else if (permit === 'ไม่อนุญาต') denied++;
 
-              const prov = row.province || 'ไม่ระบุจังหวัด';
+              const prov = String(row.province || '').trim() || 'ไม่ระบุจังหวัด';
               provinceCounts.set(prov, (provinceCounts.get(prov) || 0) + 1);
 
               return formatSurveyRow(row);

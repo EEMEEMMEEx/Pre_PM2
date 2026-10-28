@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.6] - 2026-10-28
+
+### Fixed
+- **กู้คืนข้อมูลสำรวจจังหวัดขอนแก่น (29 สถานี) และจัดกลุ่มแสดงผลครบ 10 จังหวัด (รวม 197 สถานี)**:
+  - **แก้ไขการจำกัดจำนวนจังหวัดตกหล่น (`scripts/build_static_snapshots.mjs`, `database.py`)**: ปรับแก้การจำกัดจำนวนจังหวัดจากเดิม `.slice(0, 8)` และ `[:8]` เป็น `.slice(0, 10)` และ `[:10]` เพื่อให้แสดงผลครบถ้วนทั้ง 10 จังหวัด (197 สถานี) โดยไม่ตัดจังหวัดใดตกหล่น
+  - **ซิงก์ Snapshot อัตโนมัติลงทั้ง `dist/api/` และ `public/api/` (`scripts/build_static_snapshots.mjs`)**: อัปเดตฟังก์ชัน `writeSnapshotFiles` ให้เขียนข้อมูล Snapshot สดใหม่ (`197 สถานี`, ผลสำรวจ 100%, อนุญาต 100%) ลงทั้ง `dist/api/` และ `public/api/` พร้อมกัน เพื่อให้การดึงข้อมูล Fallback จาก GitHub Raw บน Cloudflare Worker ได้รับข้อมูลสถานีจังหวัดขอนแก่นและข้อมูลล่าสุดเสมอ
+  - **ตัดช่องว่างชื่อจังหวัด (`Trim Province`)**: เพิ่มการตัดช่องว่าง `String(province).trim()` ใน `scripts/build_static_snapshots.mjs`, `worker/index.js`, และ `src/lib/api.js` ป้องกันปัญหา Collation/Encoding mismatch
+  - **คำนวณตัวชี้วัด KPI สอดคล้องแม่นยำ**: การแสดงผลบน Metric Cards (ผลสำรวจทั้งหมด 197 สถานี, อนุญาต 197 สถานี, ไม่อนุญาต 0 สถานี), กราฟแท่งรายจังหวัด (ขอนแก่น อันดับ 2 รวม 29 สถานี), และ Donut Chart คำนวณเป็น 100% สอดคล้องกับคลังสถานีทั้งหมด
+- **แก้ไขข้อผิดพลาด Client-Side SPA Route 404 Error (`/dashboard`)**:
+  - **GitHub Pages SPA Redirection Script (`404.html`, `index.html`)**: เพิ่มสคริปต์เปลี่ยนเส้นทาง SPA (`spa-github-pages`) ใน `404.html` (ทั้ง `dist/` และ `public/`) และสคริปต์รับการเปลี่ยนเส้นทางใน `<head>` ของ `index.html` เพื่อส่งคำขอเปิดหน้าตรง (เช่น `/Pre_PM2/dashboard`) กลับไปยัง `index.html` ผ่าน `window.history.replaceState` อย่างราบรื่น
+  - **สร้างโฟลเดอร์เส้นทางจริงใน Build Output (`dist/dashboard/`, `dist/field/`, `dist/login/`)**: สร้างไดเรกทอรีคงรูปพร้อม `index.html` สำเนาใน `dist/` ช่วยให้ Web Server สถิต (GitHub Pages, R2, Preview) ตอบกลับด้วย HTTP 200 ทันทีเมื่อเรียกเปิดหน้าโดยตรง
+  - **ปรับปรุงกฎแคชใน Service Worker (`public/sw.js`)**:
+    - ถอด `'/dashboard'` ออกจาก `isApiPath` และ `OFFLINE_CACHEABLE_PATHS` เนื่องจาก `/dashboard` คือ Client-Side Page Route ไม่ใช่ API Route
+    - ในคำขอประเภท Navigation (`req.mode === 'navigate'`) หากเซิร์ฟเวอร์ภายนอกตอบกลับด้วย 404 ให้ส่งคืน Cached SPA Shell (`SHELL_URL`) หรือดาวน์โหลด `index.html` อัตโนมัติ ป้องกันไม่ให้เบราว์เซอร์แสดง Error 404 บน Console
+  - **เพิ่มความทนทานให้ `getAppRoute` (`src/lib/utils.js`)**: ตรวจจับและตัด Subpath `/Pre_PM2/` อัตโนมัติแม้ในกรณีที่ Base URL ถูกตั้งเป็น `'/'`
+
 ## [2.15.5] - 2026-10-28
 
 ### Fixed

@@ -1,4 +1,4 @@
-﻿"""
+"""
 NBTC Microwave — Survey Control Room (Pre-PM)
 Modular Standalone Backend Server (Python 3 + SQLite)
 """
@@ -585,7 +585,7 @@ class DatabaseService:
             [{"name": name, "count": count} for name, count in province_counts.items()],
             key=lambda x: x["count"],
             reverse=True
-        )[:8]
+        )[:10]
 
         return {
             "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
