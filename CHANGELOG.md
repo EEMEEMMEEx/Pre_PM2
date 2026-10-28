@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.5] - 2026-10-28
+
+### Fixed
+- **แก้ปัญหา HTTP 500 Internal Server Error บน Cloudflare Worker API (`/api/dashboard`, `/api/surveys`)**:
+  - **D1 Quota & Binding Resilience (`worker/index.js`)**: ตรวจสอบการผูก Binding `env.DB` อย่างรัดกุม (`getD1(env)`) และเพิ่มระบบป้องกันกรณี D1 เกินโควตาฟรี (`daily row read limit`) หรือตารางยังไม่ได้ถูกสร้าง (`no such table`) โดยสลับไปดึงข้อมูลจาก Static Snapshot หรือคืนโครงสร้างข้อมูลเริ่มต้นที่ปลอดภัย (Status 200) อัตโนมัติ ป้องกันแอปพลิเคชันค้างหรือแสดงหน้าจอว่างเปล่า
+  - **แก้ไขบั๊ก Infinite Recursive Self-Fetch**: ขจัดคำสั่ง `new URL('/api/dashboard', request.url)` ที่เรียกย้อนกลับมาหาตัว Worker เองจนทำให้เกิดข้อผิดพลาด 500 วนลูป
+  - **Structured Error Handling with Stack Trace**: ครอบ Handler ทุกเส้นทางด้วย `try...catch` และส่งคืน JSON ข้อผิดพลาดที่มี `error`, `stack`, `route`, `method` พร้อมส่วนหัว CORS ครบถ้วน เพื่อให้ผู้พัฒนาตรวจสอบและวินิจฉัยปัญหาผ่าน Developer Tools Console ได้อย่างชัดเจน
+  - **Schema Auto-Initialization & Upstream Fallback**: เพิ่มฟังก์ชัน `ensureSchema(db)` ช่วยสร้างตารางอัตโนมัติเมื่อตรวจพบว่าตารางยังไม่ถูกสร้าง พร้อมรองรับ Fallback เขียนข้อมูลขึ้น GitHub Contents API เมื่อ D1 ออฟไลน์ (หากกำหนด `GITHUB_TOKEN`)
+
 ## [2.15.4] - 2026-10-22
 
 ### Fixed
