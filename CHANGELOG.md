@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.7] - 2026-10-29
+
+### Added
+- **แปลงการ์ดสถานะในวิดเจ็ต "สัดส่วนผลการสำรวจ" (Survey Proportions) เป็นการ์ดที่คลิกได้ พร้อมหน้าต่างเจาะลึกรายละเอียด (Drill-Down Detail Modal)**:
+  - **การ์ดสถานะแบบ Interactive พร้อม Micro-Interactions (`src/components/dashboard/SurveyDonut.jsx`)**:
+    - แปลงแถบสถานะทั้ง 4 หมวด ("อนุญาตเข้าพื้นที่", "ไม่อนุญาตเข้าพื้นที่", "ยังไม่ได้ลงพื้นที่ / รอตรวจ", และ "รวมสถานีทั้งหมดในระบบ") ให้เป็น Interactive Clickable Cards
+    - เพิ่ม Hover state คุณภาพสูง: ยกตัวขึ้น (`hover:scale-[1.015] hover:shadow-md`), กรอบเรืองแสงตามธีมสี (`hover:border-emerald-400`, `hover:border-rose-400`, `hover:border-purple-400`, `hover:border-sky-400`), สัญลักษณ์ลูกศรนำทาง (`ChevronRight` สไลด์เมื่อ Hover) และ Pointer cursor
+    - รองรับการใช้งานผ่านคีย์บอร์ด (`role="button"`, `tabIndex={0}`, ปุ่ม `Enter`/`Space`) ตามมาตรฐาน Accessibility (WCAG 2.1)
+  - **หน้าต่างเจาะลึกรายละเอียดสถานีแบบโต้ตอบ (`src/components/dashboard/SurveyDrillDownModal.jsx`)**:
+    - สร้างคอมโพเนนต์ Modal เจาะลึกสถานีเชื่อมต่อ Radix UI Dialog (`DialogPrimitive`) รองรับการปิดผ่านปุ่ม `Esc`, การคลิกพื้นที่ Backdrop หรือปุ่มกากบาท (`X`)
+    - **Header & Category Tabs**: แสดงชื่อหมวดหมู่, ป้ายสถานะพร้อมไอคอน Lucide, จำนวนสถานีตรงตามที่คลิก พร้อมแถบแท็บ 4 หมวดหมู่ (ทั้งหมด, อนุญาต, ไม่อนุญาต, รอตรวจ) ให้สลับดูได้ทันที
+    - **Search & Filter**: ช่องค้นหาด่วนแบบเรียลไทม์ รองรับชื่อสถานี, Site ID, จังหวัด, อำเภอ, ชื่อช่างผู้ตรวจ และชื่อผู้ติดต่อ พร้อม Dropdown ตัวกรองตามจังหวัดและปุ่มล้างตัวกรอง
+    - **Station List Table**: ตารางแสดงรายการสถานีครบถ้วน คอลัมน์ลำดับ, Site ID, ชื่อสถานีและสถานที่ติดตั้ง, จังหวัด/อำเภอ, สถานะผลการขออนุญาต, วันที่ลงพื้นที่, ช่างผู้ตรวจเยี่ยม และปุ่มการจัดการ
+    - **Pagination & Smooth Rendering**: แบ่งหน้าแสดงผล (15, 25, 50, 100 รายการ/หน้า) ประมวลผลลื่นไหลด้วย `useMemo` รองรับข้อมูล 197 สถานีโดยไม่เกิด UI Lag
+    - **Seamless Detail View**: ปุ่ม "ดูข้อมูล" เปิด `SurveyPreviewModal` ตรวจสอบภาพถ่าย รายละเอียดอุปกรณ์ และพิมพ์รายงาน A4 ทันที / สำหรับสถานีรอตรวจมีปุ่ม "ลงพื้นที่" เชื่อมต่อฟอร์มสำรวจอัตโนมัติ
+  - **ผสานข้อมูลคลังสถานี Master Directory และผลการสำรวจแบบไร้รอยต่อ (`src/components/dashboard/DashboardView.jsx`, `src/lib/api.js`)**:
+    - ส่งมอบ `surveys={data.recent}`, `onNavigate`, `onEditSurvey` ไปยัง `SurveyDonut`
+    - เพิ่ม Alias ค้นหาสถานี `'BS ปางใหม่พัฒนา': 'BS บ้านปางใหม่พัฒนา'` ใน `STATION_ALIASES` จับคู่สถานีในระบบครบถ้วน 100% (197/197 สถานี)
+    - ทดสอบการทำงานครอบคลุมผ่านชุดทดสอบอัตโนมัติ `tests/test_survey_proportions_drilldown.mjs`
+
 ## [2.15.6] - 2026-10-28
 
 ### Fixed

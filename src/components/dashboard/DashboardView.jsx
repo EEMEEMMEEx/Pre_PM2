@@ -358,9 +358,14 @@ export function DashboardView({ onNavigate, onEditSurvey }) {
               <ProvinceChart provinces={data.provinces} totalSurveys={data.stats?.surveys} />
             </div>
 
-            {/* Survey Donut: Proportions aligned relative to total base count */}
+            {/* Survey Donut: Proportions aligned relative to total base count with Interactive Drill-Down */}
             <div className="lg:col-span-6">
-              <SurveyDonut stats={data.stats} />
+              <SurveyDonut
+                stats={data.stats}
+                surveys={data.recent}
+                onNavigate={onNavigate}
+                onEditSurvey={onEditSurvey}
+              />
             </div>
           </div>
 
